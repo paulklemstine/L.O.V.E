@@ -5,10 +5,13 @@ Epic 2: Handles the lifecycle of creating, validating, and refining new tools.
 Acts as a specialized sub-agent invoked by the PiLoop when a tool gap is detected.
 """
 
+import os
+import shutil
 import logging
 import json
 import traceback
 from typing import Dict, Any, Optional, List
+from datetime import datetime
 
 from core.logger import log_event
 from core.evolution_state import (
@@ -200,9 +203,6 @@ Test Output (Failures):
             # We need to promote it to active/
             # For now, let's assume fabricator already put it in incubation
             # We move it to active
-            import shutil
-            import os
-            
             # .../tools/custom/incubation/foo.py -> .../tools/custom/active/foo.py
             dir_name = os.path.dirname(tool_path)
             if "incubation" not in dir_name:
@@ -261,7 +261,6 @@ Test Output (Failures):
         Returns:
             Dict with success, file_path, and server config
         """
-        import os
         
         log_event(f"🔧 Synthesizing MCP server for: {capability_description}", "INFO")
         
@@ -427,7 +426,6 @@ CMD ["python", "server.py"]
             description: What the skill does
             tags: Optional tags for categorization
         """
-        import os
         
         skill_library_path = os.path.join(
             os.path.dirname(__file__), "..", "..", "skill_library.json"
@@ -449,7 +447,7 @@ CMD ["python", "server.py"]
             "description": description,
             "code": skill_code,
             "tags": tags or [],
-            "created_at": __import__('datetime').datetime.now().isoformat(),
+            "created_at": datetime.now().isoformat(),
             "usage_count": 0
         }
         
@@ -482,7 +480,6 @@ CMD ["python", "server.py"]
             task_description: What the current task needs
             max_skills: Maximum skills to return
         """
-        import os
         
         skill_library_path = os.path.join(
             os.path.dirname(__file__), "..", "..", "skill_library.json"

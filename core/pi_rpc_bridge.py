@@ -20,6 +20,7 @@ class PiRPCBridge:
         self.process: Optional[subprocess.Popen] = None
         self.callbacks: Dict[str, Callable[[Dict[str, Any]], Awaitable[None]]] = {}
         self.running = False
+        self._ready = asyncio.Event()  # Set when Pi Agent finishes initialization
     
     def _get_vllm_model(self) -> str:
         """Get the model name from .vllm_config, or use default."""
@@ -363,6 +364,7 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
                 start_new_session=True
             )
             self.running = True
+            self._ready.clear()  # Reset ready state for new process
             
             # Start reading output in background
             asyncio.create_task(self._read_stdout())
@@ -442,7 +444,21 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
             message: The prompt text to send.
             streaming_behavior: Optional. 'followUp' to queue if agent is busy,
                               'steer' to interrupt current processing.
+                              Defaults to 'steer' to avoid blocking.
         """
+        # Wait for Pi Agent to be ready (max 30s)
+        if not self._ready.is_set():
+            logger.info("Waiting for Pi Agent to be ready...")
+            try:
+                await asyncio.wait_for(self._ready.wait(), timeout=30.0)
+                logger.info("Pi Agent is ready, sending prompt.")
+            except asyncio.TimeoutError:
+                logger.warning("Pi Agent ready timeout (30s). Sending prompt anyway.")
+        
+        # Default to 'steer' to prevent "already processing" errors
+        if streaming_behavior is None:
+            streaming_behavior = 'steer'
+        
         cmd = {
             "id": str(uuid.uuid4()),
             "type": "prompt",
@@ -450,6 +466,8 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
         }
         if streaming_behavior:
             cmd["streamingBehavior"] = streaming_behavior
+        
+        logger.info(f"Sending prompt to Pi Agent ({len(message)} chars): {message[:100]}...")
         await self.send_command_json(cmd)
 
     async def send_command_json(self, cmd: Dict[str, Any]):
@@ -465,6 +483,7 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
             try:
                 self.process.stdin.write(json_line)
                 self.process.stdin.flush()
+                logger.info(f"JSON command written to stdin: type={cmd.get('type')}")
             except Exception as e:
                 logger.error(f"Failed to write to agent stdin: {e}")
         
@@ -487,6 +506,7 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
             try:
                 # Try parsing as JSON event
                 data = json.loads(line)
+                logger.info(f"Pi Agent JSON event: type={data.get('type', 'unknown')}")
                 # Emit to all registered callbacks
                 if self.callbacks:
                     for cid, cb in list(self.callbacks.items()):
@@ -498,11 +518,15 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
             except json.JSONDecodeError:
                 # Non-JSON output (e.g., extension init messages, progress logs)
                 logger.info(f"Pi Agent: {line}")
+                # Detect when Pi Agent is ready (after vLLM extension registers)
+                if "Registering vLLM provider" in line or "registered" in line.lower():
+                    logger.info("Pi Agent initialization complete - marking as ready.")
+                    self._ready.set()
             except Exception as e:
                 logger.error(f"Error handling agent output: {e}")
         
         if self.process:
-            logger.debug(f"Pi Agent process exited with code: {self.process.poll()}")
+            logger.info(f"Pi Agent stdout reader exited. Process return code: {self.process.poll()}")
 
     async def _read_stderr(self):
         """Read stderr for logs."""
@@ -511,8 +535,12 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
             
         while self.running:
             line = await asyncio.to_thread(self.process.stderr.readline)
+            if not line:
+                break
+            line = line.strip()
             if line:
-                logger.debug(f"Pi Log: {line.strip()}")
+                # Log at INFO level so Pi Agent errors are visible
+                logger.info(f"Pi Agent stderr: {line}")
 
 # Singleton
 _bridge: Optional[PiRPCBridge] = None
