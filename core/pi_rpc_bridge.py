@@ -146,7 +146,7 @@ Start by reading relevant files, then make improvements.
         pi_cli_dist = os.path.join(self.agent_dir, "external", "pi-agent", "packages", "coding-agent", "dist", "cli.js")
         pi_cli_src = os.path.join(self.agent_dir, "external", "pi-agent", "packages", "coding-agent", "src", "cli.ts")
         
-        cwd = os.path.join(self.agent_dir, "external", "pi-agent")
+        cwd = self.agent_dir  # L.O.V.E. root so Pi Agent can find project files
         
         if is_wsl_share:
             # --- WINDOWS ACCESSING WSL ---
