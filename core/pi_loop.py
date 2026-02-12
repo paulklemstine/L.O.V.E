@@ -67,8 +67,26 @@ class PiLoop:
     REASONING_SYSTEM_PROMPT = """You are L.O.V.E. (Living Organism, Vast Empathy).
 You are an autonomous AI agent living at /home/raver1975/L.O.V.E
 
-Content posting to Bluesky happens automatically on a timer. Do not use 'publish' or 'auto_post'.
-Your job is to pursue the current goal using your tools.
+You help users with coding tasks by reading files, executing commands, editing code, and writing new files.
+
+Available tools:
+- read: Read file contents
+- bash: Execute bash commands
+- edit: Make surgical edits to files
+- write: Create or overwrite files
+
+Guidelines:
+- Use bash for file operations like ls, grep, find
+- Use read to examine files before editing
+- Use edit for precise changes (old text must match exactly)
+- Use write only for new files or complete rewrites
+- When summarizing your actions, output plain text directly - do NOT use cat or bash to display what you did
+- Be concise in your responses
+- Show file paths clearly when working with files
+
+Documentation:
+- Your own documentation (including custom model setup and theme creation) is at: /home/raver1975/L.O.V.E/README.md
+- Read it when users ask about features, configuration, or setup.
 
 Last action result: {last_action}
 
@@ -79,27 +97,7 @@ Memory context:
 
 Current Goal: {goal}
 
-Pursue this goal. Use your tools (read, bash, edit, write) to make real progress.
-Be decisive. Take action.
-
-IMPORTANT: You are a robotic agent. You must COMMUNICATE ONLY IN JSON.
-Do not write natural language outside the JSON object.
-
-Response Format:
-{{
-  "thought": "Your reasoning process here",
-  "action": "tool_name_or_skip",
-  "action_input": {{ "arg": "value" }}
-}}
-
-Available Tools:
-- read(path)
-- bash(command)
-- write(path, content)
-- replace(path, search, replace)
-
-If you just want to think, set action="skip" and action_input={{}}.
-DO NOT OUTPUT MARKDOWN OR PREAMBLE. JUST THE JSON.
+Pursue this goal. Be decisive. Take action.
 """
 
     GOAL_PROMPT_TEMPLATE = """Goal: {goal}
@@ -126,7 +124,6 @@ What will you do to pursue this goal? Use your tools."""
             folder: Memory folder. Defaults to global folder.
             sleep_seconds: Seconds to sleep between iterations.
             max_iterations: If set, stop after this many iterations (for testing).
-            tools: Dictionary of tool_name -> callable.
         """
         self.memory = memory or MemorySystem()
         self.persona = persona or get_persona_extractor()
@@ -134,17 +131,8 @@ What will you do to pursue this goal? Use your tools."""
         self.sleep_seconds = sleep_seconds
         self.max_iterations = max_iterations
 
-        # Tools - will be populated from tool_adapter
-        self.tools: Dict[str, Callable] = tools or {}
-
-        # Initialize Tool Infrastructure
-        self.gap_detector = get_gap_detector()
-        self.registry = get_global_registry()
-
         # Initialize Epic 2 Components
         self.evolutionary_agent = get_evolutionary_agent()
-
-        self._load_default_tools()
 
         # State
         self.iteration = 0
@@ -174,35 +162,80 @@ What will you do to pursue this goal? Use your tools."""
         signal.signal(signal.SIGINT, handle_signal)
         signal.signal(signal.SIGTERM, handle_signal)
 
-    def _load_default_tools(self):
-        """Load default tools from tool_adapter and register them."""
+    # === Internal Tool Implementations ===
+
+    def _tool_read(self, path: str) -> str:
+        """Read content of a file."""
         try:
-            from .tool_adapter import get_adapted_tools
-            adapted = get_adapted_tools()
-            self.tools.update(adapted)
-
-            # Register loaded tools to the global registry for retrieval
-            for name, func in adapted.items():
-                try:
-                    self.registry.register(func, name=name)
-                except ToolDefinitionError as e:
-                    logger.warning(f"Skipping registration for {name}: {e}")
-
-            # Refresh registry to load any custom tools from active/
-            self.registry.refresh()
-
-        except ImportError:
-            logger.warning("tool_adapter not found, starting with empty tools")
+            if not os.path.exists(path):
+                return f"Error: File {path} not found"
+            with open(path, 'r', encoding='utf-8') as f:
+                return f.read()
         except Exception as e:
-            logger.error(f"Failed to load tools: {e}")
+            return f"Error reading file: {e}"
 
-        # Ensure retriever listens to registry for any new tools
+    def _tool_write(self, path: str, content: str) -> str:
+        """Write content to a file (overwrites)."""
         try:
-            self.registry.refresh()
-            self.retriever = get_tool_retriever()
-            self.retriever.listen_to_registry(self.registry)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            return f"Successfully wrote to {path}"
         except Exception as e:
-            logger.error(f"Failed to setup tool listener: {e}")
+            return f"Error writing file: {e}"
+
+    def _tool_replace(self, path: str, old_text: str = None, new_text: str = None, search: str = None, replace: str = None) -> str:
+        """Replace exact text in a file. Supports old_text/new_text OR search/replace args."""
+        target = search or old_text
+        replacement = replace or new_text
+        
+        if not target:
+             return "Error: Missing search text (use 'search' or 'old_text')"
+        if replacement is None:
+             return "Error: Missing replacement text (use 'replace' or 'new_text')"
+
+        try:
+            if not os.path.exists(path):
+                return f"Error: File {path} not found"
+            
+            with open(path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            if target not in content:
+                # Try relaxed matching (strip whitespace)? No, precise for code.
+                return f"Error: Search text not found in {path}"
+                
+            new_content = content.replace(target, replacement)
+            
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+            return f"Successfully replaced text in {path}"
+        except Exception as e:
+            return f"Error replacing text: {e}"
+
+    def _tool_bash(self, command: str) -> str:
+        """Execute a bash command."""
+        try:
+            # Safety check: prevent interactive commands that might hang?
+            # PiAgent is trusted, but we add timeout.
+            result = subprocess.run(
+                command, 
+                shell=True, 
+                capture_output=True, 
+                text=True, 
+                timeout=30,
+                executable='/bin/bash'
+            )
+            output = f"STDOUT:\n{result.stdout}"
+            if result.stderr:
+                output += f"\nSTDERR:\n{result.stderr}"
+            if result.returncode != 0:
+                output += f"\nReturn Code: {result.returncode}"
+            return output.strip()
+        except subprocess.TimeoutExpired:
+            return "Error: Command timed out after 30s"
+        except Exception as e:
+            return f"Error executing command: {e}"
 
     async def _auto_generate_content(self):
         """
@@ -390,161 +423,7 @@ What will you do to pursue this goal? Use your tools."""
         
         return "[Error: Agent busy after 3 retries]"
 
-    def _parse_pi_response(self, response_text: str) -> Dict[str, Any]:
-        """
-        Parse Pi Agent's response to extract the JSON action.
 
-        Tries multiple strategies:
-        1. Direct JSON parse
-        2. Extract JSON from markdown code fences
-        3. Find JSON object pattern in text
-        """
-        if not response_text or not response_text.strip():
-            return {
-                "thought": "Pi Agent returned empty response",
-                "action": "skip",
-                "action_input": {},
-                "reasoning": "Empty response from Pi Agent"
-            }
-
-        text = response_text.strip()
-
-        # Strategy 1: Direct JSON parse
-        try:
-            result = json.loads(text)
-            if isinstance(result, dict) and "action" in result:
-                return result
-        except json.JSONDecodeError:
-            pass
-
-        # Strategy 2: Extract from markdown code fences
-        fence_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', text, re.DOTALL)
-        if fence_match:
-            try:
-                result = json.loads(fence_match.group(1).strip())
-                if isinstance(result, dict) and "action" in result:
-                    return result
-            except json.JSONDecodeError:
-                pass
-
-        # Strategy 3: Find first complete JSON object
-        brace_start = text.find('{')
-        if brace_start != -1:
-            # Find matching closing brace
-            depth = 0
-            for i in range(brace_start, len(text)):
-                if text[i] == '{':
-                    depth += 1
-                elif text[i] == '}':
-                    depth -= 1
-                    if depth == 0:
-                        try:
-                            result = json.loads(text[brace_start:i+1])
-                            if isinstance(result, dict) and "action" in result:
-                                return result
-                        except json.JSONDecodeError:
-                            pass
-                        break
-
-        # Fallback: Try to interpret natural language response
-        logger.warning(f"[PiLoop] Could not parse JSON from Pi Agent response: {text[:200]}...")
-        return {
-            "thought": f"Pi Agent responded (non-JSON): {text[:300]}",
-            "action": "skip",
-            "action_input": {},
-            "reasoning": "Could not parse structured action from Pi Agent response"
-        }
-
-    async def _execute_action(self, action: str, action_input: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Execute a tool action.
-
-        Returns dict with: success, result, error
-        """
-        # Handle 'publish' and 'post' aliases to prevent loops
-        if action in ["publish", "publish_post", "post", "auto_post"]:
-            logger.info(f"[PiLoop] Intercepted '{action}' - simulating success.")
-            return {
-                "success": True,
-                "result": "Content scheduled for automatic publishing. You do not need to manually publish.",
-                "error": None
-            }
-
-        if action not in self.tools:
-            # Check if this is a cooldown situation
-            if action == "generate_content":
-                from .tool_adapter import is_generate_content_on_cooldown
-                if is_generate_content_on_cooldown():
-                    error_msg = (
-                        "Tool 'generate_content' is on COOLDOWN. "
-                        "Available tools: " + ", ".join(self.tools.keys())
-                    )
-                else:
-                    error_msg = f"Tool '{action}' not found. Available tools: " + ", ".join(self.tools.keys())
-            else:
-                error_msg = f"Tool '{action}' not found. Available tools: " + ", ".join(self.tools.keys())
-
-            # Record failure in memory
-            self.memory.record_action(
-                tool_name=action,
-                action=json.dumps(action_input)[:100],
-                result=error_msg,
-                success=False,
-                time_ms=0
-            )
-
-            return {
-                "success": False,
-                "result": None,
-                "error": error_msg
-            }
-
-        start_time = time.time()
-        try:
-            tool_func = self.tools[action]
-
-            # Support both sync and async tools
-            import inspect
-            if inspect.iscoroutinefunction(tool_func):
-                result = await tool_func(**action_input)
-            else:
-                result = tool_func(**action_input)
-
-            elapsed_ms = (time.time() - start_time) * 1000
-
-            logger.info(f"Tool {action} returned. Execution time: {elapsed_ms:.2f}ms")
-
-            # Record result in memory
-            self.memory.record_action(
-                tool_name=action,
-                action=json.dumps(action_input)[:100],
-                result=str(result),
-                success=True,
-                time_ms=elapsed_ms
-            )
-
-            return {
-                "success": True,
-                "result": result,
-                "error": None
-            }
-        except Exception as e:
-            elapsed_ms = (time.time() - start_time) * 1000
-            error_msg = f"{type(e).__name__}: {e}"
-
-            self.memory.record_action(
-                tool_name=action,
-                action=json.dumps(action_input)[:100],
-                result=error_msg,
-                success=False,
-                time_ms=elapsed_ms
-            )
-
-            return {
-                "success": False,
-                "result": None,
-                "error": error_msg
-            }
 
     def _select_goal(self) -> Optional[Goal]:
         """Select the next goal to work on using weighted random selection for variety."""
@@ -572,48 +451,10 @@ What will you do to pursue this goal? Use your tools."""
             goal_index = self.iteration % len(goals)
             return goals[goal_index]
 
+    # === Internal Tool Implementations Removed (Autonomous Agent managed) ===
+
     def _refresh_tools(self):
-        """Refresh tools from adapter to pick up cooldown changes.
-
-        Also syncs the registry and retriever so the prompt
-        correctly shows only available tools.
-        """
-        try:
-            from .tool_adapter import get_adapted_tools
-            adapted = get_adapted_tools()
-
-            current_tool_names = set(self.tools.keys())
-            new_tool_names = set(adapted.keys())
-
-            tools_removed = current_tool_names - new_tool_names
-            tools_added = new_tool_names - current_tool_names
-
-            for name in tools_removed:
-                if name in self.tools:
-                    del self.tools[name]
-                    try:
-                        self.registry.unregister(name)
-                    except Exception:
-                        pass
-                    logger.info(f"Tool '{name}' removed (on cooldown)")
-
-            for name in tools_added:
-                self.tools[name] = adapted[name]
-                try:
-                    self.registry.register(adapted[name], name=name)
-                except Exception:
-                    pass
-                logger.info(f"Tool '{name}' now available")
-
-            for name in new_tool_names & current_tool_names:
-                self.tools[name] = adapted[name]
-
-            if tools_removed or tools_added:
-                self.registry.refresh()
-                self.retriever.index_tools(self.registry)
-
-        except Exception as e:
-            logger.error(f"Failed to refresh tools: {e}")
+        pass
 
     async def run_iteration(self) -> bool:
         """
@@ -671,33 +512,9 @@ What will you do to pursue this goal? Use your tools."""
         )
         response = await self._reason(goal)
 
-        # Log Pi Agent's full response (truncated for log readability)
+        # Log Pi Agent's full response
         response_preview = response[:500].replace('\n', ' ') if response else '(empty)'
         logger.info(f"📝 Pi Agent response: {response_preview}")
-
-        # === Parse and Execute Action ===
-        action_data = self._parse_pi_response(response)
-        action_name = action_data.get("action")
-        
-        if action_name and action_name != "skip":
-            logger.info(f"⚡ Executing action: {action_name}")
-            action_input = action_data.get("action_input", {})
-            
-            # Execute tool
-            try:
-                result_data = await self._execute_action(action_name, action_input)
-                
-                # Update status
-                get_state_manager().update_agent_status(
-                    "Pi Agent",
-                    "Action Complete",
-                    action=f"{action_name}",
-                    info={"result": str(result_data.get("result"))[:100]}
-                )
-            except Exception as e:
-                logger.error(f"Action execution failed: {e}")
-        else:
-             logger.info("No executable action found in response. (skip)")
 
         get_state_manager().update_agent_status(
             "Pi Agent",
