@@ -552,7 +552,7 @@ What will you do to pursue this goal? Use your tools."""
         logger.info("🌊 L.O.V.E. PiLoop Starting 🌊")
         logger.info(f"   Sleep interval: {self.sleep_seconds}s")
         logger.info(f"   Max iterations: {self.max_iterations or 'Infinite'}")
-        logger.info(f"   Tools loaded: {len(self.tools)}")
+        logger.info(f"   Tools: Autonomous (Agent Managed)")
         logger.info("=" * 60)
 
         # Start Pi Agent bridge

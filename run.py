@@ -193,7 +193,7 @@ Examples:
     print(f"Configuration:")
     print(f"  • Iterations: {'Infinite' if max_iterations is None else max_iterations}")
     print(f"  • Sleep interval: {args.sleep}s")
-    print(f"  • Tools loaded: {len(loop.tools)}")
+    print(f"  • Tools: Autonomous (Agent Managed)")
     print()
     
     try:
