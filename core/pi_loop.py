@@ -83,11 +83,11 @@ Pursue this goal. Use your tools (read, bash, edit, write) to make real progress
 Be decisive. Take action.
 
 IMPORTANT: To use a tool, you must output a JSON object in this format:
-{
+{{
   "thought": "reasoning here",
   "action": "tool_name",
-  "action_input": { "arg": "value" }
-}
+  "action_input": {{ "arg": "value" }}
+}}
 If no tool is needed yet, just output your reasoning.
 """
 
