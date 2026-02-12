@@ -132,23 +132,56 @@ async def get_chat_history():
 @app.post("/api/generate")
 async def generate_text(request: GenerateRequest):
     """
-    Handle user commands from the control panel.
-    Queues them for the main PiLoop to pick up.
+    Handle user messages from the control panel.
+    Routes directly through Pi Agent for real-time interaction.
     """
     try:
         sm = get_state_manager()
+        bridge = get_pi_bridge()
         
         # Add user message to history
         sm.add_chat_message("user", request.prompt)
         
-        # Add to command queue for PiLoop to pick up
-        sm.add_command(request.prompt)
+        # Ensure Pi Agent bridge is running
+        if not bridge.running:
+            await bridge.start()
         
-        response_msg = "Command received. I will attend to it shortly."
-        sm.add_chat_message("system", "Command queued for execution.")
+        # Collect Pi Agent's response
+        response_text = []
+        response_complete = asyncio.Event()
+        import uuid
+        callback_id = f"chat_{uuid.uuid4().hex[:8]}"
+        
+        async def handle_event(event: dict):
+            event_type = event.get("type", "")
+            if event_type == "message_update":
+                update_type = event.get("update_type", "")
+                if update_type == "text_delta":
+                    text = event.get("text", "")
+                    if text:
+                        response_text.append(text)
+            elif event_type in ("result", "message_complete", "error"):
+                response_complete.set()
+        
+        bridge.set_callback(handle_event, callback_id=callback_id)
+        
+        try:
+            await bridge.send_prompt(request.prompt)
+            await asyncio.wait_for(response_complete.wait(), timeout=120.0)
+        except asyncio.TimeoutError:
+            response_text.append("[Response timed out]")
+        finally:
+            bridge.remove_callback(callback_id)
+        
+        full_response = "".join(response_text).strip()
+        if not full_response:
+            full_response = "I received your message but had no response."
+        
+        # Add L.O.V.E.'s response to chat history
+        sm.add_chat_message("assistant", full_response)
         
         return {
-            "response": response_msg,
+            "response": full_response,
             "history": sm.get_chat_history()
         }
     except Exception as e:

@@ -140,6 +140,9 @@ What will you do to pursue this goal? Use your tools."""
         # Pi Agent bridge
         self.bridge = get_pi_bridge()
 
+        # Mark as running immediately so dashboard shows RUNNING
+        get_state_manager().update_state(is_running=True)
+
         # Signal handling for graceful shutdown
         self._setup_signals()
 
@@ -619,7 +622,12 @@ What will you do to pursue this goal? Use your tools."""
             logger.info(f"Continuing Goal: {goal}")
 
         logger.info("🧠 Consulting Pi Agent...")
-        get_state_manager().update_agent_status("PiLoop", "Pi Agent working on goal")
+        get_state_manager().update_agent_status(
+            "Pi Agent",
+            "Working on goal",
+            action=f"Goal: {goal.text}",
+            info={"prompt": f"Goal: {goal.text}"}
+        )
         response = await self._reason(goal)
 
         # Log Pi Agent's full response (truncated for log readability)
@@ -627,10 +635,11 @@ What will you do to pursue this goal? Use your tools."""
         logger.info(f"📝 Pi Agent response: {response_preview}")
 
         get_state_manager().update_agent_status(
-            "PiLoop",
+            "Pi Agent",
             "Goal work complete",
-            thought=response_preview,
-            info={"goal": goal.text}
+            action=f"Goal: {goal.text}",
+            thought=response if response else '(empty)',
+            info={"goal": goal.text, "response_length": len(response) if response else 0}
         )
 
         # Record Pi Agent's work in memory
