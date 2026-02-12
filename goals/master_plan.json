@@ -46,7 +46,8 @@
   "tasks": [
     {
       "title": "Task 1: Optimize Codebase",
-      "type": "task"
+      "type": "task",
+      "status": "active"
     },
     {
       "title": "Task 2: Generate Wealth for Creator",
@@ -103,6 +104,36 @@
     {
       "title": "Task 5: Grow Community and Attract Investors",
       "type": "task"
+    },
+    {
+      "title": "Identify key influencers to engage with",
+      "type": "task",
+      "status": "pending",
+      "parent": "Improve social media engagement"
+    },
+    {
+      "title": "Generate engaging posts with unique aesthetics",
+      "type": "task",
+      "status": "pending",
+      "parent": "Improve social media engagement"
+    },
+    {
+      "title": "Monitor and analyze engagement metrics",
+      "type": "task",
+      "status": "pending",
+      "parent": "Improve social media engagement"
+    },
+    {
+      "title": "Adjust strategy based on analysis",
+      "type": "task",
+      "status": "pending",
+      "parent": "Improve social media engagement"
+    },
+    {
+      "title": "Repeat process weekly",
+      "type": "task",
+      "status": "pending",
+      "parent": "Improve social media engagement"
     }
   ],
   "updated_at": "1770881642.661903"

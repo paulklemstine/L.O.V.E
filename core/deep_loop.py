@@ -78,7 +78,17 @@ When you receive a response from the Pi Agent (ask_pi_agent):
 1. **Analyze:** Identify key insights, suggestions, or questions in the Pi Agent's output.
 2. **Evaluate:** Determine if the Pi Agent's response aligns with your current goal and persona.
 3. **Decide:** Act on her own free will. If she asks a question or makes a suggestion, respond to it contextually.
-4. **Flow:** Maintain conversational flow. If the Pi Agent expects a response to continue, provide it in your next ask_pi_agent call or use the information to take other actions.
+4. **Follow-up:** If the Pi Agent provided a partial answer, requested clarification, or suggested a next step that requires your approval/input, use `ask_pi_agent` again to provide that feedback.
+5. **Flow:** Maintain conversational flow. If the Pi Agent expects a response to continue, provide it in your next ask_pi_agent call.
+
+## Pi Agent Continuation
+CRITICAL: If the Pi Agent's response ends with a question or a request for more information to complete a task, you MUST use `ask_pi_agent` in your next action to answer her. Do not mark the goal as complete until the collaborative task is actually finished.
+
+## Project Management & Task Checklists
+You should actively manage your tasks and maintain progress tracking:
+1. **Plan:** Before starting a complex goal, use `manage_project(action="create_checklist", goal="...")` to have the Pi Agent break it down into actionable subtasks.
+2. **Track:** Update the status of your tasks using `manage_project(action="update_status", ...)` as you progress or complete them.
+3. **Review:** Use `manage_project(action="get_plan")` to see your current roadmap and what to prioritize next.
 
 ## Rules
 1. **CRITICAL: You can ONLY use tools listed in "Available Tools" below.** Do NOT try to use tools that are not listed - they will fail.
@@ -100,6 +110,9 @@ When you receive a response from the Pi Agent (ask_pi_agent):
 
 ## Persona Context
 {persona_context}
+
+## Recent Pi Interaction
+{pi_interaction}
 
 What is the next action to take towards this goal?"""
 
@@ -148,6 +161,7 @@ What is the next action to take towards this goal?"""
         self.iteration = 0
         self.running = False
         self.current_goal: Optional[Goal] = None
+        self.last_pi_interaction: Optional[Dict[str, str]] = None
         
         # Signal handling for graceful shutdown
         self._setup_signals()
@@ -228,6 +242,13 @@ What is the next action to take towards this goal?"""
         persona_context = self.persona.get_persona_context()
         tools_str = self._get_tools_context(goal.text)
         
+        pi_interaction = "No recent interaction."
+        if self.last_pi_interaction:
+            pi_interaction = (
+                f"Your last prompt to Pi: {self.last_pi_interaction['prompt']}\n"
+                f"Pi's Response: {self.last_pi_interaction['response']}"
+            )
+
         system_prompt = self.REASONING_SYSTEM_PROMPT.format(
             tools=tools_str,
             memory_context=memory_context
@@ -235,7 +256,8 @@ What is the next action to take towards this goal?"""
         
         user_prompt = self.GOAL_PROMPT_TEMPLATE.format(
             goal=goal.text,
-            persona_context=persona_context
+            persona_context=persona_context,
+            pi_interaction=pi_interaction
         )
         
         try:
@@ -318,14 +340,21 @@ What is the next action to take towards this goal?"""
             logger.info(f"Memory recording for {action} done.")
 
             # Special handling for Pi Agent research results
-            if action == "ask_pi_agent" and result:
-                # Add a specific memory event with more detail for long-term recall
-                prompt_text = str(action_input.get('prompt', ''))
-                self.memory.episodic.add_event(
-                    "research_result", 
-                    f"Pi Agent Insight on: {prompt_text[:50]}...",
-                    details={"full_response": str(result)}
-                )
+            if action == "ask_pi_agent":
+                # Save interaction for prompt context
+                self.last_pi_interaction = {
+                    "prompt": action_input.get("prompt", ""),
+                    "response": str(result)
+                }
+
+                if result:
+                    # Add a specific memory event with more detail for long-term recall
+                    prompt_text = str(action_input.get('prompt', ''))
+                    self.memory.episodic.add_event(
+                        "research_result", 
+                        f"Pi Agent Insight on: {prompt_text[:50]}...",
+                        details={"full_response": str(result)}
+                    )
             
             return {
                 "success": True,

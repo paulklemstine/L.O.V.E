@@ -305,6 +305,84 @@ def _get_love2_tools() -> Dict[str, Callable]:
     
     tools["ask_pi_agent"] = ask_pi_agent
     
+    # Project Management Tool
+    async def manage_project(action: str, **kwargs) -> Any:
+        """
+        Manage project tasks, checklists, and progress tracking.
+        
+        Actions:
+        - 'get_plan': Returns the current Master Plan (Epics, Features, Tasks).
+        - 'update_status': Update the status of a task.
+          Args: title (str), status (str: 'pending', 'active', 'completed')
+        - 'create_checklist': Uses Pi Agent to break down a goal into a checklist and adds it to the plan.
+          Args: goal (str)
+        
+        Example: manage_project(action="update_status", title="Optimize Codebase", status="completed")
+        """
+        from .master_plan_manager import get_master_plan_manager
+        from .state_manager import get_state_manager
+        manager = get_master_plan_manager()
+        state = get_state_manager()
+        
+        if action == "get_plan":
+            return manager.load_plan()
+            
+        elif action == "update_status":
+            title = kwargs.get("title")
+            status = kwargs.get("status")
+            if not title or not status:
+                return "Error: title and status are required for update_status."
+            
+            success = manager.update_task_status(title, status)
+            if success:
+                # Update UI state
+                state.update_agent_status("DeepLoop", f"Updated Task: {title} to {status}")
+                return f"Successfully updated status of '{title}' to '{status}'."
+            return f"Error: Task '{title}' not found in plan."
+            
+        elif action == "create_checklist":
+            goal = kwargs.get("goal")
+            if not goal:
+                return "Error: goal is required for create_checklist."
+            
+            # Use Pi Agent to generate checklist
+            prompt = f"Break down this goal into a list of 3-5 actionable subtasks: {goal}. Output ONLY a JSON list of strings."
+            # We call ask_pi_agent tool (which is already in the tools dict but we can call it directly)
+            # Since we are in the same scope, we can use the ask_pi_agent we just defined above.
+            
+            # NOTE: We need to handle JSON parsing from Pi Agent response
+            response = await ask_pi_agent(prompt)
+            
+            import re
+            import json
+            
+            # Try to find JSON list in response
+            match = re.search(r"\[.*\]", response, re.DOTALL)
+            if match:
+                try:
+                    subtasks = json.loads(match.group(0))
+                    if isinstance(subtasks, list):
+                        manager.add_checklist(goal, subtasks)
+                        # Update UI state with subtasks
+                        state.update_agent_status("DeepLoop", "Created Checklist", subtasks=subtasks)
+                        return f"Created checklist for '{goal}': {subtasks}"
+                except:
+                    pass
+            
+            # Fallback: Split by lines if JSON fails
+            lines = [l.strip("- *123456789. ") for l in response.strip().split("\n") if l.strip()]
+            subtasks = [l for l in lines if len(l) > 3][:5]
+            if subtasks:
+                manager.add_checklist(goal, subtasks)
+                state.update_agent_status("DeepLoop", "Created Checklist", subtasks=subtasks)
+                return f"Created checklist for '{goal}' (fallback parsing): {subtasks}"
+                
+            return "Error: Failed to generate a valid checklist from Pi Agent response."
+            
+        return f"Unknown action: {action}"
+
+    tools["manage_project"] = manage_project
+    
     return tools
 
 

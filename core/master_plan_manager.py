@@ -146,7 +146,8 @@ class MasterPlanManager:
             goals.append({
                 "text": f"Task: {task['title']}",
                 "priority": 1, # High priority to start executing
-                "category": "master_plan_task"
+                "category": "master_plan_task",
+                "status": task.get("status", "pending")
             })
             
         # Add Features (Medium)
@@ -154,7 +155,8 @@ class MasterPlanManager:
             goals.append({
                 "text": f"Feature: {feature['title']}",
                 "priority": 2,
-                "category": "master_plan_feature"
+                "category": "master_plan_feature",
+                "status": feature.get("status", "pending")
             })
             
         # Epics (Strategic)
@@ -162,10 +164,57 @@ class MasterPlanManager:
             goals.append({
                 "text": f"Epic: {epic['title']}",
                 "priority": 3,
-                "category": "master_plan_epic"
+                "category": "master_plan_epic",
+                "status": epic.get("status", "pending")
             })
             
         return goals
+
+    def update_task_status(self, title: str, status: str) -> bool:
+        """Updates the status of a task by title."""
+        plan = self.load_plan()
+        updated = False
+        
+        for task in plan.get("tasks", []):
+            if task["title"] == title or f"Task: {task['title']}" == title:
+                task["status"] = status
+                updated = True
+                break
+                
+        if updated:
+            self._save_json(plan)
+            return True
+        return False
+
+    def add_checklist(self, parent_goal: str, subtasks: List[str]) -> bool:
+        """Adds a list of subtasks to a goal."""
+        plan = self.load_plan()
+        
+        # Find if it's an Epic, Feature or Task
+        found = False
+        
+        # We'll just add them to the flat 'tasks' list for now but prefixed with the parent
+        for sub in subtasks:
+            # Check if it already exists
+            exists = False
+            for existing in plan.get("tasks", []):
+                if existing["title"] == sub:
+                    exists = True
+                    break
+            
+            if not exists:
+                plan.setdefault("tasks", []).append({
+                    "title": sub,
+                    "type": "task",
+                    "status": "pending",
+                    "parent": parent_goal
+                })
+                found = True
+        
+        if found:
+            self._save_json(plan)
+            return True
+        return False
 
 # Singleton
 _manager = None
