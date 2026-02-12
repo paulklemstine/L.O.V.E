@@ -140,7 +140,7 @@ Respond with JSON in this exact format:
         # Summarize the middle portion
         try:
             summary_json = self.llm.generate_json(
-                prompt=self.FOLD_USER_PROMPT_TEMPLATE.format(history=middle[:4000]),
+                prompt=self.FOLD_USER_PROMPT_TEMPLATE.format(history=middle),
                 system_prompt=self.FOLD_SYSTEM_PROMPT,
                 temperature=0.3
             )

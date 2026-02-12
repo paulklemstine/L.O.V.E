@@ -233,24 +233,8 @@ class InfluencerScoutAgent:
         except Exception as e:
             logger.error(f"Failed to generate reply image: {e}")
 
-        # 3.8 Generate Hashtags
-        hashtags = []
-        try:
-            hashtags = await creative_writer_agent.generate_manipulative_hashtags(
-                topic="Connection",
-                count=3
-            )
-        except Exception as e:
-             logger.error(f"Failed to generate hashtags: {e}")
-             hashtags = ["#Connection", "#Network", "#Signal"]
-
         # 4. Construct Full Text (Standard Format)
-        # Format: Text \n\n Hashtags
-        # User requested "subliminal manipulative phrase" too.
-        # Standard posts uses subliminal for image, not text body usually.
-        # But per specific request, we'll ensure it's effectively present (maybe as a focused hashtag or just relied on for image).
-        # We'll treat the generated hashtags as the "manipulative" components requested.
-        full_text = f"{reply_text}\n\n{' '.join(hashtags)}"
+        full_text = reply_text
 
         # 5. Post (or Dry Run)
         mode = "DRY RUN" if (dry_run or not self.enabled) else "LIVE"

@@ -52,7 +52,7 @@ async def websocket_endpoint(websocket: WebSocket):
         except Exception:
             pass # Socket likely closed
 
-    bridge.set_callback(on_agent_event)
+    bridge.set_callback(on_agent_event, callback_id="web_ui")
     
     # Ensure bridge is started
     if not bridge.running:

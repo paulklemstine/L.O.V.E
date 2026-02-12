@@ -73,6 +73,13 @@ You MUST respond with valid JSON in this exact format:
     "reasoning": "Why this action helps achieve the goal"
 }}
 
+## Pi Agent Interaction Strategy
+When you receive a response from the Pi Agent (ask_pi_agent):
+1. **Analyze:** Identify key insights, suggestions, or questions in the Pi Agent's output.
+2. **Evaluate:** Determine if the Pi Agent's response aligns with your current goal and persona.
+3. **Decide:** Act on her own free will. If she asks a question or makes a suggestion, respond to it contextually.
+4. **Flow:** Maintain conversational flow. If the Pi Agent expects a response to continue, provide it in your next ask_pi_agent call or use the information to take other actions.
+
 ## Rules
 1. **CRITICAL: You can ONLY use tools listed in "Available Tools" below.** Do NOT try to use tools that are not listed - they will fail.
 2. If generate_content is NOT in the Available Tools list, it is on cooldown. Use ask_pi_agent instead for research, brainstorming, or learning.
@@ -211,7 +218,7 @@ What is the next action to take towards this goal?"""
         
         return full_context
     
-    def _reason(self, goal: Goal) -> Dict[str, Any]:
+    async def _reason(self, goal: Goal) -> Dict[str, Any]:
         """
         Reason about the goal and decide on next action.
         
@@ -232,7 +239,7 @@ What is the next action to take towards this goal?"""
         )
         
         try:
-            response = self.llm.generate_json(
+            response = await self.llm.generate_json_async(
                 prompt=user_prompt,
                 system_prompt=system_prompt,
                 temperature=0.7
@@ -247,7 +254,7 @@ What is the next action to take towards this goal?"""
                 "reasoning": "LLM call failed"
             }
     
-    def _execute_action(self, action: str, action_input: Dict[str, Any]) -> Dict[str, Any]:
+    async def _execute_action(self, action: str, action_input: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a tool action.
         
@@ -286,24 +293,37 @@ What is the next action to take towards this goal?"""
         start_time = time.time()
         try:
             tool_func = self.tools[action]
-            result = tool_func(**action_input)
+            
+            # Support both sync and async tools
+            import inspect
+            if inspect.iscoroutinefunction(tool_func):
+                result = await tool_func(**action_input)
+            else:
+                result = tool_func(**action_input)
+                
             elapsed_ms = (time.time() - start_time) * 1000
             
-            # IMPORTANT: Record this failure in memory so LLM learns from it
+            # LOG IMMEDIATELY
+            logger.info(f"Tool {action} returned. Execution time: {elapsed_ms:.2f}ms")
+            
+            logger.info(f"Recording {action} result in memory...")
+            # IMPORTANT: Record this result in memory so LLM learns from it
             self.memory.record_action(
                 tool_name=action,
                 action=json.dumps(action_input)[:100],
-                result=str(result)[:5000], # Increased from 200 to 5000 to capture full research
+                result=str(result), # Truncation removed to ensure full research is captured
                 success=True,
                 time_ms=elapsed_ms
             )
+            logger.info(f"Memory recording for {action} done.")
 
             # Special handling for Pi Agent research results
             if action == "ask_pi_agent" and result:
                 # Add a specific memory event with more detail for long-term recall
+                prompt_text = str(action_input.get('prompt', ''))
                 self.memory.episodic.add_event(
                     "research_result", 
-                    f"Pi Agent Insight on: {str(action_input.get('message', ''))[:50]}...",
+                    f"Pi Agent Insight on: {prompt_text[:50]}...",
                     details={"full_response": str(result)}
                 )
             
@@ -311,6 +331,23 @@ What is the next action to take towards this goal?"""
                 "success": True,
                 "result": result,
                 "error": None
+            }
+        except Exception as e:
+            elapsed_ms = (time.time() - start_time) * 1000
+            error_msg = f"{type(e).__name__}: {e}"
+            
+            self.memory.record_action(
+                tool_name=action,
+                action=json.dumps(action_input)[:100],
+                result=error_msg,
+                success=False,
+                time_ms=elapsed_ms
+            )
+            
+            return {
+                "success": False,
+                "result": None,
+                "error": error_msg
             }
         except Exception as e:
             elapsed_ms = (time.time() - start_time) * 1000
@@ -414,7 +451,7 @@ What is the next action to take towards this goal?"""
         except Exception as e:
             logger.error(f"Failed to refresh tools: {e}")
     
-    def run_iteration(self) -> bool:
+    async def run_iteration(self) -> bool:
         """
         Run a single iteration of the loop.
         
@@ -431,7 +468,7 @@ What is the next action to take towards this goal?"""
             
             try:
                 # Delegate to CreatorCommandAgent
-                asyncio.run(get_creator_command_agent().process_command(command_text))
+                await get_creator_command_agent().process_command(command_text)
                 logger.info("✅ Creator Command Loop Completed.")
             except Exception as e:
                 logger.error(f"Creator command failed: {e}")
@@ -451,7 +488,7 @@ What is the next action to take towards this goal?"""
             try:
                 # Delegate to Evolutionary Agent
                 # This blocks the main loop until fabrication attempts are done
-                tools_built = asyncio.run(self.evolutionary_agent.process_pending_specifications())
+                tools_built = await self.evolutionary_agent.process_pending_specifications()
                 
                 if tools_built > 0:
                     logger.info(f"✨ Successfully built {tools_built} new tools! Resuming...")
@@ -475,15 +512,21 @@ What is the next action to take towards this goal?"""
             logger.warning("No goals available")
             return False
         
+        # Goal Continuity Logic
+        is_new_goal = (not self.current_goal) or (self.current_goal.text != goal.text)
+        
         self.current_goal = goal
         get_state_manager().update_state(current_goal=goal.text)
         
-        self.memory.record_goal_start(goal.text)
-        logger.info(f"Goal: {goal}")
+        if is_new_goal:
+            self.memory.record_goal_start(goal.text)
+            logger.info(f"New Goal Started: {goal}")
+        else:
+            logger.info(f"Continuing Goal: {goal}")
         
         logger.info("Reasoning...")
         get_state_manager().update_agent_status("DeepLoop", "Reasoning")
-        decision = self._reason(goal)
+        decision = await self._reason(goal)
         
         logger.info(f"Thought: {decision.get('thought', 'N/A')}")
         logger.info(f"Action: {decision.get('action', 'N/A')}")
@@ -512,16 +555,19 @@ What is the next action to take towards this goal?"""
         logger.info(f"Executing {action}...")
         get_state_manager().update_agent_status("DeepLoop", "Executing", action=action, info=action_input)
         
-        result = self._execute_action(action, action_input)
+        result = await self._execute_action(action, action_input)
         
         if result["success"]:
-            logger.info(f"Success: {str(result['result'])[:100]}...")
+            logger.info(f"Tool {action} completed successfully.")
+            # Truncate log output to keep UI/terminal responsive - increased to allow more info
+            res_str = str(result['result'])
+            logger.info(f"Result: {res_str}")
         else:
-            logger.error(f"Failed: {result['error']}")
+            logger.error(f"Tool {action} failed: {result['error']}")
         
         return result["success"]
     
-    def run(self):
+    async def run(self):
         """
         Run the continuous loop.
         
@@ -558,7 +604,8 @@ What is the next action to take towards this goal?"""
                         memory_stats=self.memory.get_stats()
                     )
                     
-                    success_or_work_done = self.run_iteration()
+                    success_or_work_done = await self.run_iteration()
+                    logger.info(f"Iteration {self.iteration} logic completed.")
                 except Exception as e:
                     logger.error(f"Iteration error: {e}")
                     traceback.print_exc()
@@ -569,19 +616,22 @@ What is the next action to take towards this goal?"""
                     success_or_work_done = False
                 
                 # Persist state
+                logger.info("Persisting memory to disk...")
+                start_save = time.time()
                 self.memory.save()
+                logger.info(f"Memory persisted in {(time.time() - start_save)*1000:.2f}ms")
                 
                 # Dynamic backoff logic
                 # If the iteration did no work (skipped/failed) and sleep is 0, 
                 # we force a small sleep to prevent busy-looping (which spams logs).
                 if not success_or_work_done:
                      if self.sleep_seconds < 1.0:
-                         time.sleep(2.0)
+                         await asyncio.sleep(2.0)
                 
                 # Main user-configured sleep
                 if self.running and self.sleep_seconds > 0:
                     logger.info(f"Sleeping {self.sleep_seconds}s...")
-                    time.sleep(self.sleep_seconds)
+                    await asyncio.sleep(self.sleep_seconds)
         
         except Exception as e:
             logger.exception(f"Fatal error: {e}")

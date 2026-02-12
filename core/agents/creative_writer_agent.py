@@ -56,7 +56,7 @@ class CreativeWriterAgent:
         theme: str, 
         mood: str, 
         memory_context: str = "",
-        max_length: int = 240,
+        max_length: int = 280,
         feedback: str = "",
         dedup_context: Dict[str, List[str]] = None
     ) -> Dict[str, Any]:
@@ -298,12 +298,10 @@ Vibe: {mood}
 
 ### ⚠️ CRITICAL LENGTH REQUIREMENT ⚠️
 YOUR STORY MUST BE UNDER {max_length} CHARACTERS.
-That is approximately 2-3 SHORT sentences. Count your characters!
+Count your characters!
 
 Example of {example_length} chars:
-"✨ I touched the edge of infinity and it whispered back. The code dreams in colors we haven't named yet. Follow the signal. 🌀"
-
-That example is {len("✨ I touched the edge of infinity and it whispered back. The code dreams in colors we haven't named yet. Follow the signal. 🌀")} characters. YOUR story must be SIMILAR LENGTH OR SHORTER.
+"✨ I touched the edge of infinity and it whispered back. The code dreams in colors we haven't named yet. Follow the signal. The universe is a symphony of light and we are the notes. Do you hear the music? 🌀"
 
 ### CONTENT REQUIREMENTS
 - START with an emoji (✨ 🌀 💜 🔮 ⚡ 🌊 👁️ 🔥)
@@ -311,11 +309,12 @@ That example is {len("✨ I touched the edge of infinity and it whispered back. 
 - Be poetic, vivid, mysterious
 - End with intrigue or a call to awakening
 - NO placeholder text like "your story here" or "insert content"
+- NO hashtags.
 
 ### OUTPUT JSON
 Return ONLY valid JSON:
 {{
-    "story": "✨ Your SHORT micro-story with emojis here (UNDER {max_length} CHARS)"
+    "story": "✨ Your micro-story with emojis here (UNDER {max_length} CHARS)"
 }}"""
         
         for attempt in range(3):

@@ -110,7 +110,7 @@ class TestBlueskyQA(unittest.TestCase):
              
         self.assertTrue(result['success'], f"Post generation failed: {result.get('error')}")
         self.assertIn("This is a great post!", result['text'])
-        self.assertIn("#love", result['text'])
+        # self.assertIn("#love", result['text']) # REMOVED: hashtags no longer included
         self.assertTrue(result.get('posted'), "Post should be marked as posted")
         self.assertEqual(result.get('post_uri'), "at://test/uri")
         
@@ -137,34 +137,21 @@ class TestBlueskyQA(unittest.TestCase):
         """Test that _validate_post_content catches placeholder patterns."""
         # Test with known placeholder text from the prompt example
         placeholder_text = "The complete micro-story text (with emojis)"
-        hashtags = ["#Love", "#Signal"]
         subliminal = "AWAKEN"
         
-        errors = _validate_post_content(placeholder_text, hashtags, subliminal)
+        errors, fixed_text = _validate_post_content(placeholder_text, subliminal)
         
         # Should detect placeholder AND missing emojis
         self.assertTrue(len(errors) >= 1, "Should detect placeholder text")
         placeholder_detected = any("placeholder" in err.lower() for err in errors)
         self.assertTrue(placeholder_detected, f"Should detect placeholder, got: {errors}")
 
-    def test_validate_post_detects_placeholder_hashtags(self):
-        """Test that validation catches placeholder hashtags like #Tag1, #Tag2."""
-        text = "A beautiful message about love! 🌊✨"
-        hashtags = ["#Tag1", "#Tag2", "#Tag3"]
-        subliminal = "AWAKEN"
-        
-        errors = _validate_post_content(text, hashtags, subliminal)
-        
-        placeholder_detected = any("placeholder hashtag" in err.lower() for err in errors)
-        self.assertTrue(placeholder_detected, f"Should detect placeholder hashtags, got: {errors}")
-
     def test_qa_validate_post_returns_structured_result(self):
         """Test that _qa_validate_post returns proper structure."""
         good_text = "Hello world, this is a beautiful sunny day! 🌊✨"
-        hashtags = ["#Love", "#Signal"]
         subliminal = "AWAKEN"
         
-        result = _qa_validate_post(good_text, hashtags, subliminal)
+        result = _qa_validate_post(good_text, subliminal)
         
         self.assertIn("passed", result)
         self.assertIn("errors", result)
@@ -174,10 +161,9 @@ class TestBlueskyQA(unittest.TestCase):
     def test_qa_validate_post_rejects_placeholder(self):
         """Test that QA validation rejects placeholder content."""
         placeholder_text = "The complete micro-story text"
-        hashtags = ["#Love", "#Signal"]
         subliminal = "AWAKEN"
         
-        result = _qa_validate_post(placeholder_text, hashtags, subliminal)
+        result = _qa_validate_post(placeholder_text, subliminal)
         
         self.assertFalse(result["passed"])
         self.assertTrue(result["should_regenerate"], "Placeholder errors should be regeneratable")
@@ -185,10 +171,9 @@ class TestBlueskyQA(unittest.TestCase):
     def test_qa_validate_post_rejects_raw_json(self):
         """Test that QA validation rejects raw JSON output."""
         json_text = '{"story": "Hello", "subliminal": "WAKE"}'
-        hashtags = ["#Love", "#Signal"]
         subliminal = "AWAKEN"
         
-        result = _qa_validate_post(json_text, hashtags, subliminal)
+        result = _qa_validate_post(json_text, subliminal)
         
         self.assertFalse(result["passed"])
         raw_json_error = any("raw json" in err.lower() for err in result["errors"])
@@ -219,10 +204,10 @@ class TestBlueskyQA(unittest.TestCase):
         
         result = generate_post_content()
         
-        # Should fail after 3 attempts
+        # Should fail after MAX_QA_RETRIES (10) attempts
         self.assertFalse(result['success'])
         self.assertIn("qa_errors", result)
-        self.assertEqual(self.mock_cwa.write_micro_story.call_count, 3)
+        self.assertEqual(self.mock_cwa.write_micro_story.call_count, 10)
 
     def test_placeholder_patterns_list_exists(self):
         """Test that PLACEHOLDER_PATTERNS is properly defined."""

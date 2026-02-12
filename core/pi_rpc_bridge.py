@@ -1,10 +1,10 @@
-
 import asyncio
 import os
 import json
 import logging
 import subprocess
 import uuid
+import signal
 from typing import Optional, Callable, Dict, Any, Awaitable
 
 logger = logging.getLogger("PiRPCBridge")
@@ -18,7 +18,7 @@ class PiRPCBridge:
     def __init__(self, agent_dir: str):
         self.agent_dir = agent_dir
         self.process: Optional[subprocess.Popen] = None
-        self.event_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None
+        self.callbacks: Dict[str, Callable[[Dict[str, Any]], Awaitable[None]]] = {}
         self.running = False
     
     def _get_vllm_model(self) -> str:
@@ -74,16 +74,26 @@ class PiRPCBridge:
         except Exception as e:
             logger.warning(f"Failed to write extension config: {e}")
 
-    def set_callback(self, callback: Callable[[Dict[str, Any]], Awaitable[None]]):
-        self.event_callback = callback
+    def set_callback(self, callback: Callable[[Dict[str, Any]], Awaitable[None]], callback_id: str = "default"):
+        """Set or update a named callback."""
+        self.callbacks[callback_id] = callback
+
+    def remove_callback(self, callback_id: str):
+        """Remove a named callback."""
+        if callback_id in self.callbacks:
+            del self.callbacks[callback_id]
 
     async def start(self):
         """Start the Pi Agent in RPC mode."""
+        # If already running, just return to keep it warm
         if self.running:
             return
         
         # Write extension config with current vLLM model info
-        self._write_extension_config()
+        try:
+            self._write_extension_config()
+        except Exception as e:
+            logger.error(f"Failed to write extension config: {e}")
 
         # Check if we are potentially dealing with a WSL path on Windows
         is_wsl_share = self.agent_dir.startswith(r"\\wsl")
@@ -226,9 +236,6 @@ export VLLM_EXTENSION_CONFIG_PATH="{wsl_config_path}"
             
             # Set Popen CWD to a safe local dir to avoid UNC errors
             popen_cwd = os.environ.get("TEMP", "C:\\")
-            
-            # Set Popen CWD to a safe local dir to avoid UNC errors
-            popen_cwd = os.environ.get("TEMP", "C:\\")
 
         else:
             # --- NATIVE (LINUX OR WINDOWS LOCAL) ---
@@ -315,10 +322,7 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
                 cwd=popen_cwd,
                 env=env,
                 text=True,
-                bufsize=1,
-                # CRITICAL: Start in new process group to prevent SIGINT propagation
-                # Without this, Ctrl+C in parent kills the Pi Agent subprocess
-                start_new_session=True
+                bufsize=1
             )
             self.running = True
             
@@ -334,39 +338,64 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
 
     async def stop(self):
         """Stop the agent."""
+        if not self.process:
+            self.running = False
+            return
+            
+        start_stop = asyncio.get_event_loop().time()
+        logger.info(f"Stopping Pi Agent (PID {self.process.pid})...")
         self.running = False
-        if self.process:
-            logger.debug("Stopping Pi Agent...")
-            try:
-                # Send abort command first nicely if stdin is open
-                if self.process.stdin:
-                    # Non-blocking write attempt
+        
+        try:
+            # Send abort command first nicely if stdin is open
+            if self.process.stdin:
+                try:
+                    logger.info("Sending 'abort' command to Pi Agent...")
                     self.process.stdin.write(json.dumps({"type": "abort"}) + "\n")
                     self.process.stdin.flush()
-            except:
-                pass
-                
-            await asyncio.sleep(0.2)
+                except:
+                    pass
+            
+            await asyncio.sleep(0.1)
             
             # Close pipes to unblock any threads waiting on readline
-            if self.process.stdin:
-                try: self.process.stdin.close()
-                except: pass
-            if self.process.stdout:
-                try: self.process.stdout.close()
-                except: pass
-            if self.process.stderr:
-                try: self.process.stderr.close()
-                except: pass
-                
-            self.process.terminate()
+            logger.info("Closing Pi Agent pipes...")
+            for pipe in [self.process.stdin, self.process.stdout, self.process.stderr]:
+                if pipe:
+                    try: pipe.close()
+                    except: pass
+            
+            # Try SIGTERM to the process group
+            logger.info(f"Sending SIGTERM to Pi Agent process group {self.process.pid}...")
+            try:
+                import os
+                os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
+            except Exception as e:
+                logger.debug(f"SIGTERM process group failed: {e}")
+                try:
+                    self.process.send_signal(signal.SIGTERM)
+                except:
+                    self.process.terminate()
+            
             try:
                 # Wait in thread since wait() is blocking
+                logger.info("Waiting for Pi Agent process to exit...")
                 await asyncio.to_thread(self.process.wait, timeout=2)
             except:
-                try: self.process.kill()
-                except: pass
-        self.running = False
+                # Force kill if still alive
+                logger.warning("Pi Agent did not exit gracefully, sending SIGKILL to process group...")
+                try:
+                    os.killpg(os.getpgid(self.process.pid), signal.SIGKILL)
+                except:
+                    try: self.process.kill()
+                    except: pass
+        except Exception as e:
+            logger.debug(f"Error during bridge stop: {e}")
+        finally:
+            self.process = None
+            self.running = False
+            elapsed = (asyncio.get_event_loop().time() - start_stop)
+            logger.info(f"Pi Agent stopped in {elapsed:.2f}s")
 
     async def send_prompt(self, message: str):
         """Send a prompt to the agent."""
@@ -412,8 +441,14 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
             try:
                 # Try parsing as JSON event
                 data = json.loads(line)
-                if self.event_callback:
-                    await self.event_callback(data)
+                # Emit to all registered callbacks
+                if self.callbacks:
+                    for cid, cb in list(self.callbacks.items()):
+                        try:
+                            # Use create_task to avoid blocking the read loop
+                            asyncio.create_task(cb(data))
+                        except Exception as e:
+                            logger.error(f"Error in callback {cid}: {e}")
             except json.JSONDecodeError:
                 # Non-JSON output (e.g., extension init messages, progress logs)
                 logger.info(f"Pi Agent: {line}")

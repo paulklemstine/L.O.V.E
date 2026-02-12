@@ -197,7 +197,8 @@ Examples:
     print()
     
     try:
-        loop.run()
+        import asyncio
+        asyncio.run(loop.run())
     except KeyboardInterrupt:
         print("\n[run.py] Interrupted by user")
         loop.stop()

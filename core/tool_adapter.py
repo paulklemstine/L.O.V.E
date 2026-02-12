@@ -9,6 +9,8 @@ See docs/tool_adapter.md for detailed documentation.
 
 import os
 import sys
+import time
+import uuid
 from typing import Dict, Callable, Any, List, Optional
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -178,7 +180,7 @@ def _get_love2_tools() -> Dict[str, Callable]:
         traceback.print_exc()
 
     # Pi Agent tool
-    def ask_pi_agent(prompt: str, timeout: float = 600.0) -> str:
+    async def ask_pi_agent(prompt: str, timeout: float = 600.0) -> str:
         """
         Send a prompt to the Pi Agent and get a response.
         
@@ -195,17 +197,22 @@ def _get_love2_tools() -> Dict[str, Callable]:
         import asyncio
         from .pi_rpc_bridge import get_pi_bridge
         
-
         logger.info(f"[ask_pi_agent] Prompt: {prompt}")
+        logger.info("[ask_pi_agent] 🧠 Pi Agent is thinking...")
         
         bridge = get_pi_bridge()
         response_text = []
         response_complete = asyncio.Event()
+        callback_id = f"ask_pi_{uuid.uuid4().hex[:8]}"
+        
+        # For streaming to logs
+        last_log_time = time.time()
+        current_chunk = []
         
         async def handle_event(event: dict):
+            nonlocal last_log_time
             """Collect response events from Pi Agent."""
             event_type = event.get("type", "")
-            # logger.info(f"[ask_pi_agent] Event: {event_type}, keys={list(event.keys())}")
             
             # Pi Agent RPC protocol event types
             if event_type == "response":
@@ -222,14 +229,29 @@ def _get_love2_tools() -> Dict[str, Callable]:
                     text = data.get("delta", "")
                     if text:
                         response_text.append(text)
+                        current_chunk.append(text)
                         print(text, end="", flush=True)
+                        
+                        # Log every 5 seconds if we have data
+                        now = time.time()
+                        if now - last_log_time > 5.0 and current_chunk:
+                            logger.info(f"[Pi Stream] {''.join(current_chunk)}")
+                            current_chunk.clear()
+                            last_log_time = now
             
             elif event_type == "text_delta":
                 # Legacy or direct text delta
                 text = event.get("text", "")
                 if text:
                     response_text.append(text)
+                    current_chunk.append(text)
                     print(text, end="", flush=True)
+                    
+                    now = time.time()
+                    if now - last_log_time > 5.0 and current_chunk:
+                        logger.info(f"[Pi Stream] {''.join(current_chunk)}")
+                        current_chunk.clear()
+                        last_log_time = now
             
             elif event_type == "message":
                 # Complete message
@@ -237,14 +259,15 @@ def _get_love2_tools() -> Dict[str, Callable]:
                 if content:
                     response_text.append(content)
                     print(content, end="", flush=True)
+                    logger.info(f"[Pi Response Chunk] {content[:200]}...")
             
             elif event_type == "agent_end":
-                # logger.info(f"[ask_pi_agent] Agent finished. Collected {len(response_text)} chunks.")
+                if current_chunk:
+                    logger.info(f"[Pi Stream Final] {''.join(current_chunk)}")
                 print("\n[Done]") # New line after streaming
                 response_complete.set()
             
             elif event_type in ("done", "end"):
-                # logger.info(f"[ask_pi_agent] Agent finished (legacy). Collected {len(response_text)} chunks.")
                 response_complete.set()
             
             elif event_type == "error":
@@ -253,10 +276,10 @@ def _get_love2_tools() -> Dict[str, Callable]:
                 response_text.append(f"[Error: {error_msg}]")
                 response_complete.set()
         
-        async def run_prompt():
-            # Set up callback
-            bridge.set_callback(handle_event)
-            
+        # Set up callback
+        bridge.set_callback(handle_event, callback_id=callback_id)
+        
+        try:
             # Ensure bridge is started
             if not bridge.running:
                 await bridge.start()
@@ -273,23 +296,12 @@ def _get_love2_tools() -> Dict[str, Callable]:
                 response_text.append(f"[Timeout: No response within {timeout}s]")
             
             result = "".join(response_text)
-            logger.info(f"[ask_pi_agent] Response: {result[:500]}..." if len(result) > 500 else f"[ask_pi_agent] Response: {result}")
+            logger.info(f"[ask_pi_agent] Response: {result[:100]}...")
+            
             return result
-        
-        # Run the async function
-        # Use asyncio.run() which handles event loop creation properly
-        # First check if we're already in an async context
-        try:
-            loop = asyncio.get_running_loop()
-            # We're inside an async context, use thread to avoid blocking
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                result = executor.submit(asyncio.run, run_prompt()).result()
-            return result
-        except RuntimeError:
-            # No running loop - this is the normal case for sync code
-            # Use asyncio.run() which creates and manages its own loop
-            return asyncio.run(run_prompt())
+        finally:
+            # Clean up callback
+            bridge.remove_callback(callback_id)
     
     tools["ask_pi_agent"] = ask_pi_agent
     

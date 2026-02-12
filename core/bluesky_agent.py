@@ -211,27 +211,23 @@ PLACEHOLDER_PATTERNS = [
     "an attention grabbing opening query",
     "a closing call to action",
     "the phrase",
-    "tag1", "tag2", "tag3",  # Generic placeholder hashtags
 ]
 
 
-def _validate_post_content(text: str, hashtags: List[str], subliminal_phrase: str) -> List[str]:
+def _validate_post_content(text: str, subliminal_phrase: str) -> List[str]:
     """
     Validate generated content against QA rules.
     
     Checks:
-    1. Total length (text + hashtags) <= 300
+    1. Total length <= 300
     2. At least 1 emoji present
     3. Subliminal phrase NOT in open text
-    4. At least 1 hashtag
-    5. No placeholder patterns detected
+    4. No placeholder patterns detected
     """
     errors = []
     
     # 1. Length check
-    # Estimate hashtag length: #tag + space
-    tags_len = sum(len(t) + 1 for t in hashtags) 
-    total_len = len(text) + tags_len
+    total_len = len(text)
     if total_len > 300:
         errors.append(f"Content too long ({total_len}/300 chars)")
         
@@ -246,24 +242,13 @@ def _validate_post_content(text: str, hashtags: List[str], subliminal_phrase: st
     # 3. Subliminal check
     if subliminal_phrase and subliminal_phrase.lower() in text.lower():
         errors.append(f"Subliminal phrase '{subliminal_phrase}' exposed in text")
-        
-    # 4. Hashtag check
-    if not hashtags:
-        errors.append("No hashtags generated")
     
-    # 5. Placeholder detection - CRITICAL for catching broken LLM outputs
+    # 4. Placeholder detection - CRITICAL for catching broken LLM outputs
     text_lower = text.lower()
     for pattern in PLACEHOLDER_PATTERNS:
         if pattern in text_lower:
             errors.append(f"Placeholder text detected: '{pattern}'")
             break  # One placeholder error is enough
-    
-    # Check hashtags for placeholder patterns too
-    hashtags_lower = " ".join(hashtags).lower()
-    for pattern in ["#tag1", "#tag2", "#tag3"]:
-        if pattern in hashtags_lower:
-            errors.append(f"Placeholder hashtag detected: '{pattern}'")
-            break
     
     if errors:
         print(f"[BlueskyAgent] ⚠️ Post validation failed: {'; '.join(errors)}")
@@ -271,14 +256,14 @@ def _validate_post_content(text: str, hashtags: List[str], subliminal_phrase: st
     return errors, text
 
 
-def _qa_validate_post(text: str, hashtags: List[str], subliminal_phrase: str) -> Dict[str, Any]:
+def _qa_validate_post(text: str, subliminal_phrase: str) -> Dict[str, Any]:
     """
     Comprehensive QA validation for post content before publishing.
     
     Returns:
         Dict with: passed (bool), errors (list), should_regenerate (bool), fixed_text (str)
     """
-    errors, fixed_text = _validate_post_content(text, hashtags, subliminal_phrase)
+    errors, fixed_text = _validate_post_content(text, subliminal_phrase)
     text = fixed_text # Use fixed text for further checks
     
     # Additional quality checks
@@ -485,13 +470,6 @@ def reply_to_comment_agent(
         if not reply_text:
             return {"success": False, "error": "Failed to generate reply text"}
             
-        # 2. Hashtags
-        hashtag_task = creative_writer_agent.generate_manipulative_hashtags(
-            topic="Connection", # Abstract topic for replies
-            count=3
-        )
-        hashtags = _run_sync_safe(hashtag_task)
-        
         # 3. Image
         image_path = None
         try:
@@ -521,7 +499,7 @@ def reply_to_comment_agent(
             print(f"[BlueskyAgent] Reply image extraction failed: {e}")
             
         # 4. Construct Full Text
-        full_text = f"{reply_text}\n\n{' '.join(hashtags)}"
+        full_text = reply_text
         
         if dry_run:
             return {
@@ -734,7 +712,6 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
         MAX_QA_RETRIES = 10
         text = ""
         subliminal = ""
-        hashtags = []
         qa_passed = False
         feedback = ""
         
@@ -746,7 +723,7 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
                 theme=theme, 
                 mood=vibe,
                 memory_context=beat_data.get("previous_beat", ""),
-                max_length=180,  # Reduced from 220 to leave room for hashtags (~60-80 chars)
+                max_length=280,  # Increased from 180 as hashtags are removed
                 feedback=feedback,
                 dedup_context=dedup_context
             )
@@ -755,16 +732,8 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
             text = content_result.get("story", "")
             subliminal = content_result.get("subliminal", "")
             
-            # Step 7: Generate Hashtags with dedup context
-            hashtag_task = creative_writer_agent.generate_manipulative_hashtags(
-                topic=theme,
-                count=3,
-                forbidden_hashtags=dedup_context.get("hashtag", [])
-            )
-            hashtags = _run_sync_safe(hashtag_task)
-            
             # QA VALIDATION - Check content before proceeding
-            qa_result = _qa_validate_post(text, hashtags, subliminal)
+            qa_result = _qa_validate_post(text, subliminal)
             
             # Use the potentially auto-fixed text
             text = qa_result.get("fixed_text", text)
@@ -886,8 +855,7 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
             }
 
         # Step 8: Post to Bluesky
-        # Combine text and hashtags for the final post
-        full_text = f"{text}\n\n{' '.join(hashtags)}"
+        full_text = text
         
         result = post_to_bluesky(
             text=full_text,
@@ -926,7 +894,6 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
                 post_text=text,
                 subliminal=subliminal,
                 visual_style=visual_prompt if 'visual_prompt' in dir() else "",
-                hashtags=hashtags,
                 vibe=vibe
             )
             log_event(f"Recorded post to memory for deduplication", "DEBUG")

@@ -97,6 +97,7 @@ class WorkingMemory:
     last_action: Optional[str] = None
     last_result: Optional[str] = None
     iteration_count: int = 0
+    research_log: List[Dict[str, str]] = field(default_factory=list)  # List of {"prompt": "...", "response": "..."}
     
     def set_goal(self, goal: str, sub_goals: Optional[List[str]] = None):
         """Set the current goal and optional sub-goals."""
@@ -104,6 +105,7 @@ class WorkingMemory:
         self.sub_goals = sub_goals or []
         self.plan = []
         self.iteration_count = 0
+        self.research_log = []
     
     def set_plan(self, steps: List[str]):
         """Set the plan for achieving the current goal."""
@@ -114,6 +116,28 @@ class WorkingMemory:
         self.last_action = action
         self.last_result = result
         self.iteration_count += 1
+        
+        # Track Pi Agent interactions specifically
+        if action.startswith("ask_pi_agent:"):
+            # Try to extract the prompt from the action string
+            # Action format: "ask_pi_agent: {"prompt": "..."}"
+            try:
+                prompt_start = action.find('{"')
+                if prompt_start != -1:
+                    action_data = json.loads(action[prompt_start:])
+                    prompt = action_data.get("prompt", action)
+                else:
+                    prompt = action
+            except:
+                prompt = action
+                
+            self.research_log.append({
+                "prompt": prompt,
+                "response": result
+            })
+            # Keep only the last 3 research interactions for context window sanity
+            if len(self.research_log) > 3:
+                self.research_log = self.research_log[-3:]
     
     def complete_sub_goal(self, sub_goal: str):
         """Mark a sub-goal as complete."""
@@ -137,6 +161,16 @@ class WorkingMemory:
             for i, step in enumerate(self.plan, 1):
                 lines.append(f"  {i}. {step}")
         
+        if self.research_log:
+            lines.append("**Recent Research (Pi Agent)**:")
+            for i, entry in enumerate(self.research_log, 1):
+                prompt_brief = entry['prompt'][:100] + "..." if len(entry['prompt']) > 100 else entry['prompt']
+                lines.append(f"  {i}. Q: {prompt_brief}")
+                # Truncate response for context window sanity
+                resp = entry['response']
+                # Truncation removed to ensure full research is captured
+                lines.append(f"     A: {resp}")
+
         if self.last_action:
             lines.append(f"**Last Action**: {self.last_action}")
             lines.append(f"**Result**: {self.last_result or 'No result'}")
@@ -335,6 +369,7 @@ class MemorySystem:
     
     def record_action(self, tool_name: str, action: str, result: str, success: bool, time_ms: float):
         """Record a tool action."""
+        start_record = time.time()
         self.working.record_action(f"{tool_name}: {action}", result)
         self.tool.record_usage(tool_name, success, time_ms, error=None if success else result)
         
@@ -343,6 +378,7 @@ class MemorySystem:
         else:
             self.episodic.add_event("action_failed", f"{tool_name} failed: {result[:100]}")
         
+        # print(f"[MemorySystem] record_action logic took {(time.time() - start_record)*1000:.2f}ms")
         self.save()
     
     def record_goal_complete(self, goal: str):
@@ -359,3 +395,32 @@ class MemorySystem:
             "tool_patterns_learned": len(self.tool.learned_patterns),
             "tools_tracked": len(self.tool.tool_usage)
         }
+
+    def save(self):
+        """Persist memory state to disk."""
+        start_save = time.time()
+        try:
+            # Episodic
+            episodic_data = {
+                "events": [asdict(e) for e in self.episodic.events]
+            }
+            (self.state_dir / "episodic_memory.json").write_text(
+                json.dumps(episodic_data, indent=2)
+            )
+            
+            # Working
+            (self.state_dir / "working_memory.json").write_text(
+                json.dumps(asdict(self.working), indent=2)
+            )
+            
+            # Tool
+            tool_data = {
+                "tool_usage": {k: asdict(v) for k, v in self.tool.tool_usage.items()},
+                "learned_patterns": self.tool.learned_patterns
+            }
+            (self.state_dir / "tool_memory.json").write_text(
+                json.dumps(tool_data, indent=2)
+            )
+            # print(f"[MemorySystem] Disk save took {(time.time() - start_save)*1000:.2f}ms")
+        except Exception as e:
+            print(f"[MemorySystem] ERROR SAVING MEMORY: {e}")
