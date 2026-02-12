@@ -322,7 +322,8 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
                 cwd=popen_cwd,
                 env=env,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                start_new_session=True
             )
             self.running = True
             

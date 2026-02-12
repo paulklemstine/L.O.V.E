@@ -68,6 +68,30 @@ class PersonaGoalExtractor:
         self.goals = []
         priority = 1
         
+        # 0. Master Plan Integration (Highest Priority if actionable tasks exist)
+        try:
+            from core.master_plan_manager import get_master_plan_manager
+            mp_manager = get_master_plan_manager()
+            mp_goals = mp_manager.get_goals_for_extractor()
+            
+            for g_data in mp_goals:
+                # Map priority 1 tasks to actual priority 1
+                # Shift others down
+                p_val = g_data['priority']
+                self.goals.append(Goal(
+                    text=g_data['text'],
+                    priority=p_val, 
+                    category=g_data['category']
+                ))
+            
+            # Adjust base priority for persona goals if we have master plan items
+            if self.goals:
+                priority = 4 
+                
+        except Exception as e:
+            # Fallback if master plan fails
+            print(f"Master plan loading failed: {e}")
+        
         # 1. Private mission standing goals (highest priority)
         private_mission = self.persona.get("private_mission", {})
         standing_goals = private_mission.get("standing_goals", [])
