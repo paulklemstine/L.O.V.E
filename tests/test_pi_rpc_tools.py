@@ -12,10 +12,13 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.pi_rpc_bridge import PiRPCBridge, get_pi_bridge
-
+from core.logger import setup_logging
 
 async def test_rpc_with_tools():
     """Test RPC connection and tool usage."""
+    # setup_logging(verbose=False)
+    import logging
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     bridge = PiRPCBridge(base_dir)
@@ -26,17 +29,22 @@ async def test_rpc_with_tools():
     async def on_event(data):
         """Callback for RPC events."""
         event_type = data.get("type", "unknown")
-        print(f"[EVENT] {event_type}: {json.dumps(data, indent=2)[:500]}")
         events.append(data)
+        
+        # Print text deltas for visibility
+        if event_type == "text_delta":
+            print(data.get("text", ""), end="", flush=True)
+        elif event_type == "message_update":
+            delta = data.get("assistantMessageEvent", {}).get("delta", "")
+            if delta:
+                print(delta, end="", flush=True)
         
         # Check for tool calls
         if event_type == "toolcall_start":
-            print(f"\n✅ TOOL CALL DETECTED: {data}")
-        elif event_type == "toolcall_end":
-            print(f"\n✅ TOOL CALL COMPLETED")
+            print(f"\n[TOOL CALL] {data.get('tool')}")
         elif event_type == "error":
             errors.append(data)
-            print(f"\n❌ ERROR: {data}")
+            print(f"\n[ERROR] {data.get('message', 'Unknown error')}")
     
     bridge.set_callback(on_event)
     
@@ -56,29 +64,30 @@ async def test_rpc_with_tools():
         
         print("\n✅ Bridge started successfully!")
         print("\n" + "=" * 60)
-        print("Sending test prompt that should trigger tool use...")
+        print("Sending test prompt...")
         print("=" * 60)
         
-        # Send a prompt that should trigger tool usage
+        # Send a prompt
         test_prompt = "List the files in the current directory. Use the ls tool."
         print(f"\nPrompt: {test_prompt}\n")
         
         await bridge.send_prompt(test_prompt)
         
         # Wait for response with timeout
-        print("Waiting for response (max 60 seconds)...")
-        timeout = 60
+        print("Waiting for response (max 600 seconds)...")
+        timeout = 600
         start_time = asyncio.get_event_loop().time()
         
         while asyncio.get_event_loop().time() - start_time < timeout:
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
             
-            # Check if we got a "done" event
-            done_events = [e for e in events if e.get("type") == "done"]
+            # Check for completion events
+            done_events = [e for e in events if e.get("type") in ("done", "agent_end", "end")]
             error_events = [e for e in events if e.get("type") == "error"]
-            tool_events = [e for e in events if "toolcall" in e.get("type", "")]
             
             if done_events or error_events:
+                if done_events:
+                    print("\n\n✅ Response complete.")
                 break
         
         print("\n" + "=" * 60)

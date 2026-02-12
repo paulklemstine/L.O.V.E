@@ -334,19 +334,38 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
 
     async def stop(self):
         """Stop the agent."""
+        self.running = False
         if self.process:
-            logger.info("Stopping Pi Agent...")
-            if self.running:
-                # Send abort command first nicely
-                await self.send_command_json({"type": "abort"})
-                await asyncio.sleep(0.5)
+            logger.debug("Stopping Pi Agent...")
+            try:
+                # Send abort command first nicely if stdin is open
+                if self.process.stdin:
+                    # Non-blocking write attempt
+                    self.process.stdin.write(json.dumps({"type": "abort"}) + "\n")
+                    self.process.stdin.flush()
+            except:
+                pass
+                
+            await asyncio.sleep(0.2)
             
+            # Close pipes to unblock any threads waiting on readline
+            if self.process.stdin:
+                try: self.process.stdin.close()
+                except: pass
+            if self.process.stdout:
+                try: self.process.stdout.close()
+                except: pass
+            if self.process.stderr:
+                try: self.process.stderr.close()
+                except: pass
+                
             self.process.terminate()
             try:
-                # Wait in tread since wait() is blocking
-                await asyncio.to_thread(self.process.wait, timeout=5)
+                # Wait in thread since wait() is blocking
+                await asyncio.to_thread(self.process.wait, timeout=2)
             except:
-                self.process.kill()
+                try: self.process.kill()
+                except: pass
         self.running = False
 
     async def send_prompt(self, message: str):
@@ -396,13 +415,13 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
                 if self.event_callback:
                     await self.event_callback(data)
             except json.JSONDecodeError:
-                # Non-JSON output (e.g., extension init messages)
-                pass
+                # Non-JSON output (e.g., extension init messages, progress logs)
+                logger.info(f"Pi Agent: {line}")
             except Exception as e:
                 logger.error(f"Error handling agent output: {e}")
         
         if self.process:
-            logger.info(f"Pi Agent process exited with code: {self.process.poll()}")
+            logger.debug(f"Pi Agent process exited with code: {self.process.poll()}")
 
     async def _read_stderr(self):
         """Read stderr for logs."""
@@ -412,7 +431,7 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
         while self.running:
             line = await asyncio.to_thread(self.process.stderr.readline)
             if line:
-                logger.warning(f"Pi Log: {line.strip()}")
+                logger.debug(f"Pi Log: {line.strip()}")
 
 # Singleton
 _bridge: Optional[PiRPCBridge] = None

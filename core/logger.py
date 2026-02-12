@@ -4,6 +4,9 @@ from pathlib import Path
 from logging.handlers import RotatingFileHandler
 from .state_manager import get_state_manager
 
+# Hide httpx logs immediately on import
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 # Create logs directory
 LOG_DIR = Path(__file__).parent.parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
@@ -54,6 +57,9 @@ def setup_logging(verbose: bool = False):
     web_handler = WebUIHandler()
     web_handler.setFormatter(formatter)
     root_logger.addHandler(web_handler)
+    
+    # Hide httpx logs
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     
     # DISABLE STDOUT REDIRECTION to prevent recursion errors in Colab
     # sys.stdout = StreamToLogger(logging.getLogger('STDOUT'), logging.INFO, original_stream)

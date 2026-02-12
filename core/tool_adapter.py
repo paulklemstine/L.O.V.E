@@ -178,7 +178,7 @@ def _get_love2_tools() -> Dict[str, Callable]:
         traceback.print_exc()
 
     # Pi Agent tool
-    def ask_pi_agent(prompt: str, timeout: float = 60.0) -> str:
+    def ask_pi_agent(prompt: str, timeout: float = 600.0) -> str:
         """
         Send a prompt to the Pi Agent and get a response.
         
@@ -187,7 +187,7 @@ def _get_love2_tools() -> Dict[str, Callable]:
         
         Args:
             prompt: The message/question to send to the Pi Agent.
-            timeout: Maximum time to wait for response in seconds.
+            timeout: Maximum time to wait for response in seconds (default: 600s).
         
         Returns:
             The Pi Agent's response text.
@@ -222,25 +222,29 @@ def _get_love2_tools() -> Dict[str, Callable]:
                     text = data.get("delta", "")
                     if text:
                         response_text.append(text)
+                        print(text, end="", flush=True)
             
             elif event_type == "text_delta":
                 # Legacy or direct text delta
                 text = event.get("text", "")
                 if text:
                     response_text.append(text)
+                    print(text, end="", flush=True)
             
             elif event_type == "message":
                 # Complete message
                 content = event.get("content", "")
                 if content:
                     response_text.append(content)
+                    print(content, end="", flush=True)
             
             elif event_type == "agent_end":
-                logger.info(f"[ask_pi_agent] Agent finished. Collected {len(response_text)} chunks.")
+                # logger.info(f"[ask_pi_agent] Agent finished. Collected {len(response_text)} chunks.")
+                print("\n[Done]") # New line after streaming
                 response_complete.set()
             
             elif event_type in ("done", "end"):
-                logger.info(f"[ask_pi_agent] Agent finished (legacy). Collected {len(response_text)} chunks.")
+                # logger.info(f"[ask_pi_agent] Agent finished (legacy). Collected {len(response_text)} chunks.")
                 response_complete.set()
             
             elif event_type == "error":
