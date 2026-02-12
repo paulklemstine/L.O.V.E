@@ -435,13 +435,21 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
             elapsed = (asyncio.get_event_loop().time() - start_stop)
             logger.info(f"Pi Agent stopped in {elapsed:.2f}s")
 
-    async def send_prompt(self, message: str):
-        """Send a prompt to the agent."""
+    async def send_prompt(self, message: str, streaming_behavior: str = None):
+        """Send a prompt to the agent.
+        
+        Args:
+            message: The prompt text to send.
+            streaming_behavior: Optional. 'followUp' to queue if agent is busy,
+                              'steer' to interrupt current processing.
+        """
         cmd = {
             "id": str(uuid.uuid4()),
             "type": "prompt",
             "message": message
         }
+        if streaming_behavior:
+            cmd["streamingBehavior"] = streaming_behavior
         await self.send_command_json(cmd)
 
     async def send_command_json(self, cmd: Dict[str, Any]):

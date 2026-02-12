@@ -25,3 +25,6 @@ package.json
 
 # vLLM config (local model settings)
 .vllm_config
+.vllm_blacklist.json
+.vllm_extension_config.json
+data/.tool_cooldowns.json

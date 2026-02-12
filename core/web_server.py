@@ -146,9 +146,11 @@ async def generate_text(request: GenerateRequest):
         if not bridge.running:
             await bridge.start()
         
-        # Collect Pi Agent's response
+        # Collect Pi Agent's response using thread-safe primitives
+        # (web server runs in a separate thread from PiLoop's event loop)
+        import threading as _threading
         response_text = []
-        response_complete = asyncio.Event()
+        response_complete = _threading.Event()
         import uuid
         callback_id = f"chat_{uuid.uuid4().hex[:8]}"
         
@@ -166,10 +168,13 @@ async def generate_text(request: GenerateRequest):
         bridge.set_callback(handle_event, callback_id=callback_id)
         
         try:
-            await bridge.send_prompt(request.prompt)
-            await asyncio.wait_for(response_complete.wait(), timeout=120.0)
-        except asyncio.TimeoutError:
-            response_text.append("[Response timed out]")
+            # Use 'followUp' so the message queues if Pi Agent is busy
+            await bridge.send_prompt(request.prompt, streaming_behavior="followUp")
+            
+            # Wait in a thread to avoid blocking the async loop
+            await asyncio.get_event_loop().run_in_executor(
+                None, lambda: response_complete.wait(timeout=120.0)
+            )
         finally:
             bridge.remove_callback(callback_id)
         
