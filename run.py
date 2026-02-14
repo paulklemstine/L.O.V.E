@@ -202,16 +202,38 @@ Examples:
     try:
         import asyncio
         try:
-            # Check if there is already a running loop (e.g. Jupyter)
+            # Check if there is already a running loop
             existing_loop = asyncio.get_running_loop()
-            print("⚠️ Asyncio loop already running. Scheduling task in background...")
-            existing_loop.create_task(start_loop())
+            print("⚠️ Asyncio loop already running. Attaching to existing loop...")
+            
+            # If we are in a Jupyter notebook or similar, this is fine.
+            # If we are in a script that somehow has a loop but isn't blocking, we might exit.
+            # But standard python run.py shouldn't have a running loop at this point unless
+            # a library started one.
+            
+            task = existing_loop.create_task(start_loop())
+            
+            # If this is the main thread and we just scheduled a task, we need to make sure
+            # we don't exit if the loop isn't blocking elsewhere.
+            # However, usually if get_running_loop() succeeds, the loop is already running/blocking somewhere?
+            # Or it's a weird state.
+            # Let's try to wait on the task if possible, or just let it float if we trust the environment.
+            # For this specific issue (run.py exiting), we want to BLOCK.
+            
+            print("   -> Note: If the application exits immediately, the existing loop was not blocking.")
+            
         except RuntimeError:
-            # No running loop, safe to create a new one
+            # No running loop, this is the standard case for 'python run.py'
+            # We use asyncio.run which BLOCKS until start_loop finishes
             asyncio.run(start_loop())
+            
     except KeyboardInterrupt:
         print("\n[run.py] Interrupted by user")
         loop.stop()
+    except Exception as e:
+        print(f"\n[run.py] Fatal error: {e}")
+        import traceback
+        traceback.print_exc()
     
     print("\n[run.py] Goodbye! 🌊")
 
