@@ -156,15 +156,19 @@ Current Goal: {goal}
 
     async def _auto_generate_content(self):
         """Auto-generate content for Bluesky every 5 minutes."""
-        # Initialize last run time if needed
+        # Initialize last run time (0 ensures immediate run on startup)
         if not hasattr(self, '_last_content_gen'):
             self._last_content_gen = 0
             
         now = time.time()
+        # Check if enough time has passed
         if now - self._last_content_gen < self.CONTENT_INTERVAL_SECONDS:
             return
 
-        logger.info("⏳ Time for auto-content generation...")
+        if self._last_content_gen == 0:
+            logger.info("🚀 Triggering IMMEDIATE startup content generation...")
+        else:
+            logger.info("⏳ Time for auto-content generation...")
         
         try:
             from .bluesky_agent import generate_post_content
@@ -252,9 +256,12 @@ Current Goal: {goal}
                 await self.bridge.start()
                 await asyncio.sleep(2.0)
                 logger.info("Pi Agent bridge ready.")
+            else:
+                logger.info("Pi Agent bridge already running.")
         except Exception as e:
             logger.error(f"Failed to start Pi Agent bridge: {e}")
 
+        logger.info("Entering main loop...")
         try:
             while self.running:
                 # Check iteration limit
