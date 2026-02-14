@@ -43,7 +43,8 @@ def bootstrap_dependencies():
     required = {
         "atproto": "atproto",
         "emoji": "emoji",
-        "dotenv": "python-dotenv"
+        "dotenv": "python-dotenv",
+        "nest_asyncio": "nest_asyncio"
     }
     
     missing = []
@@ -201,30 +202,24 @@ Examples:
 
     try:
         import asyncio
+        import nest_asyncio
+        
+        # Always apply nest_asyncio to allow re-entrant event loops
+        # This fixes issues in Colab/Jupyter where a loop is already running
+        # and we want to BLOCK until our task is done.
+        nest_asyncio.apply()
+        
         try:
             # Check if there is already a running loop
             existing_loop = asyncio.get_running_loop()
-            print("⚠️ Asyncio loop already running. Attaching to existing loop...")
+            print("⚠️ Asyncio loop already running. Using nest_asyncio to block...")
             
-            # If we are in a Jupyter notebook or similar, this is fine.
-            # If we are in a script that somehow has a loop but isn't blocking, we might exit.
-            # But standard python run.py shouldn't have a running loop at this point unless
-            # a library started one.
-            
-            task = existing_loop.create_task(start_loop())
-            
-            # If this is the main thread and we just scheduled a task, we need to make sure
-            # we don't exit if the loop isn't blocking elsewhere.
-            # However, usually if get_running_loop() succeeds, the loop is already running/blocking somewhere?
-            # Or it's a weird state.
-            # Let's try to wait on the task if possible, or just let it float if we trust the environment.
-            # For this specific issue (run.py exiting), we want to BLOCK.
-            
-            print("   -> Note: If the application exits immediately, the existing loop was not blocking.")
+            # Since we applied nest_asyncio, we can use run_until_complete on the existing loop
+            # This will block the main thread/cell until start_loop finishes
+            existing_loop.run_until_complete(start_loop())
             
         except RuntimeError:
-            # No running loop, this is the standard case for 'python run.py'
-            # We use asyncio.run which BLOCKS until start_loop finishes
+            # No running loop, standard usage
             asyncio.run(start_loop())
             
     except KeyboardInterrupt:
