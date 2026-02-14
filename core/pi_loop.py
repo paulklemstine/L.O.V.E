@@ -105,6 +105,24 @@ Memory context:
 Current Goal: {goal}
 """
 
+    def __init__(self, max_iterations: Optional[int] = None, sleep_seconds: float = 0):
+        """
+        Initialize the loop.
+
+        Args:
+            max_iterations: Max iterations to run (None = infinite)
+            sleep_seconds: Seconds to sleep between iterations
+        """
+        self.max_iterations = max_iterations
+        self.sleep_seconds = sleep_seconds
+        self.iteration = 0
+        self.running = False
+
+        # Initialize core systems
+        self.memory = MemorySystem()
+        self.persona = get_persona_extractor()
+        self.bridge = get_pi_bridge()
+
     def _select_goal(self) -> Optional[Goal]:
         """Select the next goal to work on using weighted random selection for variety."""
         goals = self.persona.get_actionable_goals(limit=10)
