@@ -136,6 +136,40 @@ Current Goal: {goal}
             self._goal_rr_index += 1
             return selected_goal
 
+    async def _auto_generate_content(self):
+        """Auto-generate content for Bluesky every 5 minutes."""
+        # Initialize last run time if needed
+        if not hasattr(self, '_last_content_gen'):
+            self._last_content_gen = 0
+            
+        now = time.time()
+        if now - self._last_content_gen < self.CONTENT_INTERVAL_SECONDS:
+            return
+
+        logger.info("⏳ Time for auto-content generation...")
+        
+        try:
+            from .bluesky_agent import generate_post_content
+            # Run in thread executor to avoid blocking main loop
+            import asyncio
+            # Check if generate_post_content is async or sync
+            import inspect
+            if inspect.iscoroutinefunction(generate_post_content):
+                result = await generate_post_content()
+            else:
+                 result = await asyncio.to_thread(generate_post_content)
+            
+            if result.get("success"):
+                logger.info(f"✅ Auto-content generated: {result.get('post_uri')}")
+            elif result.get("error"):
+                 logger.warning(f"⚠️ Auto-content generation skipped/failed: {result.get('error')}")
+                 
+            self._last_content_gen = now
+            
+        except Exception as e:
+            logger.error(f"Auto-content generation failed: {e}")
+            traceback.print_exc()
+
     async def run_iteration(self) -> bool:
         """
         Run a single iteration of the loop.
@@ -166,114 +200,13 @@ Current Goal: {goal}
             return True
 
         # === Pi Agent Reasoning ===
-        goal = self._select_goal()
-        if not goal:
-            logger.warning("No goals available")
-            return False
-
-        # Goal Continuity Logic
-        is_new_goal = (not self.current_goal) or (self.current_goal.text != goal.text)
-
-        self.current_goal = goal
-        get_state_manager().update_state(current_goal=goal.text)
-
-        if is_new_goal:
-            self.memory.record_goal_start(goal.text)
-            logger.info(f"New Goal Started: {goal}")
-        else:
-            logger.info(f"Continuing Goal: {goal}")
-
-        logger.info("🧠 Consulting Pi Agent...")
-        get_state_manager().update_agent_status(
-            "Pi Agent",
-            "Working on goal",
-            action=f"Goal: {goal.text}",
-            info={"prompt": f"Goal: {goal.text}"}
-        )
-        response = await self._reason(goal)
-
-        # Log Pi Agent's full response
-        response_preview = response[:500].replace('\n', ' ') if response else '(empty)'
-        logger.info(f"📝 Pi Agent raw response: {response_preview}")
-
-        # === Parse and Execute Tool ===
-        from .llm_parser import smart_parse_llm_response
+        # DISABLED BY USER REQUEST - Only running Bluesky loop
+        # goal = self._select_goal()
+        # if not goal:
+        #     logger.warning("No goals available")
+        #     return False
         
-        try:
-            parsed = smart_parse_llm_response(response)
-            
-            if parsed and not parsed.get('_parse_error'):
-                thought = parsed.get("thought", "No thought provided")
-                action = parsed.get("action")
-                args = parsed.get("args", {})
-                
-                logger.info(f"🤔 Thought: {thought}")
-                logger.info(f"⚡ Action: {action}")
-                
-                if action and action != "think":
-                    # Execute tool
-                    registry = get_global_registry()
-                    
-                    if action in registry:
-                        try:
-                            tool_func = registry.get_tool(action)
-                            import inspect
-                            if inspect.iscoroutinefunction(tool_func):
-                                result = await tool_func(**args)
-                            else:
-                                result = tool_func(**args)
-                            
-                            result_str = str(result)
-                            logger.info(f"✅ Tool '{action}' result: {result_str[:200]}...")
-                            
-                            self.memory.record_action(
-                                tool_name=action,
-                                action=json.dumps(args),
-                                result=result_str[:500],
-                                success=True,
-                                time_ms=0
-                            )
-                            
-                            self.last_action_summary = f"Executed '{action}': {result_str[:200]}"
-                            
-                        except Exception as e:
-                            error_msg = f"Tool execution error: {str(e)}"
-                            logger.error(error_msg)
-                            self.memory.record_action(
-                                tool_name=action,
-                                action=json.dumps(args),
-                                result=error_msg,
-                                success=False,
-                                time_ms=0
-                            )
-                            self.last_action_summary = f"Tool '{action}' failed: {error_msg}"
-                    else:
-                        msg = f"Unknown tool '{action}'"
-                        logger.warning(msg)
-                        self.last_action_summary = msg
-                else:
-                    # Just thinking
-                    self.last_action_summary = f"Thinking: {thought[:200]}"
-                    
-                get_state_manager().update_agent_status(
-                    "Pi Agent",
-                    "Goal iteration complete",
-                    action=f"Goal: {goal.text}",
-                    thought=thought[:200],
-                    info={"goal": goal.text, "action": action}
-                )
-                
-            else:
-                # Fallback for plain text response
-                logger.warning("Could not parse JSON response, treating as text thought.")
-                self.last_action_summary = f"Thought: {response_preview[:200]}"
-                
-        except Exception as e:
-            logger.error(f"Error in tool execution loop: {e}")
-            traceback.print_exc()
-            self.last_action_summary = f"Error processing response: {str(e)}"
-
-        return True
+        return False # Return False to trigger sleep/backoff since no reasoning work was done
 
     async def run(self):
         """
