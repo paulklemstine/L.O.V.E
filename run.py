@@ -196,9 +196,19 @@ Examples:
     print(f"  • Tools: Autonomous (Agent Managed)")
     print()
     
+    async def start_loop():
+        await loop.run()
+
     try:
         import asyncio
-        asyncio.run(loop.run())
+        try:
+            # Check if there is already a running loop (e.g. Jupyter)
+            existing_loop = asyncio.get_running_loop()
+            print("⚠️ Asyncio loop already running. Scheduling task in background...")
+            existing_loop.create_task(start_loop())
+        except RuntimeError:
+            # No running loop, safe to create a new one
+            asyncio.run(start_loop())
     except KeyboardInterrupt:
         print("\n[run.py] Interrupted by user")
         loop.stop()
