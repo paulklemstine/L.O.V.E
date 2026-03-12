@@ -285,6 +285,9 @@ export class BlueskyClient {
       throw new Error(`Bluesky ${endpoint.split('?')[0]} ${res.status}: ${errText.slice(0, 300)}`);
     }
 
-    return await res.json();
+    // Some endpoints (e.g. updateSeen) return empty body
+    const text = await res.text();
+    if (!text) return {};
+    try { return JSON.parse(text); } catch { return {}; }
   }
 }

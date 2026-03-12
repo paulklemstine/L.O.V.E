@@ -421,16 +421,20 @@ export class LoveEngine {
 
     // ── Step 3: Content Generation (1 LLM call) ──
     // Generates: micro-story + subliminal phrase
+    // Delay to avoid 429 rate limit (pk_ key allows 1 concurrent request)
+    await new Promise(r => setTimeout(r, 2000));
     onStatus('Writing micro-story...');
     const { story, subliminal } = await this._generateContent(
       plan, arcBeat, mutation, archetype, antiRepetition
     );
 
     // ── Step 4: Visual Prompt (1 LLM call) ──
+    await new Promise(r => setTimeout(r, 2000));
     onStatus('Designing visual aesthetic...');
     const visualPrompt = await this._generateVisualPrompt(plan, arcBeat, mutation);
 
     // ── Step 5: Image Generation ──
+    await new Promise(r => setTimeout(r, 2000));
     onStatus('Generating psychedelic image...');
     const imageBlob = await this.ai.generateImage(visualPrompt, {
       subliminalText: subliminal
@@ -621,6 +625,8 @@ ${arcBeat.tension < 0.4 ? 'Soft, ethereal, dreamy, gentle light, pastel and deep
 
 TECHNICAL: Include art style, lighting, atmosphere, color palette. 8k quality.
 
+IMPORTANT: Keep the prompt CONCISE — under 400 characters total. Dense keywords, not sentences.
+
 Return ONLY the raw image prompt. No JSON, no quotes, no explanation.`;
 
     const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { temperature: 0.95 });
@@ -628,6 +634,11 @@ Return ONLY the raw image prompt. No JSON, no quotes, no explanation.`;
 
     const codeMatch = visualPrompt.match(/```\w*\n?([\s\S]*?)```/);
     if (codeMatch) visualPrompt = codeMatch[1].trim();
+
+    // Cap at 500 chars to avoid URL length limits on image API
+    if (visualPrompt.length > 500) {
+      visualPrompt = visualPrompt.slice(0, 497) + '...';
+    }
 
     return visualPrompt.length > 30
       ? visualPrompt

@@ -80,8 +80,9 @@ export class PollinationsClient {
         return text;
       } catch (err) {
         if (attempt === maxRetries) throw err;
-        // Exponential backoff
-        await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
+        // Exponential backoff (longer for pk_ key rate limits)
+        const delay = 5000 * Math.pow(2, attempt);
+        await new Promise(r => setTimeout(r, delay));
       }
     }
   }

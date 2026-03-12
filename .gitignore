@@ -28,3 +28,4 @@ package.json
 .vllm_blacklist.json
 .vllm_extension_config.json
 data/.tool_cooldowns.json
+.firebase/
