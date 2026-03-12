@@ -117,6 +117,7 @@ async function startLoop() {
   try {
     const session = await bsky.login(handle, password);
     log(`Logged in as @${session.handle} (${session.did})`);
+    log(`PDS endpoint: ${bsky.pdsUrl}`);
 
     // Update profile with ETH address
     try {
@@ -567,7 +568,7 @@ async function doChatScan() {
 
   } catch (err) {
     // Don't spam errors if chat scope isn't enabled on the app password
-    if (err.message?.includes('Bad token scope') || err.message?.includes('AuthMissing')) {
+    if (err.message?.includes('Bad token scope') || err.message?.includes('AuthMissing') || err.message?.includes('XRPCNotSupported')) {
       log('DM: Chat not available — app password may need chat permission.');
       // Disable future chat scans to avoid noise
       if (chatTimer) { clearInterval(chatTimer); chatTimer = null; }

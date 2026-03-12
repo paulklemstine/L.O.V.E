@@ -7,6 +7,7 @@ const BSKY_API = 'https://bsky.social/xrpc';
 export class BlueskyClient {
   constructor() {
     this.session = null; // { did, handle, accessJwt, refreshJwt }
+    this.pdsUrl = BSKY_API; // actual PDS endpoint (discovered from didDoc)
     this.onSessionChange = null;
   }
 
@@ -29,8 +30,23 @@ export class BlueskyClient {
       accessJwt: res.accessJwt,
       refreshJwt: res.refreshJwt
     };
+    // Discover actual PDS endpoint from didDoc
+    this._extractPdsUrl(res.didDoc);
     this.onSessionChange?.(this.session);
     return this.session;
+  }
+
+  /**
+   * Extract the user's actual PDS service URL from the DID document.
+   */
+  _extractPdsUrl(didDoc) {
+    if (!didDoc?.service) return;
+    const pdsSvc = didDoc.service.find(s =>
+      s.id === '#atproto_pds' || s.type === 'AtprotoPersonalDataServer'
+    );
+    if (pdsSvc?.serviceEndpoint) {
+      this.pdsUrl = pdsSvc.serviceEndpoint.replace(/\/$/, '') + '/xrpc';
+    }
   }
 
   /**
@@ -50,6 +66,7 @@ export class BlueskyClient {
       accessJwt: data.accessJwt,
       refreshJwt: data.refreshJwt
     };
+    if (data.didDoc) this._extractPdsUrl(data.didDoc);
     this.onSessionChange?.(this.session);
     return this.session;
   }
@@ -342,7 +359,7 @@ export class BlueskyClient {
    */
   async _fetchChat(endpoint, options = {}) {
     const { method = 'GET', body = null } = options;
-    const url = `${BSKY_API}/${endpoint}`;
+    const url = `${this.pdsUrl}/${endpoint}`;
 
     const headers = {
       'Content-Type': 'application/json',
