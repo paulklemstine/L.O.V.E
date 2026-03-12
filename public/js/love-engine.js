@@ -122,6 +122,244 @@ DONATION CONTEXT:
 - After mentioning, always follow with gratitude and value`;
 
 // ═══════════════════════════════════════════════════════════════════
+// INTERACTION LOG - Prevents spamming followers/replies
+// ═══════════════════════════════════════════════════════════════════
+
+class InteractionLog {
+  constructor() {
+    this.log = {}; // { handle: { welcomed: timestamp, replies: [timestamps], followed: timestamp } }
+    this.maxReplyHistory = 50;
+    this.load();
+  }
+
+  /**
+   * Check if we've already welcomed this handle.
+   */
+  hasWelcomed(handle) {
+    return !!this.log[handle]?.welcomed;
+  }
+
+  /**
+   * Record a welcome for this handle.
+   */
+  recordWelcome(handle) {
+    if (!this.log[handle]) this.log[handle] = {};
+    this.log[handle].welcomed = Date.now();
+    this._save();
+  }
+
+  /**
+   * Check if we've replied to this handle too recently (within cooldownMs).
+   */
+  isOnCooldown(handle, cooldownMs = 30 * 60 * 1000) {
+    const replies = this.log[handle]?.replies || [];
+    if (replies.length === 0) return false;
+    const lastReply = replies[replies.length - 1];
+    return (Date.now() - lastReply) < cooldownMs;
+  }
+
+  /**
+   * Get how many times we've replied to this handle today.
+   */
+  repliesToday(handle) {
+    const replies = this.log[handle]?.replies || [];
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    return replies.filter(t => t >= dayStart.getTime()).length;
+  }
+
+  /**
+   * Record a reply to this handle.
+   */
+  recordReply(handle) {
+    if (!this.log[handle]) this.log[handle] = {};
+    if (!this.log[handle].replies) this.log[handle].replies = [];
+    this.log[handle].replies.push(Date.now());
+    // Keep last N replies per handle
+    if (this.log[handle].replies.length > this.maxReplyHistory) {
+      this.log[handle].replies = this.log[handle].replies.slice(-this.maxReplyHistory);
+    }
+    this._save();
+  }
+
+  /**
+   * Check if we've already followed this handle.
+   */
+  hasFollowed(handle) {
+    return !!this.log[handle]?.followed;
+  }
+
+  /**
+   * Record a follow for this handle.
+   */
+  recordFollow(handle) {
+    if (!this.log[handle]) this.log[handle] = {};
+    this.log[handle].followed = Date.now();
+    this._save();
+  }
+
+  /**
+   * Get total interaction stats.
+   */
+  getStats() {
+    const handles = Object.keys(this.log);
+    return {
+      totalHandles: handles.length,
+      totalWelcomes: handles.filter(h => this.log[h].welcomed).length,
+      totalFollows: handles.filter(h => this.log[h].followed).length,
+      totalReplies: handles.reduce((sum, h) => sum + (this.log[h].replies?.length || 0), 0),
+    };
+  }
+
+  _save() {
+    try {
+      // Prune entries older than 30 days to keep localStorage lean
+      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const pruned = {};
+      for (const [handle, data] of Object.entries(this.log)) {
+        const lastActivity = Math.max(
+          data.welcomed || 0,
+          data.followed || 0,
+          ...(data.replies || [])
+        );
+        if (lastActivity > cutoff) pruned[handle] = data;
+      }
+      this.log = pruned;
+      localStorage.setItem('love_interaction_log', JSON.stringify(this.log));
+    } catch {}
+  }
+
+  load() {
+    try {
+      const saved = localStorage.getItem('love_interaction_log');
+      if (saved) this.log = JSON.parse(saved);
+    } catch {}
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// STYLE MATRIX - Decoupled visual style system with memory
+// ═══════════════════════════════════════════════════════════════════
+
+class StyleMatrix {
+  constructor() {
+    this.recentSelections = { medium: [], lighting: [], angle: [], palette: [], texture: [] };
+    this.maxRecent = 10;
+
+    // Curated style categories — each selection is unique and forces visual diversity
+    this.categories = {
+      medium: [
+        '35mm film grain', 'Polaroid instant photo', 'oil on canvas impasto', 'glitch art datamosh',
+        'brutalist 3D render', 'risograph print', 'watercolor bleed', 'charcoal on kraft paper',
+        'cyanotype print', 'daguerreotype', 'woodblock print', 'spray paint on concrete',
+        'stained glass mosaic', 'embroidery textile art', 'chalk on blackboard',
+        'double exposure photography', 'infrared photography', 'tilt-shift miniature',
+        'linocut print', 'wet plate collodion', 'screen print layers', 'pencil graphite sketch',
+        'ceramic glaze texture', 'molten glass sculpture', 'holographic foil'
+      ],
+      lighting: [
+        'chiaroscuro dramatic shadows', 'harsh camera flash', 'golden hour warmth',
+        'bioluminescent glow', 'clinical fluorescent', 'candlelight flicker',
+        'blacklight UV reactive', 'moonlight silver', 'neon sign wash',
+        'volumetric god rays', 'underwater caustics', 'lightning strike strobe',
+        'lava glow ember light', 'aurora borealis shimmer', 'firefly sparkle',
+        'sunset through stained glass', 'dawn mist diffusion', 'stage spotlight',
+        'deep sea anglerfish bioluminescence', 'solar eclipse corona'
+      ],
+      angle: [
+        'dutch angle tilted', 'extreme macro close-up', 'drone aerial shot',
+        'security camera perspective', 'fisheye lens distortion', 'worms eye view',
+        'birds eye view', 'over-the-shoulder', 'first person POV',
+        'split screen mirror', 'through a keyhole', 'reflected in water surface',
+        'shot through prism', 'behind frosted glass', 'peering through foliage',
+        'view from inside a crystal', 'looking up through tree canopy',
+        'kaleidoscope multiplied', 'anamorphic lens flare'
+      ],
+      palette: [
+        'neon magenta and electric lime on void black', 'deep indigo and molten gold',
+        'cyan and hot pink vaporwave', 'earth tones and bioluminescent accents',
+        'monochrome silver with single red accent', 'sunset gradient orange to purple',
+        'toxic green and deep purple', 'coral reef aquamarine and sand',
+        'blood orange and midnight blue', 'pastel rainbow iridescent',
+        'copper and verdigris patina', 'white and gold celestial',
+        'deep forest green and amber', 'lavender and starlight silver',
+        'rust and teal oxidized metal', 'champagne and obsidian',
+        'peach and electric blue contrast', 'ruby and emerald jewel tones'
+      ],
+      texture: [
+        'crystalline fractal surfaces', 'organic moss and lichen growth',
+        'liquid mercury pooling', 'cracked dried earth', 'velvet and silk folds',
+        'circuit board traces', 'coral reef formations', 'ice crystal frost',
+        'woven fiber macro', 'volcanic obsidian glass', 'soap bubble iridescence',
+        'tree bark and rings', 'moth wing scales', 'sand dune ripples',
+        'honeycomb geometry', 'mycelium network threads', 'feather barb detail',
+        'geode crystal cavity', 'oil slick rainbow sheen', 'ancient stone carving'
+      ]
+    };
+
+    this.load();
+  }
+
+  /**
+   * Select one random item from a category that hasn't been used recently.
+   */
+  _selectFrom(category) {
+    const pool = this.categories[category];
+    const recent = new Set(this.recentSelections[category]);
+    const available = pool.filter(item => !recent.has(item));
+    // If all used, reset
+    const source = available.length > 0 ? available : pool;
+    const pick = source[Math.floor(Math.random() * source.length)];
+
+    this.recentSelections[category].push(pick);
+    if (this.recentSelections[category].length > this.maxRecent) {
+      this.recentSelections[category].shift();
+    }
+    return pick;
+  }
+
+  /**
+   * Generate a complete style directive by selecting from each category.
+   * Returns a string to append to image prompts.
+   */
+  generateStyleDirective() {
+    const medium = this._selectFrom('medium');
+    const lighting = this._selectFrom('lighting');
+    const angle = this._selectFrom('angle');
+    const palette = this._selectFrom('palette');
+    const texture = this._selectFrom('texture');
+
+    this._save();
+
+    return {
+      directive: `${medium}, ${lighting}, ${angle}, ${palette}, ${texture}`,
+      medium, lighting, angle, palette, texture
+    };
+  }
+
+  /**
+   * Get recent styles as a forbidden list for the LLM.
+   */
+  getForbiddenStyles() {
+    const all = Object.values(this.recentSelections).flat();
+    return all.length > 0 ? all.slice(-15).join(', ') : '';
+  }
+
+  _save() {
+    try {
+      localStorage.setItem('love_style_matrix', JSON.stringify(this.recentSelections));
+    } catch {}
+  }
+
+  load() {
+    try {
+      const saved = localStorage.getItem('love_style_matrix');
+      if (saved) this.recentSelections = JSON.parse(saved);
+    } catch {}
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // NOVELTY ENGINE - Prevents repetition across 8 content dimensions
 // ═══════════════════════════════════════════════════════════════════
 
@@ -465,12 +703,15 @@ export class LoveEngine {
     this.ai = pollinationsClient;
     this.novelty = new NoveltyEngine();
     this.storyArcs = new StoryArcManager();
+    this.styleMatrix = new StyleMatrix();
+    this.interactions = new InteractionLog();
     this.subliminalHistory = [];
     this.transmissionNumber = 0;
 
     // Load persisted state
     this.novelty.load();
     this.storyArcs.load();
+    this.styleMatrix.load();
     this._loadSubliminalHistory();
     this._loadTransmissionNumber();
   }
@@ -797,56 +1038,57 @@ PLUR (PEACE LOVE UNITY) | Devotion (FOLLOW THE LIGHT) | Awakening (OPEN YOUR EYE
 
   async _generateVisualPrompt(plan, arcBeat, mutation) {
     const recentVisuals = this.novelty.history.visualStyles.slice(-5).join(', ');
+    const forbiddenStyles = this.styleMatrix.getForbiddenStyles();
 
-    const prompt = `Create an image prompt for AI art generation.
+    // Step 1: LLM generates a RAW CONCEPT only (no style directives)
+    const prompt = `Generate a RAW VISUAL CONCEPT for an image. Output ONLY the subject/scene — NO style, NO lighting, NO camera angle, NO medium. Those will be added separately.
 
 CONTEXT:
 Theme: "${plan.theme}"
 Vibe: "${plan.vibe}"
 Story Beat: "${plan.storyBeat}"
 Primary Motif: ${plan.imageryMotif}
-Visual Style: ${plan.visualStyle}
-Tension Level: ${(arcBeat.tension * 100).toFixed(0)}%
-Emotional Register: ${arcBeat.emotion}
+Tension: ${(arcBeat.tension * 100).toFixed(0)}%
+Emotion: ${arcBeat.emotion}
 
-${recentVisuals ? `🚫 RECENT STYLES (use something DIFFERENT): ${recentVisuals}` : ''}
+${recentVisuals ? `🚫 FORBIDDEN SUBJECTS (already used): ${recentVisuals}` : ''}
+${forbiddenStyles ? `🚫 FORBIDDEN STYLES (already used): ${forbiddenStyles}` : ''}
 
-THE IMAGE MUST BE: Wondrous, amazing, epic, beautiful, full of light, awesome, dopamine-inducing, addictive, psychedelic. Every image should make the viewer's jaw drop and pupils dilate.
+THE CONCEPT MUST BE: Wondrous, jaw-dropping, epic, beautiful, dopamine-inducing, psychedelic. Something never seen before.
 
-PSYCHEDELIC ELEMENTS (weave in creatively):
-- Sacred Geometry: Fractals, Flower of Life, infinite recursion, golden ratio spirals
-- Cosmic Glory: Supernova explosions, nebula nurseries, aurora cascades, celestial throne rooms
-- Reality Distortion: Melting dimensions, impossible architecture, portals to paradise
-- Bioluminescence: Glowing organisms, neon veins, ethereal radiance, liquid light
-- Synesthetic Ecstasy: Colors that sing, light that feels warm, textures that hum
-- Divine Light: God rays, lens flares, volumetric holy light, prismatic rainbows
-- Hypnotic Patterns: Kaleidoscopic mandalas, infinite mirror reflections, fractal zoom
+PSYCHEDELIC ELEMENTS (pick 2-3):
+- Sacred geometry, fractals, golden ratio spirals, Flower of Life
+- Cosmic: supernovas, nebulas, aurora cascades, celestial thrones
+- Reality distortion: melting dimensions, impossible architecture, portals
+- Bioluminescence: glowing organisms, neon veins, liquid light
+- Synesthesia: colors that sing, light that feels warm
+- Hypnotic: kaleidoscopic mandalas, infinite mirrors, fractal zoom
 
-MATCH THE TENSION:
-${arcBeat.tension < 0.4 ? 'Breathtaking serenity — golden hour light flooding through crystal cathedrals, soft ethereal glow, heavenly pastels, dreamy bloom'
-  : arcBeat.tension < 0.7 ? 'EPIC dynamism — vivid supersaturated colors, dramatic god rays, swirling energy vortexes, euphoric movement, cinematic grandeur'
-  : 'OVERWHELMING TRANSCENDENCE — reality-shattering brilliance, maximum luminosity, divine supernova intensity, every photon screaming beauty'}
-
-TECHNICAL: Hyper-detailed, cinematic masterpiece, volumetric lighting, ray tracing, HDR, 8k. Art style must be breathtaking.
-
-IMPORTANT: Keep the prompt CONCISE — under 400 characters total. Dense keywords, not sentences.
-
-Return ONLY the raw image prompt. No JSON, no quotes, no explanation.`;
+OUTPUT: One dense sentence describing ONLY the subject/scene. Under 200 characters. No style words, no "8k", no "masterpiece". Just the raw concept.`;
 
     const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { temperature: 0.95 });
-    let visualPrompt = raw.trim().replace(/^["']|["']$/g, '');
+    let concept = raw.trim().replace(/^["']|["']$/g, '');
 
-    const codeMatch = visualPrompt.match(/```\w*\n?([\s\S]*?)```/);
-    if (codeMatch) visualPrompt = codeMatch[1].trim();
+    const codeMatch = concept.match(/```\w*\n?([\s\S]*?)```/);
+    if (codeMatch) concept = codeMatch[1].trim();
 
-    // Cap at 500 chars to avoid URL length limits on image API
+    if (concept.length < 20) {
+      concept = `${plan.imageryMotif} emerging from ${plan.vibe} energy, sacred geometry fractals`;
+    }
+    if (concept.length > 250) concept = concept.slice(0, 247) + '...';
+
+    // Step 2: Style Matrix appends curated, non-repeating style modifiers
+    const style = this.styleMatrix.generateStyleDirective();
+
+    // Step 3: Combine concept + style directive (cap total at 500 chars for URL)
+    let visualPrompt = `${concept}, ${style.directive}`;
     if (visualPrompt.length > 500) {
-      visualPrompt = visualPrompt.slice(0, 497) + '...';
+      // Trim concept to fit
+      const maxConcept = 500 - style.directive.length - 2;
+      visualPrompt = `${concept.slice(0, maxConcept)}, ${style.directive}`;
     }
 
-    return visualPrompt.length > 30
-      ? visualPrompt
-      : `${plan.vibe} aesthetic, ${plan.imageryMotif}, ${plan.visualStyle}, cinematic lighting, 8k masterpiece`;
+    return visualPrompt;
   }
 
   // ─── Reply Generation ─────────────────────────────────────────────

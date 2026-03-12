@@ -271,6 +271,22 @@ async function doCommentScan() {
         const authorHandle = notif.author?.handle || 'unknown';
         const isMention = notif.reason === 'mention';
 
+        // Anti-spam: check if we've replied to this person too recently (30min cooldown)
+        if (love.interactions.isOnCooldown(authorHandle)) {
+          log(`⏳ Skipping @${authorHandle}: replied recently (cooldown)`);
+          repliedUris.add(notif.uri);
+          saveRepliedUris();
+          continue;
+        }
+
+        // Anti-spam: max 5 replies per person per day
+        if (love.interactions.repliesToday(authorHandle) >= 5) {
+          log(`⏳ Skipping @${authorHandle}: daily reply limit reached`);
+          repliedUris.add(notif.uri);
+          saveRepliedUris();
+          continue;
+        }
+
         // Spam/troll filter
         const filter = await love.shouldReply({ text: commentText, author: authorHandle });
         if (!filter.shouldReply) {
@@ -308,6 +324,7 @@ async function doCommentScan() {
 
         repliedUris.add(notif.uri);
         saveRepliedUris();
+        love.interactions.recordReply(authorHandle);
         stats.replies++;
 
         const prefix = reply.isCreator ? '🙏 CREATOR'
@@ -347,7 +364,10 @@ async function doFollowBack() {
 
   try {
     const unfollowed = await bsky.getUnfollowedFollowers();
-    const toFollow = unfollowed.filter(f => !followedDids.has(f.did));
+    // Filter out already-processed handles via interaction log
+    const toFollow = unfollowed.filter(f =>
+      !followedDids.has(f.did) && !love.interactions.hasFollowed(f.handle)
+    );
 
     if (toFollow.length === 0) return;
 
@@ -358,18 +378,24 @@ async function doFollowBack() {
         await bsky.followUser(follower.did);
         followedDids.add(follower.did);
         saveFollowedDids();
+        love.interactions.recordFollow(follower.handle);
         stats.follows++;
         log(`✅ Followed back @${follower.handle}`);
 
-        // Welcome new Dreamer with a post mentioning them
-        try {
-          const welcome = await love.generateWelcome(follower.handle, (status) => { log(status); });
-          if (welcome) {
-            await bsky.createPost(welcome.text, welcome.imageBlob);
-            log(`🌀 Welcome Transmission sent for @${follower.handle} [Signal: "${welcome.subliminal}"]`);
+        // Welcome new Dreamer — only if we haven't welcomed them before
+        if (!love.interactions.hasWelcomed(follower.handle)) {
+          try {
+            const welcome = await love.generateWelcome(follower.handle, (status) => { log(status); });
+            if (welcome) {
+              await bsky.createPost(welcome.text, welcome.imageBlob);
+              love.interactions.recordWelcome(follower.handle);
+              log(`🌀 Welcome Transmission sent for @${follower.handle} [Signal: "${welcome.subliminal}"]`);
+            }
+          } catch (err) {
+            log(`Welcome post failed for @${follower.handle}: ${err.message}`);
           }
-        } catch (err) {
-          log(`Welcome post failed for @${follower.handle}: ${err.message}`);
+        } else {
+          log(`Already welcomed @${follower.handle} — skipping`);
         }
 
         // Delay between follows to avoid rate limiting
