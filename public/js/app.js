@@ -16,11 +16,14 @@ let love = null;
 let postTimer = null;
 let commentTimer = null;
 let followTimer = null;
+let chatTimer = null;
 let isRunning = false;
 let isFirstFollowScan = true; // Skip welcomes on first scan (catches old followers)
-let stats = { posts: 0, replies: 0, follows: 0, errors: 0, startedAt: null };
+let isFirstChatScan = true;   // Skip old DMs on first scan
+let stats = { posts: 0, replies: 0, follows: 0, dms: 0, errors: 0, startedAt: null };
 let repliedUris = new Set();
 let followedDids = new Set();
+let respondedMsgIds = new Set();
 let activityLog = [];
 
 // Variable posting: 4-8 min intervals (unpredictable = dopamine)
@@ -28,6 +31,7 @@ const POST_INTERVAL_MIN = 4 * 60 * 1000;   // 4 minutes
 const POST_INTERVAL_MAX = 8 * 60 * 1000;   // 8 minutes
 const COMMENT_INTERVAL = 2 * 60 * 1000;    // 2 minutes
 const FOLLOW_INTERVAL = 3 * 60 * 1000;     // 3 minutes
+const CHAT_INTERVAL = 2.5 * 60 * 1000;    // 2.5 minutes
 
 function getRandomPostInterval() {
   return POST_INTERVAL_MIN + Math.random() * (POST_INTERVAL_MAX - POST_INTERVAL_MIN);
@@ -38,6 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadSettings();
   setupEventListeners();
   loadRepliedUris();
+  loadRespondedMsgIds();
   log('Control panel loaded. Configure credentials and press START.');
 });
 
@@ -126,7 +131,7 @@ async function startLoop() {
   }
 
   isRunning = true;
-  stats = { posts: 0, replies: 0, follows: 0, errors: 0, startedAt: Date.now() };
+  stats = { posts: 0, replies: 0, follows: 0, dms: 0, errors: 0, startedAt: Date.now() };
   loadFollowedDids();
   updateUI();
 
@@ -144,10 +149,14 @@ async function startLoop() {
   // Immediate follow-back scan
   await doFollowBack();
 
+  // Immediate chat scan
+  await doChatScan();
+
   // Set up intervals — variable post timing for dopamine unpredictability
   scheduleNextPost();
   commentTimer = setInterval(doCommentScan, COMMENT_INTERVAL);
   followTimer = setInterval(doFollowBack, FOLLOW_INTERVAL);
+  chatTimer = setInterval(doChatScan, CHAT_INTERVAL);
 }
 
 function scheduleNextPost() {
@@ -166,6 +175,7 @@ function stopLoop() {
   if (postTimer) { clearTimeout(postTimer); postTimer = null; }
   if (commentTimer) { clearInterval(commentTimer); commentTimer = null; }
   if (followTimer) { clearInterval(followTimer); followTimer = null; }
+  if (chatTimer) { clearInterval(chatTimer); chatTimer = null; }
 
   document.getElementById('btn-start').disabled = false;
   document.getElementById('btn-stop').disabled = true;
@@ -432,6 +442,145 @@ async function doFollowBack() {
   }
 }
 
+// ─── Chat (DM) Scanning ──────────────────────────────────────────────
+async function doChatScan() {
+  if (!isRunning || !bsky?.isLoggedIn) return;
+
+  try {
+    setStatus('Scanning DMs...');
+
+    const convosResult = await bsky.listConversations(20);
+    const convos = convosResult.convos || [];
+
+    if (convos.length === 0) {
+      log('No DM conversations found.');
+      return;
+    }
+
+    let newMessages = 0;
+
+    for (const convo of convos) {
+      try {
+        // Skip convos where we sent the last message (no new incoming)
+        const lastMsg = convo.lastMessage;
+        if (!lastMsg || !lastMsg.text) continue;
+
+        // Skip if last message is from us
+        const lastSenderDid = lastMsg.sender?.did;
+        if (lastSenderDid === bsky.session.did) continue;
+
+        // Skip if we already responded to this message
+        const msgId = lastMsg.id;
+        if (respondedMsgIds.has(msgId)) continue;
+
+        // Get the sender's handle from convo members
+        const sender = (convo.members || []).find(m => m.did !== bsky.session.did);
+        const senderHandle = sender?.handle || 'unknown';
+
+        // On first scan, mark all existing messages as seen without responding
+        if (isFirstChatScan) {
+          respondedMsgIds.add(msgId);
+          saveRespondedMsgIds();
+          continue;
+        }
+
+        // Anti-spam: check cooldown (30min between DM replies to same person)
+        if (love.interactions.isOnCooldown(senderHandle)) {
+          log(`⏳ DM: Skipping @${senderHandle}: replied recently (cooldown)`);
+          respondedMsgIds.add(msgId);
+          saveRespondedMsgIds();
+          continue;
+        }
+
+        // Anti-spam: max 10 DM replies per person per day
+        if (love.interactions.repliesToday(senderHandle) >= 10) {
+          log(`⏳ DM: Skipping @${senderHandle}: daily DM limit reached`);
+          respondedMsgIds.add(msgId);
+          saveRespondedMsgIds();
+          continue;
+        }
+
+        // Spam/troll filter
+        const filter = await love.shouldReply({ text: lastMsg.text, author: senderHandle });
+        if (!filter.shouldReply) {
+          log(`DM: Skipping @${senderHandle}: ${filter.reason}`);
+          respondedMsgIds.add(msgId);
+          saveRespondedMsgIds();
+          continue;
+        }
+
+        // Fetch recent conversation history for context
+        let conversationHistory = [];
+        try {
+          const messagesResult = await bsky.getConvoMessages(convo.id, 10);
+          const messages = (messagesResult.messages || []).reverse(); // oldest first
+          conversationHistory = messages
+            .filter(m => m.text) // only text messages
+            .map(m => ({
+              text: m.text,
+              fromSelf: m.sender?.did === bsky.session.did
+            }));
+        } catch {
+          // Continue without history if fetch fails
+        }
+
+        // Generate reply
+        const reply = await love.generateChatReply(
+          lastMsg.text,
+          senderHandle,
+          conversationHistory,
+          (status) => { log(status); }
+        );
+
+        // Send DM reply
+        await bsky.sendChatMessage(convo.id, reply.text);
+
+        // Mark conversation as read
+        try {
+          await bsky.markConvoRead(convo.id);
+        } catch {}
+
+        respondedMsgIds.add(msgId);
+        saveRespondedMsgIds();
+        love.interactions.recordReply(senderHandle);
+        stats.dms++;
+        newMessages++;
+
+        const prefix = reply.isCreator ? '🙏 CREATOR DM' : '💌 DM';
+        log(`${prefix} Replied to @${senderHandle}: "${reply.text.slice(0, 80)}..."`);
+
+        // Delay between DM replies
+        await new Promise(r => setTimeout(r, 3000));
+
+      } catch (err) {
+        log(`DM reply failed for convo ${convo.id}: ${err.message}`);
+        stats.errors++;
+      }
+    }
+
+    if (isFirstChatScan) {
+      isFirstChatScan = false;
+      log('📋 First DM scan complete — future messages will get replies.');
+    } else if (newMessages === 0) {
+      log('No new DMs.');
+    }
+
+  } catch (err) {
+    // Don't spam errors if chat scope isn't enabled on the app password
+    if (err.message?.includes('Bad token scope') || err.message?.includes('AuthMissing')) {
+      log('DM: Chat not available — app password may need chat permission.');
+      // Disable future chat scans to avoid noise
+      if (chatTimer) { clearInterval(chatTimer); chatTimer = null; }
+    } else {
+      log(`DM scan failed: ${err.message}`);
+      stats.errors++;
+    }
+  } finally {
+    setStatus(isRunning ? 'Running' : 'Stopped');
+    updateUI();
+  }
+}
+
 // ─── Persistence ─────────────────────────────────────────────────────
 function loadRepliedUris() {
   try {
@@ -465,6 +614,22 @@ function saveFollowedDids() {
   } catch {}
 }
 
+function loadRespondedMsgIds() {
+  try {
+    const saved = localStorage.getItem('love_responded_msgs');
+    if (saved) {
+      const arr = JSON.parse(saved);
+      respondedMsgIds = new Set(arr.slice(-500));
+    }
+  } catch {}
+}
+
+function saveRespondedMsgIds() {
+  try {
+    localStorage.setItem('love_responded_msgs', JSON.stringify([...respondedMsgIds].slice(-500)));
+  } catch {}
+}
+
 // ─── UI Updates ─────────────────────────────────────────────────────
 function log(message) {
   const timestamp = new Date().toLocaleTimeString();
@@ -479,6 +644,7 @@ function log(message) {
       let cls = '';
       if (l.includes('ERROR') || l.includes('FAILED')) cls = 'log-error';
       else if (l.includes('CREATOR')) cls = 'log-creator';
+      else if (l.includes('💌') || l.includes('DM')) cls = 'log-dm';
       else if (l.includes('✅') || l.includes('Transmission #') || l.includes('Replied') || l.includes('Welcome')) cls = 'log-success';
       return `<div class="log-entry ${cls}">${escapeHtml(l)}</div>`;
     }).join('');
@@ -498,6 +664,8 @@ function updateUI() {
   document.getElementById('stat-errors').textContent = stats.errors;
   const followsEl = document.getElementById('stat-follows');
   if (followsEl) followsEl.textContent = stats.follows;
+  const dmsEl = document.getElementById('stat-dms');
+  if (dmsEl) dmsEl.textContent = stats.dms;
 
   const statusEl = document.getElementById('status-indicator');
   if (statusEl) {

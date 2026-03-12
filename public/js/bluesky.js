@@ -297,6 +297,83 @@ export class BlueskyClient {
     });
   }
 
+  // ─── Chat / Direct Messages ──────────────────────────────────────
+
+  /**
+   * List conversations (DMs).
+   */
+  async listConversations(limit = 30, cursor = '') {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (cursor) params.set('cursor', cursor);
+    return await this._fetchChat(`chat.bsky.convo.listConvos?${params}`);
+  }
+
+  /**
+   * Get messages from a specific conversation.
+   */
+  async getConvoMessages(convoId, limit = 30, cursor = '') {
+    const params = new URLSearchParams({ convoId, limit: String(limit) });
+    if (cursor) params.set('cursor', cursor);
+    return await this._fetchChat(`chat.bsky.convo.getMessages?${params}`);
+  }
+
+  /**
+   * Send a text message to a conversation.
+   */
+  async sendChatMessage(convoId, text) {
+    return await this._fetchChat('chat.bsky.convo.sendMessage', {
+      method: 'POST',
+      body: { convoId, message: { text } }
+    });
+  }
+
+  /**
+   * Mark a conversation as read.
+   */
+  async markConvoRead(convoId) {
+    return await this._fetchChat('chat.bsky.convo.updateRead', {
+      method: 'POST',
+      body: { convoId }
+    });
+  }
+
+  /**
+   * Internal fetch wrapper for chat endpoints (requires atproto-proxy header).
+   */
+  async _fetchChat(endpoint, options = {}) {
+    const { method = 'GET', body = null } = options;
+    const url = `${BSKY_API}/${endpoint}`;
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'atproto-proxy': 'did:web:api.bsky.chat#bsky_chat'
+    };
+    if (this.session?.accessJwt) {
+      headers['Authorization'] = `Bearer ${this.session.accessJwt}`;
+    }
+
+    const fetchOpts = { method, headers };
+    if (body) fetchOpts.body = JSON.stringify(body);
+
+    let res = await fetch(url, fetchOpts);
+
+    // Auto-refresh on 401
+    if (res.status === 401 && this.session?.refreshJwt) {
+      await this.refreshSession();
+      headers['Authorization'] = `Bearer ${this.session.accessJwt}`;
+      res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    }
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Bluesky ${endpoint.split('?')[0]} ${res.status}: ${errText.slice(0, 300)}`);
+    }
+
+    const text = await res.text();
+    if (!text) return {};
+    try { return JSON.parse(text); } catch { return {}; }
+  }
+
   /**
    * Internal fetch wrapper with auth and retry.
    */

@@ -367,6 +367,11 @@ body {
   border-left-color: var(--accent-gold);
 }
 
+.log-dm {
+  color: #e879f9;
+  border-left-color: #e879f9;
+}
+
 /* ─── Placeholder ────────────────────────────────── */
 
 .placeholder-text {
