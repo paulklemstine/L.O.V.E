@@ -1,14 +1,15 @@
 /**
  * pollinations.js - Pollinations API client for text and image generation
  *
+ * Uses the new gen.pollinations.ai API (OpenAI-compatible chat completions).
  * Pollen budget: 10 pollen/day = 5/12 pollen/hour (~0.417/hr)
  * Text model: openai (GPT-5 Mini) - 950 responses/pollen, best non-paid quality
  * Image model: gptimage (GPT Image 1 Mini) - 80 images/pollen, renders text in-scene
  * Estimated per hour (~12 cycles): ~0.17 pollen (within 0.417/hr budget)
  */
 
-const TEXT_URL = 'https://text.pollinations.ai/';
-const IMAGE_URL = 'https://image.pollinations.ai/prompt';
+const TEXT_URL = 'https://gen.pollinations.ai/v1/chat/completions';
+const IMAGE_URL = 'https://gen.pollinations.ai/image';
 
 // Pollen tracking
 let pollenUsed = 0;
@@ -35,8 +36,8 @@ export class PollinationsClient {
   }
 
   /**
-   * Generate text using Pollinations API.
-   * Uses POST with messages array.
+   * Generate text using Pollinations OpenAI-compatible API.
+   * POST /v1/chat/completions — returns OpenAI JSON format.
    * Model: openai (GPT-5 Mini) - best non-paid quality
    */
   async generateText(systemPrompt, userPrompt, options = {}) {
@@ -52,8 +53,7 @@ export class PollinationsClient {
           ],
           temperature,
           seed: Math.floor(Math.random() * 100000),
-          jsonMode: false,
-          private: true
+          stream: false
         };
 
         const response = await fetch(TEXT_URL, {
@@ -70,8 +70,9 @@ export class PollinationsClient {
           throw new Error(`Pollinations text ${response.status}: ${errText.slice(0, 200)}`);
         }
 
-        // Base endpoint returns plain text
-        const text = await response.text();
+        // New API returns OpenAI-compatible JSON
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content || '';
 
         // Track pollen (~0.001 per call with openai model)
         pollenUsed += 0.001;
@@ -87,6 +88,7 @@ export class PollinationsClient {
 
   /**
    * Generate an image and return it as a Blob.
+   * GET /image/{prompt} — returns binary image.
    * Model: gptimage (GPT Image 1 Mini) - best quality, excellent text rendering
    */
   async generateImage(prompt, options = {}) {
@@ -102,7 +104,7 @@ export class PollinationsClient {
 
     const seed = Math.floor(Math.random() * 2147483647);
     const encoded = encodeURIComponent(fullPrompt);
-    const url = `${IMAGE_URL}/${encoded}?model=${model}&width=${width}&height=${height}&seed=${seed}&enhance=true&nologo=true&private=true`;
+    const url = `${IMAGE_URL}/${encoded}?model=${model}&width=${width}&height=${height}&seed=${seed}&enhance=true`;
 
     const response = await fetch(url, {
       headers: { 'Authorization': `Bearer ${this.apiKey}` }
