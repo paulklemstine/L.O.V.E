@@ -213,8 +213,8 @@ class InteractionLog {
 
   _save() {
     try {
-      // Prune entries older than 30 days to keep localStorage lean
-      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      // Prune entries older than 7 days to keep localStorage lean
+      const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
       const pruned = {};
       for (const [handle, data] of Object.entries(this.log)) {
         const lastActivity = Math.max(

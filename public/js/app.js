@@ -17,6 +17,7 @@ let postTimer = null;
 let commentTimer = null;
 let followTimer = null;
 let isRunning = false;
+let isFirstFollowScan = true; // Skip welcomes on first scan (catches old followers)
 let stats = { posts: 0, replies: 0, follows: 0, errors: 0, startedAt: null };
 let repliedUris = new Set();
 let followedDids = new Set();
@@ -250,11 +251,22 @@ async function doCommentScan() {
     setStatus('Scanning for notifications...');
 
     const notifs = await bsky.getNotifications(30);
-    const actionable = (notifs.notifications || []).filter(n =>
-      (n.reason === 'reply' || n.reason === 'mention') &&
-      !repliedUris.has(n.uri) &&
-      n.record?.text
-    );
+    const MAX_AGE_MS = 3 * 60 * 60 * 1000; // 3 hours — skip stale notifications
+    const now = Date.now();
+
+    const actionable = (notifs.notifications || []).filter(n => {
+      if (n.reason !== 'reply' && n.reason !== 'mention') return false;
+      if (repliedUris.has(n.uri)) return false;
+      if (!n.record?.text) return false;
+      // Skip notifications older than 3 hours
+      const notifAge = now - new Date(n.indexedAt || n.record?.createdAt || 0).getTime();
+      if (notifAge > MAX_AGE_MS) {
+        repliedUris.add(n.uri); // Mark as processed so we don't check again
+        saveRepliedUris();
+        return false;
+      }
+      return true;
+    });
 
     if (actionable.length === 0) {
       log('No new mentions or replies.');
@@ -383,7 +395,11 @@ async function doFollowBack() {
         log(`✅ Followed back @${follower.handle}`);
 
         // Welcome new Dreamer — only if we haven't welcomed them before
-        if (!love.interactions.hasWelcomed(follower.handle)) {
+        // Skip welcomes on first scan (would spam old followers on restart)
+        if (isFirstFollowScan) {
+          love.interactions.recordWelcome(follower.handle); // Mark as welcomed silently
+          log(`📋 First scan — recorded @${follower.handle} (no welcome post)`);
+        } else if (!love.interactions.hasWelcomed(follower.handle)) {
           try {
             const welcome = await love.generateWelcome(follower.handle, (status) => { log(status); });
             if (welcome) {
@@ -408,6 +424,11 @@ async function doFollowBack() {
   } catch (err) {
     log(`Follow-back scan failed: ${err.message}`);
     stats.errors++;
+  } finally {
+    if (isFirstFollowScan) {
+      isFirstFollowScan = false;
+      log('📋 First follow scan complete — future new followers will get welcome posts.');
+    }
   }
 }
 
