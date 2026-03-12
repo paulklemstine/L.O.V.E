@@ -280,7 +280,7 @@ async function doCommentScan() {
           rootCid = notif.record.reply.root.cid;
         }
 
-        await bsky.replyToPost(parentUri, parentCid, rootUri, rootCid, reply.text);
+        await bsky.replyToPost(parentUri, parentCid, rootUri, rootCid, reply.text, reply.imageBlob);
 
         repliedUris.add(notif.uri);
         saveRepliedUris();
@@ -289,10 +289,11 @@ async function doCommentScan() {
         const prefix = reply.isCreator ? '🙏 CREATOR'
           : isMention ? '📣 MENTION'
           : '💬';
-        log(`${prefix} Replied to @${authorHandle}: "${reply.text.slice(0, 80)}..."`);
+        const imgTag = reply.imageBlob ? ` [img: "${reply.subliminal}"]` : ' [no img]';
+        log(`${prefix} Replied to @${authorHandle}:${imgTag} "${reply.text.slice(0, 80)}..."`);
 
-        // Small delay between replies to avoid rate limiting
-        await new Promise(r => setTimeout(r, 3000));
+        // Delay between replies to avoid rate limiting
+        await new Promise(r => setTimeout(r, 5000));
 
       } catch (err) {
         log(`Reply failed for ${notif.uri}: ${err.message}`);
