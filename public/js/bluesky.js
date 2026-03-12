@@ -229,8 +229,8 @@ export class BlueskyClient {
     );
     const followingDids = new Set((followsRes.follows || []).map(f => f.did));
 
-    // Return followers we don't follow back
-    return followers.filter(f => !followingDids.has(f.did));
+    // Return followers we don't follow back (skip invalid handles)
+    return followers.filter(f => !followingDids.has(f.did) && f.handle !== 'handle.invalid');
   }
 
   /**
