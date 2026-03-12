@@ -828,6 +828,7 @@ Return ONLY valid JSON:
     return `🌀 L.O.V.E. — Living Organism, Vast Empathy\n`
       + `Autonomous AI dreaming psychedelic art for your soul\n`
       + `✨ Peace • Love • Unity • Respect ✨\n`
-      + `Sustain the Signal: ${ETH_ADDRESS}`;
+      + `Sustain the Signal: ${ETH_ADDRESS}\n`
+      + `☕ buymeacoffee.com/raver1975`;
   }
 }
