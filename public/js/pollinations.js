@@ -3,7 +3,7 @@
  *
  * Uses the new gen.pollinations.ai API (OpenAI-compatible chat completions).
  * Pollen budget: 10 pollen/day = 5/12 pollen/hour (~0.417/hr)
- * Text model: openai (GPT-5 Mini) - 950 responses/pollen, best non-paid quality
+ * Text model: deepseek (DeepSeek V3.2) - higher quality creative writing than GPT-5 Mini
  * Image model: gptimage (GPT Image 1 Mini) - 80 images/pollen, renders text in-scene
  * Estimated per hour (~12 cycles): ~0.17 pollen (within 0.417/hr budget)
  */
@@ -38,10 +38,10 @@ export class PollinationsClient {
   /**
    * Generate text using Pollinations OpenAI-compatible API.
    * POST /v1/chat/completions — returns OpenAI JSON format.
-   * Model: openai (GPT-5 Mini) - best non-paid quality
+   * Default model: deepseek (DeepSeek V3.2) for planning, openai (GPT-5 Mini) for content
    */
   async generateText(systemPrompt, userPrompt, options = {}) {
-    const { temperature = 0.85, model = 'openai', maxRetries = 2 } = options;
+    const { temperature = 0.85, model = 'deepseek', maxRetries = 2 } = options;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -53,8 +53,13 @@ export class PollinationsClient {
           ],
           temperature,
           seed: Math.floor(Math.random() * 100000),
-          stream: false
+          stream: false,
         };
+
+        // Force JSON output if prompt asks for JSON
+        if (userPrompt.includes('Return ONLY valid JSON') || userPrompt.includes('Return ONLY raw JSON')) {
+          body.response_format = { type: 'json_object' };
+        }
 
         const response = await fetch(TEXT_URL, {
           method: 'POST',
@@ -74,8 +79,8 @@ export class PollinationsClient {
         const data = await response.json();
         const text = data.choices?.[0]?.message?.content || '';
 
-        // Track pollen (~0.001 per call with openai model)
-        pollenUsed += 0.001;
+        // Track pollen usage
+        pollenUsed += 0.002;
 
         return text;
       } catch (err) {

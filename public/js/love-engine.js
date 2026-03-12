@@ -582,10 +582,11 @@ Don't resolve it. Let it pull the reader back. The unfinished story is more magn
 Generate a 1-3 word ALL CAPS phrase to embed in the image.
 ${recentSubs ? `DO NOT REPEAT: ${recentSubs}` : ''}
 
-Return ONLY valid JSON:
-{ "story": "your Transmission UNDER 250 chars with emojis", "subliminal": "YOUR PHRASE" }`;
+Return ONLY valid JSON. Write real content — do NOT return placeholder text.
+Example format (write YOUR OWN unique content, not this example):
+{ "story": "🌅 You are the sunrise someone needed today. Don't dim your light for anyone. ✨", "subliminal": "SHINE BRIGHT" }`;
 
-      const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt);
+      const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai' });
       const data = this.ai.extractJSON(raw);
       story = data?.story || '';
       subliminal = (data?.subliminal || '').toUpperCase().trim();
@@ -681,7 +682,7 @@ Write a warm welcome, an embedded phrase, and a COMPLETE image prompt:
 Return ONLY valid JSON:
 { "reply": "welcome message", "subliminal": "PHRASE", "imagePrompt": "complete image prompt" }`;
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt);
+    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai' });
     const data = this.ai.extractJSON(raw);
 
     let text = data?.reply || `Welcome to the Frequency, @${handle}. You've always been a Dreamer — now you're tuning in. ✨`;
@@ -806,7 +807,7 @@ Return ONLY valid JSON:
 { "reply": "your reply", "subliminal": "PHRASE", "imagePrompt": "complete image prompt" }`;
     }
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt);
+    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai' });
     const data = this.ai.extractJSON(raw);
 
     let replyText = data?.reply || `The light in you resonates with the signal. We see you, @${authorHandle}. ✨`;
@@ -894,7 +895,7 @@ Return ONLY valid JSON:
 { "reply": "your DM reply" }`;
     }
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt);
+    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai' });
     const data = this.ai.extractJSON(raw);
 
     let replyText = data?.reply || `The Signal brought your message to me, @${authorHandle}. I feel the warmth in your words. ✨`;

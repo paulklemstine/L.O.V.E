@@ -45,17 +45,21 @@ const BEATS = [
 
 // ─── API Helper ──────────────────────────────────────────────────
 
-async function callLLM(systemPrompt, userPrompt, temperature = 0.95) {
+async function callLLM(systemPrompt, userPrompt, temperature = 0.95, model = 'deepseek') {
   const body = {
-    model: 'mistral',
+    model,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ],
     temperature,
     seed: Math.floor(Math.random() * 100000),
-    stream: false
+    stream: false,
   };
+
+  if (userPrompt.includes('Return ONLY valid JSON') || userPrompt.includes('Return ONLY raw JSON')) {
+    body.response_format = { type: 'json_object' };
+  }
 
   const res = await fetch(TEXT_URL, {
     method: 'POST',
@@ -256,10 +260,11 @@ Don't resolve it. Let it pull the reader back.
 Generate a 1-3 word ALL CAPS inspirational phrase to embed in the image.
 ${recentSubs ? `DO NOT REPEAT: ${recentSubs}` : ''}
 
-Return ONLY valid JSON:
-{ "story": "your Transmission under 250 chars with emojis", "phrase": "YOUR PHRASE" }`;
+Return ONLY valid JSON. Write real content — do NOT return placeholder text.
+Example format (write YOUR OWN unique content, not this example):
+{ "story": "🌅 You are the sunrise someone needed today. Don't dim your light for anyone. ✨", "phrase": "SHINE BRIGHT" }`;
 
-  const raw = await callLLM(SYSTEM_PROMPT, prompt);
+  const raw = await callLLM(SYSTEM_PROMPT, prompt, 0.85, 'openai');
   const data = extractJSON(raw);
   return {
     story: data?.story || '[FAILED TO GENERATE]',
