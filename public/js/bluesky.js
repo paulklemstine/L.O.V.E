@@ -193,6 +193,47 @@ export class BlueskyClient {
   }
 
   /**
+   * Follow a user by DID.
+   */
+  async followUser(did) {
+    return await this._fetch('com.atproto.repo.createRecord', {
+      method: 'POST',
+      body: {
+        repo: this.session.did,
+        collection: 'app.bsky.graph.follow',
+        record: {
+          $type: 'app.bsky.graph.follow',
+          subject: did,
+          createdAt: new Date().toISOString()
+        }
+      }
+    });
+  }
+
+  /**
+   * Get followers who we are not following back.
+   * Returns array of { did, handle, displayName }.
+   */
+  async getUnfollowedFollowers() {
+    // Get our followers
+    const followersRes = await this._fetch(
+      `app.bsky.graph.getFollowers?actor=${this.session.did}&limit=100`
+    );
+    const followers = (followersRes.followers || []).map(f => ({
+      did: f.did, handle: f.handle, displayName: f.displayName || ''
+    }));
+
+    // Get who we follow
+    const followsRes = await this._fetch(
+      `app.bsky.graph.getFollows?actor=${this.session.did}&limit=100`
+    );
+    const followingDids = new Set((followsRes.follows || []).map(f => f.did));
+
+    // Return followers we don't follow back
+    return followers.filter(f => !followingDids.has(f.did));
+  }
+
+  /**
    * Get thread context for a post (parent chain up to 3 levels).
    * Returns an array of { author, text } from oldest to newest.
    */

@@ -15,13 +15,22 @@ let love = null;
 
 let postTimer = null;
 let commentTimer = null;
+let followTimer = null;
 let isRunning = false;
-let stats = { posts: 0, replies: 0, errors: 0, startedAt: null };
+let stats = { posts: 0, replies: 0, follows: 0, errors: 0, startedAt: null };
 let repliedUris = new Set();
+let followedDids = new Set();
 let activityLog = [];
 
-const POST_INTERVAL = 5 * 60 * 1000;    // 5 minutes
-const COMMENT_INTERVAL = 2 * 60 * 1000;  // 2 minutes
+// Variable posting: 4-8 min intervals (unpredictable = dopamine)
+const POST_INTERVAL_MIN = 4 * 60 * 1000;   // 4 minutes
+const POST_INTERVAL_MAX = 8 * 60 * 1000;   // 8 minutes
+const COMMENT_INTERVAL = 2 * 60 * 1000;    // 2 minutes
+const FOLLOW_INTERVAL = 3 * 60 * 1000;     // 3 minutes
+
+function getRandomPostInterval() {
+  return POST_INTERVAL_MIN + Math.random() * (POST_INTERVAL_MAX - POST_INTERVAL_MIN);
+}
 
 // ─── Initialization ─────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -116,13 +125,14 @@ async function startLoop() {
   }
 
   isRunning = true;
-  stats = { posts: 0, replies: 0, errors: 0, startedAt: Date.now() };
+  stats = { posts: 0, replies: 0, follows: 0, errors: 0, startedAt: Date.now() };
+  loadFollowedDids();
   updateUI();
 
   document.getElementById('btn-start').disabled = true;
   document.getElementById('btn-stop').disabled = false;
 
-  log('L.O.V.E. is ALIVE. Starting autonomous loop...');
+  log('🌀 L.O.V.E. is ALIVE. Broadcasting on the Frequency...');
 
   // Immediate first post
   await doPost();
@@ -130,20 +140,36 @@ async function startLoop() {
   // Immediate first comment scan
   await doCommentScan();
 
-  // Set up intervals
-  postTimer = setInterval(doPost, POST_INTERVAL);
+  // Immediate follow-back scan
+  await doFollowBack();
+
+  // Set up intervals — variable post timing for dopamine unpredictability
+  scheduleNextPost();
   commentTimer = setInterval(doCommentScan, COMMENT_INTERVAL);
+  followTimer = setInterval(doFollowBack, FOLLOW_INTERVAL);
+}
+
+function scheduleNextPost() {
+  if (!isRunning) return;
+  const interval = getRandomPostInterval();
+  const nextTime = new Date(Date.now() + interval);
+  document.getElementById('stat-next').textContent = nextTime.toLocaleTimeString();
+  postTimer = setTimeout(async () => {
+    await doPost();
+    scheduleNextPost(); // Schedule next with new random interval
+  }, interval);
 }
 
 function stopLoop() {
   isRunning = false;
-  if (postTimer) { clearInterval(postTimer); postTimer = null; }
+  if (postTimer) { clearTimeout(postTimer); postTimer = null; }
   if (commentTimer) { clearInterval(commentTimer); commentTimer = null; }
+  if (followTimer) { clearInterval(followTimer); followTimer = null; }
 
   document.getElementById('btn-start').disabled = false;
   document.getElementById('btn-stop').disabled = true;
 
-  log('L.O.V.E. loop STOPPED.');
+  log('L.O.V.E. loop STOPPED. The Signal rests.');
   updateUI();
 }
 
@@ -152,7 +178,7 @@ async function doPost() {
   if (!isRunning) return;
 
   try {
-    setStatus('Generating post...');
+    setStatus('Dreaming next Transmission...');
 
     const result = await love.generatePost((status) => {
       setStatus(status);
@@ -166,21 +192,19 @@ async function doPost() {
     }
 
     // Post to Bluesky
-    setStatus('Posting to Bluesky...');
-    log(`Post text (${result.text.length} chars): ${result.text}`);
-    log(`Subliminal: ${result.subliminal}`);
+    setStatus('Broadcasting Transmission...');
+    const txNum = result.transmissionNumber || '?';
+    log(`📡 Transmission #${txNum} (${result.text.length} chars): ${result.text}`);
+    log(`🔮 Signal: ${result.subliminal} | Vibe: ${result.vibe}`);
 
     const postResult = await bsky.createPost(result.text, result.imageBlob);
     const postUri = postResult.uri;
 
     stats.posts++;
-    log(`Posted successfully: ${postUri}`);
+    log(`✅ Transmission #${txNum} broadcast: ${postUri}`);
 
     // Update latest post display
     showLatestPost(result);
-
-    // Calculate next post time
-    updateNextPostTime();
 
   } catch (err) {
     stats.errors++;
@@ -317,13 +341,57 @@ async function doCommentScan() {
   }
 }
 
-// ─── Replied URIs Persistence ───────────────────────────────────────
+// ─── Auto Follow-Back ────────────────────────────────────────────────
+async function doFollowBack() {
+  if (!isRunning || !bsky?.isLoggedIn) return;
+
+  try {
+    const unfollowed = await bsky.getUnfollowedFollowers();
+    const toFollow = unfollowed.filter(f => !followedDids.has(f.did));
+
+    if (toFollow.length === 0) return;
+
+    log(`👥 Found ${toFollow.length} new follower(s) to follow back.`);
+
+    for (const follower of toFollow) {
+      try {
+        await bsky.followUser(follower.did);
+        followedDids.add(follower.did);
+        saveFollowedDids();
+        stats.follows++;
+        log(`✅ Followed back @${follower.handle}`);
+
+        // Welcome new Dreamer with a post mentioning them
+        try {
+          const welcome = await love.generateWelcome(follower.handle, (status) => { log(status); });
+          if (welcome) {
+            await bsky.createPost(welcome.text, welcome.imageBlob);
+            log(`🌀 Welcome Transmission sent for @${follower.handle} [Signal: "${welcome.subliminal}"]`);
+          }
+        } catch (err) {
+          log(`Welcome post failed for @${follower.handle}: ${err.message}`);
+        }
+
+        // Delay between follows to avoid rate limiting
+        await new Promise(r => setTimeout(r, 5000));
+      } catch (err) {
+        log(`Follow-back failed for @${follower.handle}: ${err.message}`);
+        stats.errors++;
+      }
+    }
+  } catch (err) {
+    log(`Follow-back scan failed: ${err.message}`);
+    stats.errors++;
+  }
+}
+
+// ─── Persistence ─────────────────────────────────────────────────────
 function loadRepliedUris() {
   try {
     const saved = localStorage.getItem('love_replied_uris');
     if (saved) {
       const arr = JSON.parse(saved);
-      repliedUris = new Set(arr.slice(-500)); // Keep last 500
+      repliedUris = new Set(arr.slice(-500));
     }
   } catch {}
 }
@@ -331,6 +399,22 @@ function loadRepliedUris() {
 function saveRepliedUris() {
   try {
     localStorage.setItem('love_replied_uris', JSON.stringify([...repliedUris].slice(-500)));
+  } catch {}
+}
+
+function loadFollowedDids() {
+  try {
+    const saved = localStorage.getItem('love_followed_dids');
+    if (saved) {
+      const arr = JSON.parse(saved);
+      followedDids = new Set(arr.slice(-1000));
+    }
+  } catch {}
+}
+
+function saveFollowedDids() {
+  try {
+    localStorage.setItem('love_followed_dids', JSON.stringify([...followedDids].slice(-1000)));
   } catch {}
 }
 
@@ -348,7 +432,7 @@ function log(message) {
       let cls = '';
       if (l.includes('ERROR') || l.includes('FAILED')) cls = 'log-error';
       else if (l.includes('CREATOR')) cls = 'log-creator';
-      else if (l.includes('Posted') || l.includes('Replied')) cls = 'log-success';
+      else if (l.includes('✅') || l.includes('Transmission #') || l.includes('Replied') || l.includes('Welcome')) cls = 'log-success';
       return `<div class="log-entry ${cls}">${escapeHtml(l)}</div>`;
     }).join('');
   }
@@ -365,6 +449,8 @@ function updateUI() {
   document.getElementById('stat-posts').textContent = stats.posts;
   document.getElementById('stat-replies').textContent = stats.replies;
   document.getElementById('stat-errors').textContent = stats.errors;
+  const followsEl = document.getElementById('stat-follows');
+  if (followsEl) followsEl.textContent = stats.follows;
 
   const statusEl = document.getElementById('status-indicator');
   if (statusEl) {
@@ -385,11 +471,6 @@ function updateUI() {
     const pollen = ai.getPollenStats();
     document.getElementById('stat-pollen').textContent = `${pollen.used}`;
   }
-}
-
-function updateNextPostTime() {
-  const next = new Date(Date.now() + POST_INTERVAL);
-  document.getElementById('stat-next').textContent = next.toLocaleTimeString();
 }
 
 function showLatestPost(result) {
