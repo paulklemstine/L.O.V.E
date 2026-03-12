@@ -97,10 +97,9 @@ export class PollinationsClient {
 
     let fullPrompt = prompt;
     if (subliminalText) {
-      fullPrompt += ` Seamlessly integrate the text "${subliminalText}" into the scene - `
-        + `rendered in a style that fits naturally (glowing neon, flickering fire, crystalline ice, `
-        + `liquid chrome, ethereal light, smoky wisps, or electric plasma). `
-        + `Place it where it feels right within the composition. Emphasized but not overpowering.`;
+      // Minimal fallback — callers should include subliminal rendering in the prompt itself
+      fullPrompt += ` Seamlessly integrate the text "${subliminalText}" into the scene, `
+        + `matching the art style naturally. Visible but not overpowering.`;
     }
 
     const seed = Math.floor(Math.random() * 2147483647);

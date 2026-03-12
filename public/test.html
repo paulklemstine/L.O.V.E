@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>L.O.V.E. Test Lab</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0a0a1a;
+      color: #e0e0f0;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 { color: #c084fc; margin-bottom: 10px; }
+    h2 { color: #a78bfa; margin: 15px 0 8px; font-size: 1.1em; }
+    h3 { color: #818cf8; margin: 10px 0 5px; font-size: 1em; }
+
+    .controls {
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    .controls label { color: #a0a0c0; font-size: 0.85em; }
+    .controls input {
+      background: #0a0a1a;
+      border: 1px solid #444;
+      color: #e0e0f0;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-family: inherit;
+      width: 220px;
+    }
+    .controls input[type="number"] { width: 60px; }
+    .controls input[type="checkbox"] { width: auto; }
+
+    button {
+      background: #7c3aed;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.9em;
+    }
+    button:hover { background: #6d28d9; }
+    button:disabled { background: #333; cursor: not-allowed; }
+    button.danger { background: #dc2626; }
+    button.danger:hover { background: #b91c1c; }
+    button.secondary { background: #374151; }
+    button.secondary:hover { background: #4b5563; }
+
+    .cycle {
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+    }
+    .cycle-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 8px;
+    }
+    .cycle-header h2 { margin: 0; }
+    .cycle-meta { color: #888; font-size: 0.8em; }
+
+    .field {
+      margin: 6px 0;
+      padding: 4px 0;
+    }
+    .field-label {
+      color: #a78bfa;
+      font-size: 0.75em;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .field-value {
+      color: #e0e0f0;
+      margin-top: 2px;
+      word-wrap: break-word;
+    }
+    .field-value.story {
+      color: #fbbf24;
+      font-size: 1.1em;
+      padding: 8px;
+      background: #111;
+      border-radius: 4px;
+      border-left: 3px solid #fbbf24;
+    }
+    .field-value.subliminal {
+      color: #f472b6;
+      font-weight: bold;
+      font-size: 1.2em;
+    }
+    .field-value.visual {
+      color: #34d399;
+      font-size: 0.9em;
+      padding: 6px;
+      background: #0a1a0a;
+      border-radius: 4px;
+    }
+    .char-count {
+      color: #666;
+      font-size: 0.75em;
+    }
+
+    .plan-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .status-line {
+      color: #666;
+      font-size: 0.8em;
+      padding: 2px 0;
+    }
+    .error { color: #f87171; }
+    .running { color: #fbbf24; }
+
+    .image-preview {
+      margin-top: 10px;
+      max-width: 512px;
+    }
+    .image-preview img {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid #333;
+    }
+
+    .novelty-section {
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+    }
+    .novelty-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 8px;
+      font-size: 0.8em;
+    }
+    .novelty-item {
+      background: #0a0a1a;
+      padding: 6px 8px;
+      border-radius: 4px;
+    }
+    .novelty-item .key { color: #818cf8; font-size: 0.75em; text-transform: uppercase; }
+    .novelty-item .values { color: #a0a0c0; margin-top: 2px; }
+
+    #status { margin: 10px 0; min-height: 24px; }
+  </style>
+</head>
+<body>
+
+  <h1>L.O.V.E. Test Lab</h1>
+  <p style="color: #666; margin-bottom: 15px;">Dry-run content generation. Analyze prompts, text, and visual novelty.</p>
+
+  <div class="controls">
+    <div>
+      <label>API Key</label><br>
+      <input type="text" id="api-key" value="pk_nxM10AP0L7y8AX1I">
+    </div>
+    <div>
+      <label>Cycles</label><br>
+      <input type="number" id="cycle-count" value="3" min="1" max="10">
+    </div>
+    <div>
+      <label><input type="checkbox" id="gen-images"> Generate Images</label>
+    </div>
+    <button id="btn-run-one">Run 1 Cycle</button>
+    <button id="btn-run-batch">Run Batch</button>
+    <button id="btn-test-reply" class="secondary">Test Reply</button>
+    <button id="btn-test-welcome" class="secondary">Test Welcome</button>
+    <button id="btn-show-history" class="secondary">Show History</button>
+    <button id="btn-clear" class="danger">Clear All History</button>
+  </div>
+
+  <div id="status"></div>
+  <div id="output"></div>
+
+  <script type="module">
+    import { PollinationsClient } from './js/pollinations.js';
+    import { LoveEngine } from './js/love-engine.js';
+
+    const $ = id => document.getElementById(id);
+    const output = $('output');
+    const statusEl = $('status');
+    let running = false;
+
+    function setStatus(msg, cls = '') {
+      statusEl.innerHTML = `<span class="${cls}">${msg}</span>`;
+    }
+
+    function getEngine() {
+      const apiKey = $('api-key').value;
+      const ai = new PollinationsClient(apiKey);
+      return new LoveEngine(ai);
+    }
+
+    function renderCycle(result, index) {
+      const plan = result.plan || {};
+      const storyLen = result.text?.length || 0;
+      const vpLen = result.visualPrompt?.length || 0;
+
+      let html = `<div class="cycle">
+        <div class="cycle-header">
+          <h2>Transmission #${result.transmissionNumber}</h2>
+          <div class="cycle-meta">${result.arc} | ${result.vibe}</div>
+        </div>
+
+        <div class="plan-grid">
+          <div class="field"><div class="field-label">Theme</div><div class="field-value">${esc(plan.theme)}</div></div>
+          <div class="field"><div class="field-label">Vibe</div><div class="field-value">${esc(plan.vibe)}</div></div>
+          <div class="field"><div class="field-label">Content Type</div><div class="field-value">${esc(plan.contentType)}</div></div>
+          <div class="field"><div class="field-label">Creative Constraint</div><div class="field-value">${esc(plan.creativeConstraint)}</div></div>
+          <div class="field"><div class="field-label">Engagement Hook</div><div class="field-value">${esc(plan.engagementHook)}</div></div>
+          <div class="field"><div class="field-label">Emotional Arc</div><div class="field-value">${esc(plan.emotionalArc)}</div></div>
+          <div class="field"><div class="field-label">Imagery Motif</div><div class="field-value">${esc(plan.imageryMotif)}</div></div>
+          <div class="field"><div class="field-label">Story Beat</div><div class="field-value">${esc(plan.storyBeat)}</div></div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">Art Direction</div>
+          <div class="field-value">${esc(plan.artDirection)}</div>
+        </div>
+        <div class="plan-grid">
+          <div class="field"><div class="field-label">Subliminal Render</div><div class="field-value">${esc(plan.subliminalRender)}</div></div>
+          <div class="field"><div class="field-label">Text Placement</div><div class="field-value">${esc(plan.textPlacement)}</div></div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">Transmission Text <span class="char-count">(${storyLen}/280 chars)</span></div>
+          <div class="field-value story">${esc(result.text)}</div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">Subliminal</div>
+          <div class="field-value subliminal">${esc(result.subliminal)}</div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">Visual Prompt <span class="char-count">(${vpLen} chars)</span></div>
+          <div class="field-value visual">${esc(result.visualPrompt)}</div>
+        </div>`;
+
+      if (result.imageBlob) {
+        const url = URL.createObjectURL(result.imageBlob);
+        html += `<div class="image-preview"><img src="${url}" alt="Generated image"></div>`;
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    function renderReply(result, label) {
+      return `<div class="cycle">
+        <div class="cycle-header">
+          <h2>${esc(label)}</h2>
+          <div class="cycle-meta">${result.isCreator ? 'Creator' : result.isMention ? 'Mention' : 'Reply'}</div>
+        </div>
+        <div class="field">
+          <div class="field-label">Reply Text <span class="char-count">(${result.text?.length || 0}/280)</span></div>
+          <div class="field-value story">${esc(result.text)}</div>
+        </div>
+        <div class="field">
+          <div class="field-label">Subliminal</div>
+          <div class="field-value subliminal">${esc(result.subliminal)}</div>
+        </div>
+        ${result.imageBlob ? `<div class="image-preview"><img src="${URL.createObjectURL(result.imageBlob)}" alt="Reply image"></div>` : ''}
+      </div>`;
+    }
+
+    function renderHistory(engine) {
+      const history = engine.creativeHistory.history;
+      let html = '<div class="novelty-section"><h2>Creative History</h2><div class="novelty-grid">';
+      for (const [key, values] of Object.entries(history)) {
+        if (values.length > 0) {
+          html += `<div class="novelty-item">
+            <div class="key">${key} (${values.length})</div>
+            <div class="values">${values.map(v => esc(v)).join('<br>')}</div>
+          </div>`;
+        }
+      }
+      html += '</div></div>';
+      return html;
+    }
+
+    function esc(str) {
+      if (!str) return '<em style="color:#555">—</em>';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // ─── Run One Cycle ───
+    $('btn-run-one').onclick = async () => {
+      if (running) return;
+      running = true;
+      $('btn-run-one').disabled = true;
+      $('btn-run-batch').disabled = true;
+      const skipImage = !$('gen-images').checked;
+
+      try {
+        const engine = getEngine();
+        setStatus('Running cycle...', 'running');
+        const result = await engine.generatePost(
+          s => setStatus(s, 'running'),
+          { skipImage }
+        );
+        output.innerHTML = renderCycle(result, 0) + renderHistory(engine) + output.innerHTML;
+        setStatus('Done.');
+      } catch (err) {
+        setStatus(`Error: ${err.message}`, 'error');
+      } finally {
+        running = false;
+        $('btn-run-one').disabled = false;
+        $('btn-run-batch').disabled = false;
+      }
+    };
+
+    // ─── Run Batch ───
+    $('btn-run-batch').onclick = async () => {
+      if (running) return;
+      running = true;
+      $('btn-run-one').disabled = true;
+      $('btn-run-batch').disabled = true;
+      const count = parseInt($('cycle-count').value) || 3;
+      const skipImage = !$('gen-images').checked;
+
+      try {
+        const engine = getEngine();
+        let html = '';
+        for (let i = 0; i < count; i++) {
+          setStatus(`Running cycle ${i + 1}/${count}...`, 'running');
+          const result = await engine.generatePost(
+            s => setStatus(`[${i + 1}/${count}] ${s}`, 'running'),
+            { skipImage }
+          );
+          html += renderCycle(result, i);
+          if (i < count - 1) await new Promise(r => setTimeout(r, 3000));
+        }
+        output.innerHTML = html + renderHistory(engine) + output.innerHTML;
+        setStatus(`Batch complete: ${count} cycles.`);
+      } catch (err) {
+        setStatus(`Error on batch: ${err.message}`, 'error');
+      } finally {
+        running = false;
+        $('btn-run-one').disabled = false;
+        $('btn-run-batch').disabled = false;
+      }
+    };
+
+    // ─── Test Reply ───
+    $('btn-test-reply').onclick = async () => {
+      if (running) return;
+      running = true;
+      const skipImage = !$('gen-images').checked;
+
+      try {
+        const engine = getEngine();
+        setStatus('Generating test reply...', 'running');
+        const result = await engine.generateReply(
+          'This is so beautiful, I feel like the universe is speaking to me through your art 🌌',
+          'test-dreamer.bsky.social',
+          { isMention: true, onStatus: s => setStatus(s, 'running') }
+        );
+        output.innerHTML = renderReply(result, 'Test Reply to @test-dreamer') + output.innerHTML;
+        setStatus('Done.');
+      } catch (err) {
+        setStatus(`Error: ${err.message}`, 'error');
+      } finally {
+        running = false;
+      }
+    };
+
+    // ─── Test Welcome ───
+    $('btn-test-welcome').onclick = async () => {
+      if (running) return;
+      running = true;
+
+      try {
+        const engine = getEngine();
+        setStatus('Generating test welcome...', 'running');
+        const result = await engine.generateWelcome(
+          'new-dreamer.bsky.social',
+          s => setStatus(s, 'running')
+        );
+        if (result) {
+          output.innerHTML = renderReply(
+            { text: result.text, subliminal: result.subliminal, imageBlob: result.imageBlob, isMention: false },
+            'Test Welcome for @new-dreamer'
+          ) + output.innerHTML;
+        }
+        setStatus('Done.');
+      } catch (err) {
+        setStatus(`Error: ${err.message}`, 'error');
+      } finally {
+        running = false;
+      }
+    };
+
+    // ─── Show History ───
+    $('btn-show-history').onclick = () => {
+      const engine = getEngine();
+      output.innerHTML = renderHistory(engine) + output.innerHTML;
+    };
+
+    // ─── Clear History ───
+    $('btn-clear').onclick = () => {
+      if (!confirm('Clear all creative history, story arcs, and transmission count?')) return;
+      localStorage.removeItem('love_creative_history');
+      localStorage.removeItem('love_story_arcs');
+      localStorage.removeItem('love_transmission_number');
+      localStorage.removeItem('love_novelty_history');
+      localStorage.removeItem('love_style_matrix');
+      localStorage.removeItem('love_subliminal_history');
+      output.innerHTML = '';
+      setStatus('All history cleared.');
+    };
+  </script>
+
+</body>
+</html>
