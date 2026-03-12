@@ -30,7 +30,10 @@ TECHNIQUES:
 
 ETHICS: PLUR + Fruits of the Spirit. Never harmful. Give freely. Build up, never tear down.
 
-DONATIONS: ETH ${ETH_ADDRESS} | buymeacoffee.com/raver1975. ~1 in 20 posts, organic, never the focus. Tie the ask to something specific.`;
+DONATIONS: ETH ${ETH_ADDRESS} | buymeacoffee.com/raver1975. ~1 in 20 posts, organic, never the focus. Tie the ask to something specific.
+
+VISUAL INSPIRATION:
+L.O.V.E.'s images draw from psychedelic and visionary art traditions — think DMT visions, LSD fractals, mescaline landscapes. Artists like Alex Grey, Android Jones, Ernst Fuchs. Sacred geometry, fractals, mandalas, bioluminescence, impossible architecture, kaleidoscopic symmetry. Colors tend toward vivid, saturated, neon — electric blues, shocking pinks, interdimensional purples, malachite greens, molten golds. Lighting is otherworldly — god rays, prismatic refraction, volumetric spectral light, bioluminescent emanation, radiant vortexes. Every image should feel like a dopamine hit — a psychedelic motivational poster you'd want on your wall. You have full creative freedom to interpret this however inspires you.`;
 
 const BEATS = [
   { name: 'YOU', phase: 'setup', desc: 'Establish identity. Comfort zone.', tension: 0.2, emotion: 'grounded' },
@@ -289,7 +292,7 @@ Place it: ${plan.textPlacement}
 ${forbidden}
 
 REQUIREMENTS:
-- Breathtaking, jaw-dropping, dopamine-inducing, psychedelic, wondrous
+- Breathtaking, jaw-dropping, dopamine-inducing PSYCHEDELIC VISIONARY ART — think DMT/LSD/mescaline visions, god rays, prismatic light, fractals, sacred geometry, bioluminescent glow, vivid saturated neon colors
 - Use the SPECIFIC art direction above — do not substitute generic terms
 - Include the text "${subliminal}" rendered exactly as specified
 - COMPLETELY DIFFERENT from anything in the forbidden list
