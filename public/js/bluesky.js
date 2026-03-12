@@ -183,6 +183,43 @@ export class BlueskyClient {
   }
 
   /**
+   * Mark notifications as seen up to the current time.
+   */
+  async updateSeenNotifications() {
+    return await this._fetch('app.bsky.notification.updateSeen', {
+      method: 'POST',
+      body: { seenAt: new Date().toISOString() }
+    });
+  }
+
+  /**
+   * Get thread context for a post (parent chain up to 3 levels).
+   * Returns an array of { author, text } from oldest to newest.
+   */
+  async getThreadContext(uri) {
+    try {
+      const thread = await this.getPostThread(uri, 3);
+      const context = [];
+      let node = thread.thread;
+      // Walk up the parent chain
+      const stack = [];
+      while (node) {
+        if (node.post?.record?.text) {
+          stack.push({
+            author: node.post.author?.handle || 'unknown',
+            text: node.post.record.text
+          });
+        }
+        node = node.parent;
+      }
+      // Reverse so oldest is first
+      return stack.reverse();
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Update profile description to include ETH address.
    */
   async updateProfileDescription(description) {

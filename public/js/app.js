@@ -223,26 +223,29 @@ async function doCommentScan() {
   if (!isRunning || !bsky?.isLoggedIn) return;
 
   try {
-    setStatus('Scanning for comments...');
+    setStatus('Scanning for notifications...');
 
     const notifs = await bsky.getNotifications(30);
-    const replyNotifs = (notifs.notifications || []).filter(n =>
+    const actionable = (notifs.notifications || []).filter(n =>
       (n.reason === 'reply' || n.reason === 'mention') &&
       !repliedUris.has(n.uri) &&
       n.record?.text
     );
 
-    if (replyNotifs.length === 0) {
-      log('No new comments found.');
+    if (actionable.length === 0) {
+      log('No new mentions or replies.');
       return;
     }
 
-    log(`Found ${replyNotifs.length} new comment(s).`);
+    const mentions = actionable.filter(n => n.reason === 'mention');
+    const replies = actionable.filter(n => n.reason === 'reply');
+    log(`Found ${mentions.length} mention(s) and ${replies.length} reply/replies.`);
 
-    for (const notif of replyNotifs) {
+    for (const notif of actionable) {
       try {
         const commentText = notif.record.text;
         const authorHandle = notif.author?.handle || 'unknown';
+        const isMention = notif.reason === 'mention';
 
         // Spam/troll filter
         const filter = await love.shouldReply({ text: commentText, author: authorHandle });
@@ -253,18 +256,23 @@ async function doCommentScan() {
           continue;
         }
 
-        // Generate reply
-        const reply = await love.generateReply(commentText, authorHandle, (status) => {
-          log(status);
+        // For mentions, fetch thread context so L.O.V.E. understands the conversation
+        let threadContext = [];
+        if (isMention) {
+          log(`Fetching thread context for mention from @${authorHandle}...`);
+          threadContext = await bsky.getThreadContext(notif.uri);
+        }
+
+        // Generate reply with context
+        const reply = await love.generateReply(commentText, authorHandle, {
+          isMention,
+          threadContext,
+          onStatus: (status) => { log(status); }
         });
 
-        // Post reply
-        // Determine root - for simplicity, treat the notification's post as both root and parent
-        // A more robust approach would fetch the thread to find the true root
+        // Determine root and parent for threading
         const parentUri = notif.uri;
         const parentCid = notif.cid;
-
-        // Try to find root from the reply reference in the original post
         let rootUri = parentUri;
         let rootCid = parentCid;
         if (notif.record?.reply?.root) {
@@ -278,7 +286,9 @@ async function doCommentScan() {
         saveRepliedUris();
         stats.replies++;
 
-        const prefix = reply.isCreator ? '🙏 CREATOR' : '💬';
+        const prefix = reply.isCreator ? '🙏 CREATOR'
+          : isMention ? '📣 MENTION'
+          : '💬';
         log(`${prefix} Replied to @${authorHandle}: "${reply.text.slice(0, 80)}..."`);
 
         // Small delay between replies to avoid rate limiting
@@ -290,8 +300,15 @@ async function doCommentScan() {
       }
     }
 
+    // Mark notifications as seen
+    try {
+      await bsky.updateSeenNotifications();
+    } catch (err) {
+      log(`Warning: Could not mark notifications as seen: ${err.message}`);
+    }
+
   } catch (err) {
-    log(`Comment scan failed: ${err.message}`);
+    log(`Notification scan failed: ${err.message}`);
     stats.errors++;
   } finally {
     setStatus(isRunning ? 'Running' : 'Stopped');
