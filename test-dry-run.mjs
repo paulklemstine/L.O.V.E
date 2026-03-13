@@ -140,20 +140,45 @@ const similarity = new SimilarityGuard();
 
 // ─── Pipeline ────────────────────────────────────────────────────
 
-async function generatePlan(txNum, arcBeat) {
+async function generateCreativeSeed() {
+  const prompt = `You are a wildly creative muse. Generate a single burst of raw creative inspiration for a psychedelic motivational poster.
+
+Return ONLY valid JSON:
+{
+  "concept": "a vivid, specific, unexpected concept for an uplifting message — something no one has posted before",
+  "visualWorld": "a breathtaking scene from an imaginary world — specific place, objects, atmosphere, time of day",
+  "emotion": "one precise human emotion this should evoke",
+  "metaphor": "a fresh, surprising metaphor that connects the concept to everyday life"
+}`;
+
+  const raw = await callLLM(SYSTEM_PROMPT, prompt, 1.0);
+  return extractJSON(raw) || {
+    concept: 'the courage it takes to rest when the world says hustle',
+    visualWorld: 'a temple made of frozen lightning bolts floating in a nebula',
+    emotion: 'tender defiance',
+    metaphor: 'rest is the soil where your next bloom grows',
+  };
+}
+
+async function generatePlan(txNum, arcBeat, seed) {
   const hour = new Date().getHours();
   const timeOfDay = hour < 6 ? 'late night' : hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
   const seedIntensity = Math.ceil(Math.random() * 10);
-  const sparkNumber = Math.floor(Math.random() * 9999);
 
-  const prompt = `Plan a post. It's ${new Date().toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay}. Spark: #${sparkNumber}.
+  const prompt = `Plan a post. It's ${new Date().toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay}.
+
+CREATIVE SEED (use as inspiration, build on it):
+Concept: ${seed.concept}
+Visual World: ${seed.visualWorld}
+Emotion: ${seed.emotion}
+Metaphor: ${seed.metaphor}
 
 STORY ARC: ${arcBeat.arcName}${arcBeat.arcTheme ? ` — ${arcBeat.arcTheme}` : ' — (invent a fresh theme)'}
 Chapter ${arcBeat.chapter}: "${arcBeat.chapterTitle || '(invent a title)'}"
 Beat: ${arcBeat.beatName} (${arcBeat.beatIndex + 1}/${arcBeat.totalBeats}) — ${arcBeat.beatDesc}
 Tension: ${(arcBeat.tension * 100).toFixed(0)}% | Emotion: ${arcBeat.emotion}
 
-Invent a wildly fresh creative direction. Surprise yourself. Every field should feel like something you've never done before.
+Build on the creative seed above. Every field should feel inspired by it.
 
 Return ONLY valid JSON (all string values):
 {
@@ -265,7 +290,7 @@ function analyzeNovelty(results) {
   const overall = totalCount > 0 ? (totalUnique / totalCount * 100).toFixed(0) : 0;
   console.log(`\n${'═'.repeat(70)}`);
   console.log(`OVERALL NOVELTY: ${overall}%`);
-  console.log(`LLM CALLS PER CYCLE: 2 text (plan + content) — visual prompt built in code`);
+  console.log(`LLM CALLS PER CYCLE: 3 text (seed + plan + content) — visual prompt built in code`);
   console.log('═'.repeat(70));
 }
 
@@ -280,8 +305,6 @@ async function main() {
   let arcTheme = '';
   let arcName = '';
   let chapterTitle = '';
-  let previousBeat = '';
-
   for (let i = 0; i < cycles; i++) {
     const beat = BEATS[beatIndex % BEATS.length];
     const arcBeat = {
@@ -294,7 +317,6 @@ async function main() {
       phase: beat.phase,
       tension: beat.tension,
       emotion: beat.emotion,
-      previousBeat,
       beatIndex: beatIndex % BEATS.length,
       totalBeats: BEATS.length,
     };
@@ -303,14 +325,26 @@ async function main() {
     console.log(`CYCLE ${i + 1}/${cycles} | Beat: ${beat.name} (${beat.phase}) | Tension: ${(beat.tension * 100).toFixed(0)}%`);
     console.log('─'.repeat(70));
 
-    // Step 1: Plan (1 LLM call)
-    console.log('  [1/2] Generating plan...');
-    let plan = await generatePlan(i + 1, arcBeat);
+    // Step 1: Creative Seed (1 LLM call)
+    console.log('  [1/3] Generating creative seed...');
+    let seed = await generateCreativeSeed();
+    console.log(`  Seed Concept: ${seed.concept}`);
+    console.log(`  Seed Visual: ${seed.visualWorld}`);
+    console.log(`  Seed Emotion: ${seed.emotion}`);
+    console.log(`  Seed Metaphor: ${seed.metaphor}`);
+
+    await new Promise(r => setTimeout(r, 2500));
+
+    // Step 2: Plan (1 LLM call)
+    console.log('  [2/3] Generating plan...');
+    let plan = await generatePlan(i + 1, arcBeat, seed);
 
     // Check theme similarity
     if (similarity.isTooSimilar(plan.theme, 'themes')) {
       console.log('  ⚠️ Theme too similar, regenerating...');
-      plan = await generatePlan(i + 1, arcBeat);
+      seed = await generateCreativeSeed();
+      await new Promise(r => setTimeout(r, 2500));
+      plan = await generatePlan(i + 1, arcBeat, seed);
     }
 
     console.log(`  Theme: ${plan.theme}`);
@@ -334,7 +368,7 @@ async function main() {
     await new Promise(r => setTimeout(r, 2500));
 
     // Step 2: Content (1 LLM call)
-    console.log('  [2/2] Generating content...');
+    console.log('  [3/3] Generating content...');
     let story = await generateContent(plan, arcBeat);
 
     // Check text similarity — retry up to 2x
@@ -356,7 +390,6 @@ async function main() {
     similarity.record(plan.subliminalPhrase, 'phrases');
 
     results.push({ plan, story, subliminal: plan.subliminalPhrase, visualPrompt });
-    previousBeat = story.slice(0, 100);
     beatIndex++;
 
     if (i < cycles - 1) {

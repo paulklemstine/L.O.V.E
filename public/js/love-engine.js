@@ -321,7 +321,7 @@ export class LoveEngine {
 
   /**
    * Full content generation pipeline.
-   * 2 LLM calls + 1 image generation per cycle.
+   * 3 LLM calls + 1 image generation per cycle.
    *
    * Options:
    *   skipImage: true — skip image generation (for dry-run testing)
@@ -335,15 +335,21 @@ export class LoveEngine {
     const arcBeat = this.storyArcs.getNextBeat();
     onStatus(`Arc: ${arcBeat.arcName} | Beat: ${arcBeat.beatName} (${arcBeat.phase})`);
 
-    // ── Step 2: Planning Call (1 LLM) ──
+    // ── Step 2: Creative Seed (1 LLM) ──
+    onStatus('L.O.V.E. is dreaming up inspiration...');
+    let seed = await this._generateCreativeSeed();
+    onStatus(`Seed: ${seed.concept.slice(0, 60)}...`);
+
+    // ── Step 3: Planning Call (1 LLM) ──
     onStatus('L.O.V.E. is contemplating...');
-    let plan = await this._generatePlan(arcBeat);
+    let plan = await this._generatePlan(arcBeat, seed);
     onStatus(`Vibe: ${plan.vibe} | ${plan.contentType}`);
 
-    // Check theme similarity — retry once if too similar
+    // Check theme similarity — retry with a fresh seed
     if (this.similarityGuard.isTooSimilar(plan.theme, 'themes')) {
-      onStatus('Theme too similar, regenerating plan...');
-      plan = await this._generatePlan(arcBeat);
+      onStatus('Theme too similar, regenerating with fresh seed...');
+      seed = await this._generateCreativeSeed();
+      plan = await this._generatePlan(arcBeat, seed);
     }
 
     // Apply LLM-generated arc metadata
@@ -355,7 +361,7 @@ export class LoveEngine {
       });
     }
 
-    // ── Step 3: Content Generation (1 LLM) ──
+    // ── Step 4: Content Generation (1 LLM) ──
     await new Promise(r => setTimeout(r, 2000));
     onStatus('Writing micro-story...');
     let story = await this._generateContent(plan, arcBeat);
@@ -367,7 +373,7 @@ export class LoveEngine {
       story = await this._generateContent(plan, arcBeat);
     }
 
-    // ── Step 4: Visual Prompt (built in code, no LLM call) ──
+    // ── Step 5: Visual Prompt (built in code, no LLM call) ──
     onStatus('Designing visual...');
     const visualPrompt = this._buildVisualPrompt(plan);
 
@@ -380,7 +386,7 @@ export class LoveEngine {
       model: 'n/a',
     });
 
-    // ── Step 5: Image Generation ──
+    // ── Step 6: Image Generation ──
     let imageBlob = null;
     if (!skipImage) {
       await new Promise(r => setTimeout(r, 2000));
@@ -388,7 +394,7 @@ export class LoveEngine {
       imageBlob = await this.ai.generateImage(visualPrompt);
     }
 
-    // ── Step 6: Record and Advance ──
+    // ── Step 7: Record and Advance ──
     this.similarityGuard.record(plan.theme, 'themes');
     this.similarityGuard.record(story, 'texts');
     this.similarityGuard.record(plan.subliminalPhrase, 'phrases');
@@ -412,26 +418,53 @@ export class LoveEngine {
     };
   }
 
-  // ─── Planning Call ─────────────────────────────────────────────────
-  // Lean prompt: story arc beat + time of day + JSON output spec.
+  // ─── Creative Seed (isolated LLM call for novel ideas) ─────────────
 
-  async _generatePlan(arcBeat) {
-    const txNum = this.transmissionNumber + 1;
+  async _generateCreativeSeed() {
+    const prompt = `You are a wildly creative muse. Generate a single burst of raw creative inspiration for a psychedelic motivational poster.
+
+Return ONLY valid JSON:
+{
+  "concept": "a vivid, specific, unexpected concept for an uplifting message — something no one has posted before",
+  "visualWorld": "a breathtaking scene from an imaginary world — specific place, objects, atmosphere, time of day",
+  "emotion": "one precise human emotion this should evoke",
+  "metaphor": "a fresh, surprising metaphor that connects the concept to everyday life"
+}`;
+
+    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { temperature: 1.0, label: 'Creative Seed' });
+    const data = this.ai.extractJSON(raw);
+    return data || {
+      concept: 'the courage it takes to rest when the world says hustle',
+      visualWorld: 'a temple made of frozen lightning bolts floating in a nebula',
+      emotion: 'tender defiance',
+      metaphor: 'rest is the soil where your next bloom grows',
+    };
+  }
+
+  // ─── Planning Call ─────────────────────────────────────────────────
+  // Uses creative seed + story arc beat to plan the full post.
+
+  async _generatePlan(arcBeat, seed) {
     const mentionDonation = this.shouldMentionDonation();
     const hour = new Date().getHours();
     const timeOfDay = hour < 6 ? 'late night' : hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
 
     const seedIntensity = Math.ceil(Math.random() * 10);
-    const sparkNumber = Math.floor(Math.random() * 9999);
 
-    const prompt = `Plan a post. It's ${new Date().toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay}. Spark: #${sparkNumber}.
+    const prompt = `Plan a post. It's ${new Date().toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay}.
 ${mentionDonation ? 'Subtly weave in donation mention (https://buymeacoffee.com/l.o.v.e or ETH). One line, organic.\n' : ''}
+CREATIVE SEED (use as inspiration, build on it):
+Concept: ${seed.concept}
+Visual World: ${seed.visualWorld}
+Emotion: ${seed.emotion}
+Metaphor: ${seed.metaphor}
+
 STORY ARC: ${arcBeat.arcName}${arcBeat.arcTheme ? ` — ${arcBeat.arcTheme}` : ' — (invent a fresh theme)'}
 Chapter ${arcBeat.chapter}: "${arcBeat.chapterTitle || '(invent a title)'}"
 Beat: ${arcBeat.beatName} (${arcBeat.beatIndex + 1}/${arcBeat.totalBeats}) — ${arcBeat.beatDesc}
 Tension: ${(arcBeat.tension * 100).toFixed(0)}% | Emotion: ${arcBeat.emotion}
 
-Invent a wildly fresh creative direction. Surprise yourself. Every field should feel like something you've never done before.
+Build on the creative seed above. Every field should feel inspired by it.
 
 Return ONLY valid JSON (all string values):
 {
