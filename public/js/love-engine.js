@@ -442,7 +442,7 @@ Return ONLY valid JSON (all string values):
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
   "imageSubject": "foreground subject with midground context and background environment — describe a layered scene with spatial depth",
-  "imageMedium": "specific render style: name a film stock (Kodak Portra 400, Fuji Velvia), render engine (Octane, Unreal Engine 5), or art medium (gouache, cel-shaded) — one term",
+  "imageMedium": "specific render style: name a film stock (Kodak Portra 400, Fuji Velvia, Cinestill 800T), render engine (Octane Render, Unreal Engine 5), or digital style (3D render, DSLR photography, CGI) — one term, always photorealistic or high-definition digital",
   "lighting": "specific cinematographic lighting: volumetric god rays, rim lighting with lens flare, golden hour backlight, split Rembrandt lighting — one setup",
   "colorPalette": "name 3-4 specific colors by pigment name — e.g. cadmium orange, cerulean blue, magenta, titanium white",
   "composition": "camera/lens and angle: 85mm portrait f/1.4 shallow DOF, wide-angle tilt-shift, macro close-up, bird's-eye drone shot — one choice",
