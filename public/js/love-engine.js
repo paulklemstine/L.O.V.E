@@ -511,10 +511,10 @@ Return ONLY valid JSON:
   _buildVisualPrompt(plan) {
     const phrase = plan.subliminalPhrase || 'TRANSCEND';
     const subject = plan.imageSubject || 'cosmic energy vortex';
-    const style = plan.imageStyle || 'visionary psychedelic art, vivid neon colors, volumetric lighting';
+    const style = plan.imageStyle || 'radiant psychedelic art, vivid rainbow colors, glowing light rays, warm and luminous';
 
     const textRendering = plan.textRendering || 'in large bold clean white font, centered, high contrast';
-    let prompt = `${subject}, ${style}. The words "${phrase}" ${textRendering}. Readable, vivid saturated colors, dark rich background.`;
+    let prompt = `${subject}, ${style}. The words "${phrase}" ${textRendering}. Readable, radiant psychedelic colors, luminous and light-filled, bursting with love and warmth.`;
 
     if (prompt.length > 500) prompt = prompt.slice(0, 497) + '...';
     return prompt;
