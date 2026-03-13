@@ -730,18 +730,19 @@ async function refreshPollenStats() {
 }
 
 function updateUI() {
-  document.getElementById('stat-posts').textContent = stats.posts;
-  document.getElementById('stat-replies').textContent = stats.replies;
-  document.getElementById('stat-errors').textContent = stats.errors;
-  const followsEl = document.getElementById('stat-follows');
-  if (followsEl) followsEl.textContent = stats.follows;
-  const dmsEl = document.getElementById('stat-dms');
-  if (dmsEl) dmsEl.textContent = stats.dms;
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+  set('stat-posts', stats.posts);
+  set('stat-replies', stats.replies);
+  set('stat-errors', stats.errors);
+  set('stat-follows', stats.follows);
+  set('stat-dms', stats.dms);
 
   const statusEl = document.getElementById('status-indicator');
   if (statusEl) {
     statusEl.className = `status-indicator ${isRunning ? 'running' : 'stopped'}`;
-    statusEl.querySelector('.status-label').textContent = isRunning ? 'RUNNING' : 'STOPPED';
+    const label = statusEl.querySelector('.status-label');
+    if (label) label.textContent = isRunning ? 'RUNNING' : 'STOPPED';
   }
 
   // Uptime
@@ -749,7 +750,7 @@ function updateUI() {
     const uptime = Math.floor((Date.now() - stats.startedAt) / 1000);
     const h = Math.floor(uptime / 3600);
     const m = Math.floor((uptime % 3600) / 60);
-    document.getElementById('stat-uptime').textContent = `${h}h ${m}m`;
+    set('stat-uptime', `${h}h ${m}m`);
   }
 
   // Live pollen stats (fetched async, updates DOM when ready)
