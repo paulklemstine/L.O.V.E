@@ -474,18 +474,18 @@ Return ONLY valid JSON (all string values):
       const txNum = this.transmissionNumber + 1;
       const mentionDonation = this.shouldMentionDonation();
 
-      const prompt = `Write Transmission #${txNum}.
+      const prompt = `Write a post.
 Theme: "${plan.theme}" | Vibe: ${plan.vibe} | Type: ${plan.contentType}
 Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10 | Tension: ${(arcBeat.tension * 100).toFixed(0)}%
 ${mentionDonation ? `Weave in donation: buymeacoffee.com/raver1975 or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}
-RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." No hashtags, no placeholders, no ALL CAPS in story text. Follow the constraint.
+RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." No hashtags, no placeholders, no ALL CAPS in story text. Do NOT include "Transmission #" or any numbering. Follow the constraint.
 
 Return ONLY valid JSON:
 { "story": "your transmission text here" }`;
 
       const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai', label: `Content (attempt ${attempt + 1})` });
       const data = this.ai.extractJSON(raw);
-      story = data?.story || '';
+      story = (data?.story || '').replace(/^✨?\s*Transmission\s*#\d+\s*/i, '').trim();
 
       const errors = this._validatePost(story);
       if (errors.length === 0) break;
