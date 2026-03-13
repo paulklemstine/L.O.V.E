@@ -4,6 +4,25 @@
 
 const BSKY_API = 'https://bsky.social/xrpc';
 
+/**
+ * Detect URLs in text and return Bluesky link facets (byte-indexed).
+ */
+function detectLinkFacets(text) {
+  const encoder = new TextEncoder();
+  const facets = [];
+  const urlRegex = /https?:\/\/[^\s)]+/g;
+  let match;
+  while ((match = urlRegex.exec(text)) !== null) {
+    const beforeBytes = encoder.encode(text.slice(0, match.index)).byteLength;
+    const matchBytes = encoder.encode(match[0]).byteLength;
+    facets.push({
+      index: { byteStart: beforeBytes, byteEnd: beforeBytes + matchBytes },
+      features: [{ $type: 'app.bsky.richtext.facet#link', uri: match[0] }]
+    });
+  }
+  return facets;
+}
+
 export class BlueskyClient {
   constructor() {
     this.session = null; // { did, handle, accessJwt, refreshJwt }
@@ -81,6 +100,10 @@ export class BlueskyClient {
       createdAt: new Date().toISOString()
     };
 
+    // Add link facets for any URLs in text
+    const facets = detectLinkFacets(text);
+    if (facets.length > 0) record.facets = facets;
+
     // Attach image if provided
     if (imageBlob) {
       const blobRef = await this.uploadBlob(imageBlob);
@@ -117,6 +140,10 @@ export class BlueskyClient {
         parent: { uri: parentUri, cid: parentCid }
       }
     };
+
+    // Add link facets for any URLs in text
+    const replyFacets = detectLinkFacets(text);
+    if (replyFacets.length > 0) record.facets = replyFacets;
 
     if (imageBlob) {
       const blobRef = await this.uploadBlob(imageBlob);
