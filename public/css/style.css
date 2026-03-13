@@ -372,6 +372,45 @@ body {
   border-left-color: #e879f9;
 }
 
+/* Expandable log entries */
+.log-expandable {
+  cursor: pointer;
+}
+
+.log-expandable:hover {
+  background: rgba(155, 89, 255, 0.08);
+}
+
+.log-summary {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.log-detail {
+  display: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+  color: var(--text-secondary);
+  border-left: 2px solid var(--accent-purple);
+  padding: 6px 10px;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 0 4px 4px 0;
+}
+
+.log-expandable.expanded .log-detail {
+  display: block;
+}
+
+.log-expandable.expanded .log-summary {
+  white-space: normal;
+}
+
 /* ─── Placeholder ────────────────────────────────── */
 
 .placeholder-text {

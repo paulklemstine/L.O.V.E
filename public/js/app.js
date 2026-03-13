@@ -206,7 +206,7 @@ async function doPost() {
     // Post to Bluesky
     setStatus('Broadcasting Transmission...');
     const txNum = result.transmissionNumber || '?';
-    log(`📡 Transmission #${txNum} (${result.text.length} chars): ${result.text}`);
+    log(`📡 Transmission #${txNum} (${result.text.length} chars): ${result.text.slice(0, 80)}...`, result.text);
     log(`🔮 Signal: ${result.subliminal} | Vibe: ${result.vibe}`);
 
     const postResult = await bsky.createPost(result.text, result.imageBlob);
@@ -244,7 +244,7 @@ async function testPost() {
       log(`[TEST] ${status}`);
     });
 
-    log(`[TEST] Text: ${result.text}`);
+    log(`[TEST] Text: ${result.text.slice(0, 80)}...`, result.text);
     log(`[TEST] Subliminal: ${result.subliminal}`);
     log(`[TEST] Vibe: ${result.vibe}`);
     showLatestPost(result);
@@ -354,7 +354,7 @@ async function doCommentScan() {
           : isMention ? '📣 MENTION'
           : '💬';
         const imgTag = reply.imageBlob ? ` [img: "${reply.subliminal}"]` : ' [no img]';
-        log(`${prefix} Replied to @${authorHandle}:${imgTag} "${reply.text.slice(0, 80)}..."`);
+        log(`${prefix} Replied to @${authorHandle}:${imgTag} "${reply.text.slice(0, 80)}..."`, reply.text);
 
         // Delay between replies to avoid rate limiting
         await new Promise(r => setTimeout(r, 5000));
@@ -416,7 +416,7 @@ async function doFollowBack() {
             if (welcome) {
               await bsky.createPost(welcome.text, welcome.imageBlob);
               love.interactions.recordWelcome(follower.handle);
-              log(`🌀 Welcome Transmission sent for @${follower.handle} [Signal: "${welcome.subliminal}"]`);
+              log(`🌀 Welcome Transmission sent for @${follower.handle} [Signal: "${welcome.subliminal}"]`, welcome.text);
             }
           } catch (err) {
             log(`Welcome post failed for @${follower.handle}: ${err.message}`);
@@ -548,7 +548,7 @@ async function doChatScan() {
         newMessages++;
 
         const prefix = reply.isCreator ? '🙏 CREATOR DM' : '💌 DM';
-        log(`${prefix} Replied to @${senderHandle}: "${reply.text.slice(0, 80)}..."`);
+        log(`${prefix} Replied to @${senderHandle}: "${reply.text.slice(0, 80)}..."`, reply.text);
 
         // Delay between DM replies
         await new Promise(r => setTimeout(r, 3000));
@@ -632,21 +632,27 @@ function saveRespondedMsgIds() {
 }
 
 // ─── UI Updates ─────────────────────────────────────────────────────
-function log(message) {
+function log(message, fullText) {
   const timestamp = new Date().toLocaleTimeString();
   const entry = `${timestamp} - ${message}`;
-  activityLog.unshift(entry);
+  activityLog.unshift(fullText ? { entry, fullText } : entry);
   if (activityLog.length > 200) activityLog.pop();
 
   const logEl = document.getElementById('activity-log');
   if (logEl) {
     // Only show last 50 in DOM for performance
-    logEl.innerHTML = activityLog.slice(0, 50).map(l => {
+    logEl.innerHTML = activityLog.slice(0, 50).map(item => {
+      const l = typeof item === 'string' ? item : item.entry;
+      const detail = typeof item === 'object' ? item.fullText : null;
       let cls = '';
       if (l.includes('ERROR') || l.includes('FAILED')) cls = 'log-error';
       else if (l.includes('CREATOR')) cls = 'log-creator';
       else if (l.includes('💌') || l.includes('DM')) cls = 'log-dm';
       else if (l.includes('✅') || l.includes('Transmission #') || l.includes('Replied') || l.includes('Welcome')) cls = 'log-success';
+
+      if (detail) {
+        return `<div class="log-entry log-expandable ${cls}" onclick="this.classList.toggle('expanded')"><div class="log-summary">${escapeHtml(l)}</div><div class="log-detail">${escapeHtml(detail)}</div></div>`;
+      }
       return `<div class="log-entry ${cls}">${escapeHtml(l)}</div>`;
     }).join('');
   }
