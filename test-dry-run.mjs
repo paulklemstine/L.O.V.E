@@ -141,14 +141,14 @@ const similarity = new SimilarityGuard();
 // ─── Pipeline ────────────────────────────────────────────────────
 
 async function generateCreativeSeed() {
-  const prompt = `You are a wildly creative muse. Generate a single burst of raw creative inspiration for a motivational art piece. Be wildly original — explore unexpected settings, unusual color palettes, and fresh visual vocabulary every single time.
+  const prompt = `Generate a single burst of raw creative inspiration for a motivational art piece.
 
 Return ONLY valid JSON:
 {
-  "concept": "a vivid, specific, unexpected concept for an uplifting message — something no one has posted before",
-  "visualWorld": "a breathtaking scene from an imaginary world — specific place, objects, atmosphere, time of day. Use fresh, original imagery.",
+  "concept": "an uplifting message concept",
+  "visualWorld": "a complete scene for the concept",
   "emotion": "one precise human emotion this should evoke",
-  "metaphor": "a fresh, surprising metaphor that connects the concept to everyday life"
+  "metaphor": "a fresh metaphor that connects the concept to everyday life"
 }`;
 
   const raw = await callLLM(SYSTEM_PROMPT, prompt, 1.0);
@@ -182,12 +182,12 @@ Build on the creative seed above. Every field should feel inspired by it.
 
 Return ONLY valid JSON (all string values):
 {
-  "theme": "specific uplifting theme — surprising, fresh, concrete, unexpected angle",
-  "vibe": "2-4 word aesthetic vibe — inventive, evocative",
-  "contentType": "invent a fresh post format — get weird and creative with it",
+  "theme": "an uplifting theme",
+  "vibe": "2-4 word aesthetic vibe",
+  "contentType": "a post format",
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "subliminalPhrase": "a short ALL CAPS motivational poster phrase — uplifting, memorable, inspiring. Related to the post theme and image. Think: BELIEVE IN YOURSELF, YOU ARE ENOUGH, KEEP GOING, RISE AND SHINE, DREAM BIGGER"
+  "subliminalPhrase": "a short ALL CAPS motivational poster phrase — uplifting, memorable, inspiring, related to the theme"
   ${!arcBeat.arcTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${!arcBeat.chapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
   ${!arcBeat.arcTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
@@ -219,12 +219,12 @@ Post text: "${postText || plan.theme}"
 Mood: ${plan.vibe}
 Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"
 
-IMPORTANT: Capture the EMOTION of the post, not its literal metaphors. If the post mentions a match, paint a wildfire. If it mentions sewing, paint an ocean. Transform the metaphor into a completely different visual.
+Capture the emotion of the post. Transform its metaphors into an unexpected visual.
 
 Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 
   const raw = await callLLM(
-    'You are an image prompt writer. You prize radical visual variety. Every prompt must use a completely different subject, setting, scale, composition, and art style from the last. Rotate through: vast landscapes, aerial/satellite views, abstract geometric art, underwater scenes, microscopic worlds, architectural interiors, food/botanical still life, weather phenomena, portraits, minimalist design, collage, vintage poster art, pixel art, watercolor, photography.',
+    'You are an image prompt writer who prizes originality.',
     prompt, 1.5
   );
 

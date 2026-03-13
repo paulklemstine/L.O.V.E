@@ -467,17 +467,17 @@ export class LoveEngine {
   // ─── Creative Seed (isolated LLM call for novel ideas) ─────────────
 
   async _generateCreativeSeed() {
-    const prompt = `Generate a single burst of raw creative inspiration for a motivational art piece. Be wildly original every time — vary the subject, setting, scale, time period, and mood.
+    const prompt = `Generate a single burst of raw creative inspiration for a motivational art piece.
 
 Return ONLY valid JSON:
 {
-  "concept": "a vivid, specific, unexpected concept for an uplifting message",
-  "visualWorld": "a complete scene — vary widely: sometimes macro, sometimes epic landscape, sometimes abstract, sometimes intimate, sometimes architectural, sometimes natural. Use completely different subjects and settings each time.",
+  "concept": "an uplifting message concept",
+  "visualWorld": "a complete scene for the concept",
   "emotion": "one precise human emotion this should evoke",
-  "metaphor": "a fresh, surprising metaphor that connects the concept to everyday life"
+  "metaphor": "a fresh metaphor that connects the concept to everyday life"
 }`;
 
-    const raw = await this.ai.generateText('You are a creative director who prizes originality above all else. Every idea must be completely different from the last.', prompt, { temperature: 1.5, label: 'Creative Seed' });
+    const raw = await this.ai.generateText('You are a creative director.', prompt, { temperature: 1.5, label: 'Creative Seed' });
     const data = this.ai.extractJSON(raw);
     return data || {
       concept: 'the courage it takes to rest when the world says hustle',
@@ -514,12 +514,12 @@ Build on the creative seed above. Every field should feel inspired by it.
 
 Return ONLY valid JSON (all string values):
 {
-  "theme": "specific uplifting theme — surprising, fresh, concrete, unexpected angle",
-  "vibe": "2-4 word aesthetic vibe — inventive, evocative",
-  "contentType": "invent a fresh post format — get weird and creative with it",
-  "constraint": "invent a unique writing constraint achievable in 250 chars",
+  "theme": "an uplifting theme",
+  "vibe": "2-4 word aesthetic vibe",
+  "contentType": "a post format",
+  "constraint": "a writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "subliminalPhrase": "a short ALL CAPS motivational poster phrase — uplifting, memorable, inspiring. Related to the post theme and image. Think: BELIEVE IN YOURSELF, YOU ARE ENOUGH, KEEP GOING, RISE AND SHINE, DREAM BIGGER"
+  "subliminalPhrase": "a short ALL CAPS motivational poster phrase — uplifting, memorable, inspiring, related to the theme"
   ${arcBeat.needsTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${arcBeat.needsChapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
   ${arcBeat.needsTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
@@ -581,26 +581,18 @@ Return ONLY valid JSON:
   // ─── Visual Prompt (separate LLM call, neutral system prompt) ──────
 
   async _generateImagePrompt(plan, postText = '') {
-    // Gather recent image descriptions from guard to show the LLM what's been done
-    const recentVisuals = this.similarityGuard.recentVisuals.slice(-5);
-    let recentSection = '';
-    if (recentVisuals.length > 0) {
-      const summaries = recentVisuals.map((v, i) => `${i + 1}. ${v.slice(0, 80)}`).join('\n');
-      recentSection = `\nRECENT IMAGES (create something completely different from all of these):\n${summaries}\n`;
-    }
-
     const prompt = `Create an image generation prompt inspired by this post:
 
 Post text: "${postText || plan.theme}"
 Mood: ${plan.vibe}
 Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"
-${recentSection}
-IMPORTANT: Capture the EMOTION of the post, not its literal metaphors. If the post mentions a match, paint a wildfire. If it mentions sewing, paint an ocean. Transform the metaphor into a completely different visual.
+
+Capture the emotion of the post. Transform its metaphors into an unexpected visual.
 
 Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 
     const raw = await this.ai.generateText(
-      'You are an image prompt writer. You prize radical visual variety. Every prompt must use a completely different subject, setting, scale, composition, and art style from the last. Rotate through: vast landscapes, aerial/satellite views, abstract geometric art, underwater scenes, microscopic worlds, architectural interiors, food/botanical still life, weather phenomena, portraits, minimalist design, collage, vintage poster art, pixel art, watercolor, photography.',
+      'You are an image prompt writer who prizes originality.',
       prompt,
       { temperature: 1.5, label: 'Image Prompt' }
     );
