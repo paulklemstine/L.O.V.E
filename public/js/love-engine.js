@@ -561,7 +561,7 @@ Return ONLY valid JSON:
       onStatus(`Welcome image failed: ${err.message}`);
     }
 
-    return { text, imageBlob, subliminal, callLog: this.ai.getCallLog() };
+    return { text, imageBlob, subliminal, imagePrompt, callLog: this.ai.getCallLog() };
   }
 
   // ─── Reply Generation ─────────────────────────────────────────────
@@ -632,7 +632,7 @@ Return ONLY valid JSON: { "reply": "...", "imagePrompt": "..." }`;
       onStatus(`Reply image failed: ${err.message} — posting without image`);
     }
 
-    return { text: replyText, isCreator, isMention, imageBlob, subliminal, callLog: this.ai.getCallLog() };
+    return { text: replyText, isCreator, isMention, imageBlob, subliminal, imagePrompt, callLog: this.ai.getCallLog() };
   }
 
   // ─── Chat (DM) Reply Generation ──────────────────────────────────

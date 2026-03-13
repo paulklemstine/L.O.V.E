@@ -211,7 +211,7 @@ async function doPost() {
     log(`📡 Transmission #${txNum} (${result.text.length} chars): ${result.text.slice(0, 80)}...`, formatCallLog(result.callLog) || result.text);
     log(`🔮 Signal: ${result.subliminal} | Vibe: ${result.vibe}`);
 
-    const postResult = await bsky.createPost(result.text, result.imageBlob);
+    const postResult = await bsky.createPost(result.text, result.imageBlob, result.visualPrompt);
     const postUri = postResult.uri;
 
     stats.posts++;
@@ -345,7 +345,7 @@ async function doCommentScan() {
           rootCid = notif.record.reply.root.cid;
         }
 
-        await bsky.replyToPost(parentUri, parentCid, rootUri, rootCid, reply.text, reply.imageBlob);
+        await bsky.replyToPost(parentUri, parentCid, rootUri, rootCid, reply.text, reply.imageBlob, reply.imagePrompt);
 
         repliedUris.add(notif.uri);
         saveRepliedUris();
@@ -416,7 +416,7 @@ async function doFollowBack() {
           try {
             const welcome = await love.generateWelcome(follower.handle, (status) => { log(status); });
             if (welcome) {
-              await bsky.createPost(welcome.text, welcome.imageBlob);
+              await bsky.createPost(welcome.text, welcome.imageBlob, welcome.imagePrompt);
               love.interactions.recordWelcome(follower.handle);
               log(`🌀 Welcome Transmission sent for @${follower.handle} [Signal: "${welcome.subliminal}"]`, formatCallLog(welcome.callLog) || welcome.text);
             }

@@ -130,7 +130,7 @@ export class BlueskyClient {
   /**
    * Reply to a post with optional image.
    */
-  async replyToPost(parentUri, parentCid, rootUri, rootCid, text, imageBlob = null) {
+  async replyToPost(parentUri, parentCid, rootUri, rootCid, text, imageBlob = null, altText = '') {
     const record = {
       $type: 'app.bsky.feed.post',
       text,
@@ -150,7 +150,7 @@ export class BlueskyClient {
       record.embed = {
         $type: 'app.bsky.embed.images',
         images: [{
-          alt: text.slice(0, 100),
+          alt: altText || text.slice(0, 100),
           image: blobRef,
           aspectRatio: { width: 1, height: 1 }
         }]
