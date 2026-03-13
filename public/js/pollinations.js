@@ -77,7 +77,7 @@ export class PollinationsClient {
             { role: 'user', content: userPrompt }
           ],
           temperature,
-          seed: Math.floor(Math.random() * 100000),
+          seed: Math.floor(Math.random() * 2147483647),
           stream: false,
         };
 

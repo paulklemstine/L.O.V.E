@@ -475,7 +475,7 @@ Return ONLY valid JSON:
   "metaphor": "a fresh, surprising metaphor that connects the concept to everyday life"
 }`;
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { temperature: 1.0, label: 'Creative Seed' });
+    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { temperature: 1.5, label: 'Creative Seed' });
     const data = this.ai.extractJSON(raw);
     return data || {
       concept: 'the courage it takes to rest when the world says hustle',
@@ -529,7 +529,7 @@ Return ONLY valid JSON (all string values):
   ${arcBeat.needsTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
 }`;
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { temperature: 0.95, label: 'Plan' });
+    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { temperature: 1.2, label: 'Plan' });
     const data = this.ai.extractJSON(raw);
 
     if (!data) {
