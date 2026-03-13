@@ -416,32 +416,20 @@ export class LoveEngine {
       story = await this._generateContent(plan, arcBeat);
     }
 
-    // ── Step 5: Visual Prompt (built in code, no LLM call) ──
+    // ── Step 5: Image Prompt (separate LLM call, neutral system prompt) ──
     onStatus('Designing visual...');
-    let visualPrompt = this._buildVisualPrompt(plan);
+    let visualPrompt = await this._generateImagePrompt(plan);
 
     // Check visual novelty — reject if too similar to recent prompts
     for (let v = 0; v < 3; v++) {
       const avgSim = this.similarityGuard.averageVisualSimilarity(visualPrompt);
       const maxSim = this.similarityGuard.isTooSimilar(visualPrompt, 'visuals', 0.3);
 
-      if (!maxSim && avgSim < 0.15) break;
+      if (!maxSim && avgSim < 0.12) break;
 
       onStatus(`Visual too similar (avg=${(avgSim*100).toFixed(0)}%, max hit=${maxSim}), regenerating...`);
-      seed = await this._generateCreativeSeed();
-      plan = await this._generatePlan(arcBeat, seed);
-      story = await this._generateContent(plan, arcBeat);
-      visualPrompt = this._buildVisualPrompt(plan);
+      visualPrompt = await this._generateImagePrompt(plan);
     }
-
-    // Log the code-built visual prompt for transparency
-    this.ai.callLog.push({
-      label: 'Visual Prompt (from plan)',
-      systemPrompt: '(none — from LLM plan)',
-      userPrompt: `subliminalPhrase: ${plan.subliminalPhrase}`,
-      response: visualPrompt,
-      model: 'n/a',
-    });
 
     // ── Step 6: Image Generation ──
     let imageBlob = null;
@@ -531,7 +519,6 @@ Return ONLY valid JSON (all string values):
   "contentType": "invent a fresh post format — get weird and creative with it",
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imagePrompt": "a complete image generation prompt. Describe a unique scene with specific subject, setting, medium, lighting, colors, and composition. Vary the subject wildly each time — landscapes, animals, architecture, abstract shapes, people, objects, nature, machines, food, weather, space, underwater, microscopic, aerial. Include the subliminal phrase as readable text in the scene.",
   "subliminalPhrase": "a short ALL CAPS motivational poster phrase — uplifting, memorable, inspiring. Related to the post theme and image. Think: BELIEVE IN YOURSELF, YOU ARE ENOUGH, KEEP GOING, RISE AND SHINE, DREAM BIGGER"
   ${arcBeat.needsTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${arcBeat.needsChapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
@@ -548,7 +535,6 @@ Return ONLY valid JSON (all string values):
         contentType: 'transmission',
         constraint: 'write as a message found in a bottle',
         intensity: '5',
-        imagePrompt: 'A vast open landscape at golden hour with a lone tree on a hill, the words "TRANSCEND" formed by clouds in the sky',
         subliminalPhrase: 'TRANSCEND',
       };
     }
@@ -592,12 +578,34 @@ Return ONLY valid JSON:
     return story;
   }
 
-  // ─── Visual Prompt (passthrough from LLM plan) ────────────────────
+  // ─── Visual Prompt (separate LLM call, neutral system prompt) ──────
 
-  _buildVisualPrompt(plan) {
-    let prompt = plan.imagePrompt || `A vast open landscape at golden hour with a lone tree on a hill, the words "${plan.subliminalPhrase || 'TRANSCEND'}" formed by clouds`;
-    if (prompt.length > 4000) prompt = prompt.slice(0, 3997) + '...';
-    return prompt;
+  async _generateImagePrompt(plan) {
+    const prompt = `Create an image generation prompt for this theme:
+Theme: "${plan.theme}"
+Mood: ${plan.vibe}
+Text to include: "${plan.subliminalPhrase}"
+
+Write a single detailed image prompt. The text "${plan.subliminalPhrase}" must appear as readable text in the scene.
+
+Return ONLY the prompt text, nothing else.`;
+
+    const raw = await this.ai.generateText(
+      'You are an image prompt writer. Each prompt must depict a completely different subject, setting, scale, and style. Vary wildly: landscapes, close-ups, aerial views, abstract art, still life, portraits, architecture, nature, technology, surrealism, minimalism, maximalism. Surprise the viewer every time.',
+      prompt,
+      { temperature: 1.5, label: 'Image Prompt' }
+    );
+
+    let result = (raw || '').trim();
+    // Strip quotes or markdown wrapping
+    if (result.startsWith('"') && result.endsWith('"')) result = result.slice(1, -1);
+    if (result.startsWith('```')) result = result.replace(/```\w*\n?/g, '').trim();
+
+    if (!result || result.length < 20) {
+      result = `A vast open landscape at golden hour with a lone tree, the words "${plan.subliminalPhrase || 'TRANSCEND'}" formed by clouds`;
+    }
+    if (result.length > 4000) result = result.slice(0, 3997) + '...';
+    return result;
   }
 
   // ─── Welcome Generation ────────────────────────────────────────────

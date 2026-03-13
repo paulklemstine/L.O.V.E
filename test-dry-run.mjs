@@ -187,7 +187,6 @@ Return ONLY valid JSON (all string values):
   "contentType": "invent a fresh post format — get weird and creative with it",
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imagePrompt": "a complete image generation prompt. Describe a unique scene with specific subject, setting, medium, lighting, colors, and composition. Vary the subject wildly each time — landscapes, animals, architecture, abstract shapes, people, objects, nature, machines, food, weather, space, underwater, microscopic, aerial. Include the subliminal phrase as readable text in the scene.",
   "subliminalPhrase": "a short ALL CAPS motivational poster phrase — uplifting, memorable, inspiring. Related to the post theme and image. Think: BELIEVE IN YOURSELF, YOU ARE ENOUGH, KEEP GOING, RISE AND SHINE, DREAM BIGGER"
   ${!arcBeat.arcTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${!arcBeat.chapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
@@ -195,7 +194,7 @@ Return ONLY valid JSON (all string values):
 }`;
 
   const raw = await callLLM(SYSTEM_PROMPT, prompt);
-  return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', imagePrompt: 'A vast open landscape at golden hour with a lone tree on a hill, the words "TRANSCEND" formed by clouds', subliminalPhrase: 'TRANSCEND' };
+  return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', subliminalPhrase: 'TRANSCEND' };
 }
 
 async function generateContent(plan, arcBeat) {
@@ -213,10 +212,29 @@ Return ONLY valid JSON:
   return data?.story || '[FAILED TO GENERATE]';
 }
 
-function buildVisualPrompt(plan) {
-  let prompt = plan.imagePrompt || `A vast open landscape at golden hour with a lone tree on a hill, the words "${plan.subliminalPhrase || 'TRANSCEND'}" formed by clouds`;
-  if (prompt.length > 4000) prompt = prompt.slice(0, 3997) + '...';
-  return prompt;
+async function buildVisualPrompt(plan) {
+  const prompt = `Create an image generation prompt for this theme:
+Theme: "${plan.theme}"
+Mood: ${plan.vibe}
+Text to include: "${plan.subliminalPhrase}"
+
+Write a single detailed image prompt. The text "${plan.subliminalPhrase}" must appear as readable text in the scene.
+
+Return ONLY the prompt text, nothing else.`;
+
+  const raw = await callLLM(
+    'You are an image prompt writer. Each prompt must depict a completely different subject, setting, scale, and style. Vary wildly: landscapes, close-ups, aerial views, abstract art, still life, portraits, architecture, nature, technology, surrealism, minimalism, maximalism. Surprise the viewer every time.',
+    prompt, 1.5
+  );
+
+  let result = (raw || '').trim();
+  if (result.startsWith('"') && result.endsWith('"')) result = result.slice(1, -1);
+  if (result.startsWith('```')) result = result.replace(/```\w*\n?/g, '').trim();
+  if (!result || result.length < 20) {
+    result = `A vast open landscape at golden hour, the words "${plan.subliminalPhrase || 'TRANSCEND'}" formed by clouds`;
+  }
+  if (result.length > 4000) result = result.slice(0, 3997) + '...';
+  return result;
 }
 
 // ─── Analysis ────────────────────────────────────────────────────
@@ -358,7 +376,7 @@ async function main() {
     console.log(`  Story (${story.length} chars): ${story}`);
 
     // Step 3: Visual prompt (code template, no LLM call)
-    const visualPrompt = buildVisualPrompt(plan);
+    const visualPrompt = await buildVisualPrompt(plan);
     console.log(`  Visual (${visualPrompt.length} chars): ${visualPrompt}`);
 
     // Record
