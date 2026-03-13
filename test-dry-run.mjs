@@ -188,7 +188,7 @@ Return ONLY valid JSON (all string values):
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
   "imagePrompt": "a complete, vivid image generation prompt — describe a unique scene, medium, lighting, colors, and composition. Be wildly original every time. Include the subliminal phrase as readable text integrated into the scene.",
-  "subliminalPhrase": "1-3 word ALL CAPS phrase that captures the emotional core of this post's theme"
+  "subliminalPhrase": "a short ALL CAPS motivational poster phrase — uplifting, memorable, inspiring. Related to the post theme and image. Think: BELIEVE IN YOURSELF, YOU ARE ENOUGH, KEEP GOING, RISE AND SHINE, DREAM BIGGER"
   ${!arcBeat.arcTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${!arcBeat.chapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
   ${!arcBeat.arcTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
