@@ -25,6 +25,7 @@ let repliedUris = new Set();
 let followedDids = new Set();
 let respondedMsgIds = new Set();
 let activityLog = [];
+let activityLogDetails = new Map(); // key: entry string, value: fullText
 
 // Variable posting: 4-8 min intervals (unpredictable = dopamine)
 const POST_INTERVAL_MIN = 4 * 60 * 1000;   // 4 minutes
@@ -636,36 +637,54 @@ function saveRespondedMsgIds() {
 function log(message, fullText) {
   const timestamp = new Date().toLocaleTimeString();
   const entry = `${timestamp} - ${message}`;
-  activityLog.unshift(fullText ? { entry, fullText } : entry);
+  activityLog.unshift(entry);
   if (activityLog.length > 200) activityLog.pop();
+
+  if (fullText) {
+    activityLogDetails.set(entry, fullText);
+  }
 
   const logEl = document.getElementById('activity-log');
   if (logEl) {
     // Only show last 50 in DOM for performance
-    logEl.innerHTML = activityLog.slice(0, 50).map(item => {
-      const l = typeof item === 'string' ? item : item.entry;
-      const detail = typeof item === 'object' ? item.fullText : null;
+    const fragment = document.createDocumentFragment();
+
+    activityLog.slice(0, 50).forEach(function(l) {
+      const detail = activityLogDetails.get(l);
       let cls = '';
-      if (l.includes('ERROR') || l.includes('FAILED')) cls = 'log-error';
-      else if (l.includes('CREATOR')) cls = 'log-creator';
-      else if (l.includes('💌') || l.includes('DM')) cls = 'log-dm';
-      else if (l.includes('✅') || l.includes('Transmission #') || l.includes('Replied') || l.includes('Welcome')) cls = 'log-success';
+      if (l.indexOf('ERROR') !== -1 || l.indexOf('FAILED') !== -1) cls = 'log-error';
+      else if (l.indexOf('CREATOR') !== -1) cls = 'log-creator';
+      else if (l.indexOf('DM') !== -1) cls = 'log-dm';
+      else if (l.indexOf('Transmission #') !== -1 || l.indexOf('Replied') !== -1 || l.indexOf('Welcome') !== -1) cls = 'log-success';
+
+      var div = document.createElement('div');
+      div.className = 'log-entry ' + cls;
 
       if (detail) {
-        return `<div class="log-entry log-expandable ${cls}"><div class="log-summary">${escapeHtml(l)}</div><div class="log-detail">${escapeHtml(detail)}</div></div>`;
+        div.className += ' log-expandable';
+        var summary = document.createElement('div');
+        summary.className = 'log-summary';
+        summary.textContent = l;
+        var detailDiv = document.createElement('div');
+        detailDiv.className = 'log-detail';
+        detailDiv.textContent = detail;
+        div.appendChild(summary);
+        div.appendChild(detailDiv);
+        div.addEventListener('click', function() {
+          this.classList.toggle('expanded');
+        });
+      } else {
+        div.textContent = l;
       }
-      return `<div class="log-entry ${cls}">${escapeHtml(l)}</div>`;
-    }).join('');
 
-    // Attach click handlers for expandable entries
-    logEl.querySelectorAll('.log-expandable').forEach(el => {
-      el.addEventListener('click', function() {
-        this.classList.toggle('expanded');
-      });
+      fragment.appendChild(div);
     });
+
+    logEl.innerHTML = '';
+    logEl.appendChild(fragment);
   }
 
-  console.log(`[L.O.V.E.] ${entry}`);
+  console.log('[L.O.V.E.] ' + entry);
 }
 
 function setStatus(text) {
