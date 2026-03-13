@@ -645,7 +645,14 @@ Example format (write YOUR OWN unique content, not this example):
   // subject, art style, AND subliminal text rendering. Nothing is
   // appended or hardcoded afterward.
 
-  async _generateVisualPrompt(plan, subliminal, forbidden) {
+  async _generateVisualPrompt(plan, subliminal, _forbidden) {
+    // NOTE: forbidden context intentionally NOT passed to visual prompt —
+    // it overwhelms the image model and causes muted/golden fallback colors.
+    const recentVisuals = (this.creativeHistory.history.visualConcepts || []).slice(-3);
+    const visualAvoid = recentVisuals.length > 0
+      ? `\nAVOID these recent visual approaches (but DO use vivid colors): ${recentVisuals.join(' | ')}`
+      : '';
+
     const prompt = `Generate a COMPLETE image prompt. ONE dense paragraph, under 450 characters total.
 
 CONTEXT:
@@ -659,15 +666,16 @@ ${plan.artDirection}
 EMBEDDED TEXT PHRASE: "${subliminal}"
 Render the text as: ${plan.subliminalRender}
 Place it: ${plan.textPlacement}
-${forbidden}
+${visualAvoid}
 
 REQUIREMENTS:
-- Breathtaking, jaw-dropping, dopamine-inducing PSYCHEDELIC VISIONARY ART — think DMT/LSD/mescaline visions, god rays, prismatic light, fractals, sacred geometry, bioluminescent glow, vivid saturated neon colors
+- VIVID, ELECTRIC, SATURATED NEON COLORS ARE MANDATORY — electric cyan, hot magenta, shocking pink, acid green, ultraviolet purple, molten gold, bioluminescent blue. NO muted tones. NO sepia. NO monochrome. NO desaturated palettes.
+- Breathtaking PSYCHEDELIC VISIONARY ART — DMT visions, Alex Grey, Android Jones, Ernst Fuchs. God rays, prismatic refraction, fractals, sacred geometry, bioluminescent glow.
+- MAXIMUM VISUAL CONTRAST and COLOR VARIETY — at least 3-4 vivid colors in every image
 - Use the SPECIFIC art direction above — do not substitute generic terms
 - Include the text "${subliminal}" rendered exactly as specified
-- COMPLETELY DIFFERENT from anything in the forbidden list
-- Dense visual keywords ONLY. NO emoji. NO narrative ("you step into..."). Just raw image description.
-- HARD LIMIT: Under 450 characters`;
+- Dense visual keywords ONLY. NO emoji. NO narrative. Just raw image description.
+- HARD LIMIT: Under 400 characters (leave room for color suffix)`;
 
     const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { temperature: 0.95 });
     let concept = raw.trim().replace(/^["']|["']$/g, '');
@@ -683,6 +691,13 @@ REQUIREMENTS:
     if (concept.length < 20) {
       concept = `${plan.imageryMotif}, ${plan.artDirection}, text "${subliminal}" rendered as ${plan.subliminalRender} ${plan.textPlacement}`;
     }
+
+    // Always append color booster to fight muted/golden defaults
+    const colorBoost = ', vivid saturated neon colors, high contrast, electric cyan, hot magenta, ultraviolet purple, bioluminescent glow';
+    if (concept.length + colorBoost.length <= 500) {
+      concept += colorBoost;
+    }
+
     if (concept.length > 500) concept = concept.slice(0, 497) + '...';
 
     return concept;
