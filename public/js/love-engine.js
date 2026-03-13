@@ -124,6 +124,7 @@ class SimilarityGuard {
     this.recentTexts = [];
     this.recentThemes = [];
     this.recentPhrases = [];
+    this.recentVisuals = [];
     this.maxHistory = 20;
     this._load();
   }
@@ -149,10 +150,15 @@ class SimilarityGuard {
     return union === 0 ? 0 : intersection / union;
   }
 
+  _getList(category) {
+    if (category === 'texts') return this.recentTexts;
+    if (category === 'themes') return this.recentThemes;
+    if (category === 'visuals') return this.recentVisuals;
+    return this.recentPhrases;
+  }
+
   isTooSimilar(text, category, threshold = 0.4) {
-    const list = category === 'texts' ? this.recentTexts
-      : category === 'themes' ? this.recentThemes
-      : this.recentPhrases;
+    const list = this._getList(category);
     for (const prev of list) {
       if (this._jaccard(text, prev) >= threshold) return true;
     }
@@ -160,12 +166,31 @@ class SimilarityGuard {
   }
 
   record(text, category) {
-    const list = category === 'texts' ? this.recentTexts
-      : category === 'themes' ? this.recentThemes
-      : this.recentPhrases;
+    const list = this._getList(category);
     list.push(String(text));
     if (list.length > this.maxHistory) list.shift();
     this._save();
+  }
+
+  /**
+   * Extract overused words from recent visual prompts.
+   * Returns words that appear in 3+ of the last 10 visual prompts.
+   */
+  getOverusedVisualWords() {
+    const stopWords = new Set(['with','that','from','into','this','have','been','were','they','their','them','than','each','which','there','these','about','would','some','what','other','more','very','just','also','over','such','after','only','well','back','then','when','where','your','will','like','made','tiny','small','large']);
+    const recent = this.recentVisuals.slice(-10);
+    if (recent.length < 2) return [];
+    const freq = {};
+    for (const prompt of recent) {
+      const words = new Set(
+        prompt.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(w => w.length > 3 && !stopWords.has(w))
+      );
+      for (const w of words) freq[w] = (freq[w] || 0) + 1;
+    }
+    return Object.entries(freq)
+      .filter(([, count]) => count >= 3)
+      .sort((a, b) => b[1] - a[1])
+      .map(([word]) => word);
   }
 
   _save() {
@@ -174,6 +199,7 @@ class SimilarityGuard {
         recentTexts: this.recentTexts,
         recentThemes: this.recentThemes,
         recentPhrases: this.recentPhrases,
+        recentVisuals: this.recentVisuals,
       }));
     } catch {}
   }
@@ -186,6 +212,7 @@ class SimilarityGuard {
         this.recentTexts = data.recentTexts || [];
         this.recentThemes = data.recentThemes || [];
         this.recentPhrases = data.recentPhrases || [];
+        this.recentVisuals = data.recentVisuals || [];
       }
     } catch {}
   }
@@ -375,7 +402,23 @@ export class LoveEngine {
 
     // ── Step 5: Visual Prompt (built in code, no LLM call) ──
     onStatus('Designing visual...');
-    const visualPrompt = this._buildVisualPrompt(plan);
+    let visualPrompt = this._buildVisualPrompt(plan);
+
+    // Check visual novelty — reject if too similar or reuses overused words
+    for (let v = 0; v < 2; v++) {
+      const overused = this.similarityGuard.getOverusedVisualWords();
+      const promptLower = visualPrompt.toLowerCase();
+      const overusedHits = overused.filter(w => promptLower.includes(w)).length;
+      const tooSimilar = this.similarityGuard.isTooSimilar(visualPrompt, 'visuals', 0.35);
+
+      if (!tooSimilar && overusedHits < 3) break;
+
+      onStatus(`Visual too repetitive (${overusedHits} reused words), regenerating...`);
+      seed = await this._generateCreativeSeed();
+      plan = await this._generatePlan(arcBeat, seed);
+      story = await this._generateContent(plan, arcBeat);
+      visualPrompt = this._buildVisualPrompt(plan);
+    }
 
     // Log the code-built visual prompt for transparency
     this.ai.callLog.push({
@@ -398,6 +441,7 @@ export class LoveEngine {
     this.similarityGuard.record(plan.theme, 'themes');
     this.similarityGuard.record(story, 'texts');
     this.similarityGuard.record(plan.subliminalPhrase, 'phrases');
+    this.similarityGuard.record(visualPrompt, 'visuals');
 
     this.storyArcs.advanceBeat(arcBeat.arcKey, story.slice(0, 100));
     this.transmissionNumber++;
@@ -421,12 +465,12 @@ export class LoveEngine {
   // ─── Creative Seed (isolated LLM call for novel ideas) ─────────────
 
   async _generateCreativeSeed() {
-    const prompt = `You are a wildly creative muse. Generate a single burst of raw creative inspiration for a motivational art piece.
+    const prompt = `You are a wildly creative muse. Generate a single burst of raw creative inspiration for a motivational art piece. Be wildly original — explore unexpected settings, unusual color palettes, and fresh visual vocabulary every single time.
 
 Return ONLY valid JSON:
 {
   "concept": "a vivid, specific, unexpected concept for an uplifting message — something no one has posted before",
-  "visualWorld": "a breathtaking scene from an imaginary world — specific place, objects, atmosphere, time of day",
+  "visualWorld": "a breathtaking scene from an imaginary world — specific place, objects, atmosphere, time of day. Use fresh, original imagery.",
   "emotion": "one precise human emotion this should evoke",
   "metaphor": "a fresh, surprising metaphor that connects the concept to everyday life"
 }`;

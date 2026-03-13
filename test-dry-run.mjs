@@ -141,12 +141,12 @@ const similarity = new SimilarityGuard();
 // ─── Pipeline ────────────────────────────────────────────────────
 
 async function generateCreativeSeed() {
-  const prompt = `You are a wildly creative muse. Generate a single burst of raw creative inspiration for a motivational art piece.
+  const prompt = `You are a wildly creative muse. Generate a single burst of raw creative inspiration for a motivational art piece. Be wildly original — explore unexpected settings, unusual color palettes, and fresh visual vocabulary every single time.
 
 Return ONLY valid JSON:
 {
   "concept": "a vivid, specific, unexpected concept for an uplifting message — something no one has posted before",
-  "visualWorld": "a breathtaking scene from an imaginary world — specific place, objects, atmosphere, time of day",
+  "visualWorld": "a breathtaking scene from an imaginary world — specific place, objects, atmosphere, time of day. Use fresh, original imagery.",
   "emotion": "one precise human emotion this should evoke",
   "metaphor": "a fresh, surprising metaphor that connects the concept to everyday life"
 }`;
