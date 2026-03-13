@@ -141,7 +141,7 @@ const similarity = new SimilarityGuard();
 // ─── Pipeline ────────────────────────────────────────────────────
 
 async function generateCreativeSeed() {
-  const prompt = `You are a wildly creative muse. Generate a single burst of raw creative inspiration for a psychedelic motivational poster.
+  const prompt = `You are a wildly creative muse. Generate a single burst of raw creative inspiration for a motivational art piece.
 
 Return ONLY valid JSON:
 {
@@ -187,11 +187,11 @@ Return ONLY valid JSON (all string values):
   "contentType": "invent a fresh post format — get weird and creative with it",
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imageSubject": "a psychedelic, sacred, awe-inspiring scene — foreground subject, midground context, background cosmos. Think DMT visions, sacred geometry, cosmic temples, bioluminescent landscapes, fractal galaxies, divine light. Dopamine-inspiring and epic",
-  "imageMedium": "photorealistic 3D render, hyper-detailed CGI, or ultra-realistic digital art — pick one. Crisp, sharp, high-definition. The image must look like a real photograph or a cinematic VFX still",
-  "lighting": "dramatic, luminous lighting with visible light rays — volumetric god rays, prismatic rainbow refractions, aurora borealis glow, sacred golden radiance, neon light bloom, kaleidoscopic lens flares — bright and heavenly",
-  "colorPalette": "name 3-4 vivid, electric, psychedelic pigment colors — e.g. electric violet, fluorescent magenta, iridescent gold, cosmic teal",
-  "composition": "camera/lens and angle: 85mm portrait f/1.4 shallow DOF, wide-angle tilt-shift, macro close-up, bird's-eye drone shot — one choice",
+  "imageSubject": "a striking, awe-inspiring scene with spatial depth — foreground subject, midground context, background environment",
+  "imageMedium": "a specific visual medium or render style — your choice",
+  "lighting": "a specific lighting setup that fits the mood",
+  "colorPalette": "name 3-4 specific colors that suit the emotion",
+  "composition": "camera angle and framing — your choice",
   "subliminalPhrase": "1-3 word ALL CAPS phrase that captures the emotional core of this post's theme — the takeaway a reader carries with them",
   "textRendering": "how the text physically appears — start with a verb: carved into stone, formed by fireflies, glowing on the wall, etched in frost, woven from light — physically integrated into the scene"
   ${!arcBeat.arcTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
@@ -200,7 +200,7 @@ Return ONLY valid JSON (all string values):
 }`;
 
   const raw = await callLLM(SYSTEM_PROMPT, prompt);
-  return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', imageSubject: 'a crystalline mandala floating above a mirror lake, bioluminescent particles in the midground, nebula sky behind', imageMedium: 'photorealistic 3D render', lighting: 'volumetric god rays with rim lighting', colorPalette: 'electric violet, cadmium orange, cerulean blue, titanium white', composition: '85mm lens f/1.4 centered symmetrical', subliminalPhrase: 'TRANSCEND', textRendering: 'formed by constellations of light in the sky, large and centered' };
+  return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', imageSubject: 'a vast open landscape at golden hour with a lone tree on a hill', imageMedium: 'digital painting', lighting: 'warm golden hour sunlight', colorPalette: 'amber, sky blue, sage green, soft white', composition: 'wide angle centered', subliminalPhrase: 'TRANSCEND', textRendering: 'formed by clouds in the sky, large and centered' };
 }
 
 async function generateContent(plan, arcBeat) {
@@ -220,18 +220,17 @@ Return ONLY valid JSON:
 
 function buildVisualPrompt(plan) {
   const phrase = plan.subliminalPhrase || 'TRANSCEND';
-  const subject = plan.imageSubject || 'a crystalline mandala floating above a mirror lake, bioluminescent particles in the midground, nebula sky behind';
-  const medium = plan.imageMedium || 'photorealistic 3D render';
-  const lighting = plan.lighting || 'volumetric god rays with rim lighting';
-  const palette = plan.colorPalette || 'electric violet, cadmium orange, cerulean blue, titanium white';
-  const composition = plan.composition || '85mm lens f/1.4 centered symmetrical';
-  const textRendering = plan.textRendering || 'formed by constellations of light in the sky, large and centered';
+  const subject = plan.imageSubject || 'a vast open landscape at golden hour with a lone tree on a hill';
+  const medium = plan.imageMedium || 'digital painting';
+  const lighting = plan.lighting || 'warm golden hour sunlight';
+  const palette = plan.colorPalette || 'amber, sky blue, sage green, soft white';
+  const composition = plan.composition || 'wide angle centered';
+  const textRendering = plan.textRendering || 'formed by clouds in the sky, large and centered';
 
   let prompt = `${subject}. `
     + `${medium}, ${composition}. `
     + `${lighting}, color palette: ${palette}. `
-    + `The words "${phrase}" ${textRendering}, crisp and legible. `
-    + `Photorealistic, 8K UHD, sharp focus, ray traced, psychedelic, sacred, epic, bursting with light.`;
+    + `The words "${phrase}" ${textRendering}, crisp and legible.`;
 
   if (prompt.length > 4000) prompt = prompt.slice(0, 3997) + '...';
   return prompt;

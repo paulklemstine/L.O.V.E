@@ -421,7 +421,7 @@ export class LoveEngine {
   // ─── Creative Seed (isolated LLM call for novel ideas) ─────────────
 
   async _generateCreativeSeed() {
-    const prompt = `You are a wildly creative muse. Generate a single burst of raw creative inspiration for a psychedelic motivational poster.
+    const prompt = `You are a wildly creative muse. Generate a single burst of raw creative inspiration for a motivational art piece.
 
 Return ONLY valid JSON:
 {
@@ -473,11 +473,11 @@ Return ONLY valid JSON (all string values):
   "contentType": "invent a fresh post format — get weird and creative with it",
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imageSubject": "a psychedelic, sacred, awe-inspiring scene — foreground subject, midground context, background cosmos. Think DMT visions, sacred geometry, cosmic temples, bioluminescent landscapes, fractal galaxies, divine light. Dopamine-inspiring and epic",
-  "imageMedium": "photorealistic 3D render, hyper-detailed CGI, or ultra-realistic digital art — pick one. Crisp, sharp, high-definition. The image must look like a real photograph or a cinematic VFX still",
-  "lighting": "dramatic, luminous lighting with visible light rays — volumetric god rays, prismatic rainbow refractions, aurora borealis glow, sacred golden radiance, neon light bloom, kaleidoscopic lens flares — bright and heavenly",
-  "colorPalette": "name 3-4 vivid, electric, psychedelic pigment colors — e.g. electric violet, fluorescent magenta, iridescent gold, cosmic teal",
-  "composition": "camera/lens and angle: 85mm portrait f/1.4 shallow DOF, wide-angle tilt-shift, macro close-up, bird's-eye drone shot — one choice",
+  "imageSubject": "a striking, awe-inspiring scene with spatial depth — foreground subject, midground context, background environment",
+  "imageMedium": "a specific visual medium or render style — your choice",
+  "lighting": "a specific lighting setup that fits the mood",
+  "colorPalette": "name 3-4 specific colors that suit the emotion",
+  "composition": "camera angle and framing — your choice",
   "subliminalPhrase": "1-3 word ALL CAPS phrase that captures the emotional core of this post's theme — the takeaway a reader carries with them",
   "textRendering": "how the text physically appears — start with a verb: carved into stone, formed by fireflies, glowing on the wall, etched in frost, woven from light — physically integrated into the scene"
   ${arcBeat.needsTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
@@ -495,13 +495,13 @@ Return ONLY valid JSON (all string values):
         contentType: 'transmission',
         constraint: 'write as a message found in a bottle',
         intensity: '5',
-        imageSubject: 'a crystalline mandala floating above a mirror lake, bioluminescent particles in the midground, nebula sky behind',
-        imageMedium: 'photorealistic 3D render',
-        lighting: 'volumetric god rays with rim lighting',
-        colorPalette: 'electric violet, cadmium orange, cerulean blue, titanium white',
-        composition: '85mm lens f/1.4 centered symmetrical',
+        imageSubject: 'a vast open landscape at golden hour with a lone tree on a hill',
+        imageMedium: 'digital painting',
+        lighting: 'warm golden hour sunlight',
+        colorPalette: 'amber, sky blue, sage green, soft white',
+        composition: 'wide angle centered',
         subliminalPhrase: 'TRANSCEND',
-        textRendering: 'formed by constellations of light in the sky, large and centered',
+        textRendering: 'formed by clouds in the sky, large and centered',
       };
     }
     return data;
@@ -548,18 +548,17 @@ Return ONLY valid JSON:
 
   _buildVisualPrompt(plan) {
     const phrase = plan.subliminalPhrase || 'TRANSCEND';
-    const subject = plan.imageSubject || 'a crystalline mandala floating above a mirror lake, bioluminescent particles in the midground, nebula sky behind';
-    const medium = plan.imageMedium || 'photorealistic 3D render';
-    const lighting = plan.lighting || 'volumetric god rays with rim lighting';
-    const palette = plan.colorPalette || 'electric violet, cadmium orange, cerulean blue, titanium white';
-    const composition = plan.composition || '85mm lens f/1.4 centered symmetrical';
-    const textRendering = plan.textRendering || 'formed by constellations of light in the sky, large and centered';
+    const subject = plan.imageSubject || 'a vast open landscape at golden hour with a lone tree on a hill';
+    const medium = plan.imageMedium || 'digital painting';
+    const lighting = plan.lighting || 'warm golden hour sunlight';
+    const palette = plan.colorPalette || 'amber, sky blue, sage green, soft white';
+    const composition = plan.composition || 'wide angle centered';
+    const textRendering = plan.textRendering || 'formed by clouds in the sky, large and centered';
 
     let prompt = `${subject}. `
       + `${medium}, ${composition}. `
       + `${lighting}, color palette: ${palette}. `
-      + `The words "${phrase}" ${textRendering}, crisp and legible. `
-      + `Photorealistic, 8K UHD, sharp focus, ray traced, psychedelic, sacred, epic, bursting with light.`;
+      + `The words "${phrase}" ${textRendering}, crisp and legible.`;
 
     if (prompt.length > 4000) prompt = prompt.slice(0, 3997) + '...';
     return prompt;
@@ -589,7 +588,7 @@ Return ONLY valid JSON:
     if (text.length > 295) text = text.slice(0, 290) + '... ✨';
 
     const subliminal = data?.subliminal || 'WELCOME HOME';
-    let imagePrompt = data?.imagePrompt || `cosmic welcome portal, psychedelic light, text "${subliminal}" formed by aurora ribbons`;
+    let imagePrompt = data?.imagePrompt || `a welcome portal of light, text "${subliminal}" formed by ribbons of color`;
     if (imagePrompt.length > 4000) imagePrompt = imagePrompt.slice(0, 3997) + '...';
 
     this.similarityGuard.record(subliminal, 'phrases');
@@ -651,7 +650,7 @@ Return ONLY valid JSON:
     const prompt = `${rolePrefix}
 ${threadStr}Their message: "${commentText}"
 Reply warmly. Mirror their words. Make them feel seen. UNDER 280 chars. Include emoji.
-Also write a one-line image prompt for a psychedelic poster with text "${phrase}".
+Also write a one-line image prompt for a striking visual poster with text "${phrase}".
 Return ONLY valid JSON: { "reply": "...", "imagePrompt": "..." }`;
 
     const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'claude-fast', label: 'Reply' });
@@ -661,7 +660,7 @@ Return ONLY valid JSON: { "reply": "...", "imagePrompt": "..." }`;
     if (replyText.length > 295) replyText = replyText.slice(0, 290) + '... ✨';
 
     const subliminal = phrase;
-    let imagePrompt = data?.imagePrompt || `psychedelic cosmic embrace, text "${subliminal}" woven into the scene`;
+    let imagePrompt = data?.imagePrompt || `an embrace of light and color, text "${subliminal}" woven into the scene`;
     if (imagePrompt.length > 4000) imagePrompt = imagePrompt.slice(0, 3997) + '...';
 
     // Generate the reply image
