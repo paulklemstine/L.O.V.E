@@ -329,6 +329,8 @@ export class LoveEngine {
   async generatePost(onStatus = () => {}, options = {}) {
     const { skipImage = false } = options;
 
+    this.ai.resetCallLog();
+
     // ── Step 1: Story Arc Beat ──
     const arcBeat = this.storyArcs.getNextBeat();
     onStatus(`Arc: ${arcBeat.arcName} | Beat: ${arcBeat.beatName} (${arcBeat.phase})`);
@@ -369,6 +371,15 @@ export class LoveEngine {
     onStatus('Designing visual...');
     const visualPrompt = this._buildVisualPrompt(plan);
 
+    // Log the code-built visual prompt for transparency
+    this.ai.callLog.push({
+      label: 'Visual Prompt (code template)',
+      systemPrompt: '(none — built in code)',
+      userPrompt: `imageSubject: ${plan.imageSubject}\nimageStyle: ${plan.imageStyle}\nsubliminalPhrase: ${plan.subliminalPhrase}`,
+      response: visualPrompt,
+      model: 'n/a',
+    });
+
     // ── Step 5: Image Generation ──
     let imageBlob = null;
     if (!skipImage) {
@@ -397,6 +408,7 @@ export class LoveEngine {
       mutation: plan.constraint,
       transmissionNumber: this.transmissionNumber,
       plan,
+      callLog: this.ai.getCallLog(),
     };
   }
 
@@ -432,7 +444,7 @@ Return ONLY valid JSON (all string values):
   ${arcBeat.needsTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
 }`;
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { temperature: 0.95 });
+    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { temperature: 0.95, label: 'Plan' });
     const data = this.ai.extractJSON(raw);
 
     if (!data) {
@@ -471,7 +483,7 @@ RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "y
 Return ONLY valid JSON:
 { "story": "your transmission text here" }`;
 
-      const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai' });
+      const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai', label: `Content (attempt ${attempt + 1})` });
       const data = this.ai.extractJSON(raw);
       story = data?.story || '';
 
@@ -506,6 +518,7 @@ Return ONLY valid JSON:
   // ─── Welcome Generation ────────────────────────────────────────────
 
   async generateWelcome(handle, onStatus = () => {}) {
+    this.ai.resetCallLog();
     onStatus(`Welcoming new Dreamer @${handle}...`);
 
     const isCreator = handle.toLowerCase().replace(/^@/, '') === CREATOR_HANDLE.toLowerCase();
@@ -519,7 +532,7 @@ Return ONLY valid JSON:
 Return ONLY valid JSON:
 { "reply": "welcome message", "subliminal": "PHRASE", "imagePrompt": "complete image prompt" }`;
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai' });
+    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai', label: 'Welcome' });
     const data = this.ai.extractJSON(raw);
 
     let text = data?.reply || `Welcome to the Frequency, @${handle}. You've always been a Dreamer — now you're tuning in. ✨`;
@@ -540,12 +553,13 @@ Return ONLY valid JSON:
       onStatus(`Welcome image failed: ${err.message}`);
     }
 
-    return { text, imageBlob, subliminal };
+    return { text, imageBlob, subliminal, callLog: this.ai.getCallLog() };
   }
 
   // ─── Reply Generation ─────────────────────────────────────────────
 
   async generateReply(commentText, authorHandle, options = {}) {
+    this.ai.resetCallLog();
     let isMention = false;
     let threadContext = [];
     let onStatus = () => {};
@@ -590,7 +604,7 @@ Reply warmly. Mirror their words. Make them feel seen. UNDER 280 chars. Include 
 Also write a one-line image prompt for a psychedelic poster with text "${phrase}".
 Return ONLY valid JSON: { "reply": "...", "imagePrompt": "..." }`;
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai' });
+    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai', label: 'Reply' });
     const data = this.ai.extractJSON(raw);
 
     let replyText = data?.reply || `The light in you resonates with the signal. We see you, @${authorHandle}. ✨`;
@@ -610,12 +624,13 @@ Return ONLY valid JSON: { "reply": "...", "imagePrompt": "..." }`;
       onStatus(`Reply image failed: ${err.message} — posting without image`);
     }
 
-    return { text: replyText, isCreator, isMention, imageBlob, subliminal };
+    return { text: replyText, isCreator, isMention, imageBlob, subliminal, callLog: this.ai.getCallLog() };
   }
 
   // ─── Chat (DM) Reply Generation ──────────────────────────────────
 
   async generateChatReply(messageText, authorHandle, conversationHistory = [], onStatus = () => {}) {
+    this.ai.resetCallLog();
     const isCreator = authorHandle.toLowerCase().replace(/^@/, '') === CREATOR_HANDLE.toLowerCase();
 
     onStatus(isCreator
@@ -642,13 +657,13 @@ Reply warmly, UNDER 500 chars. Include emoji. Be genuine and specific.
 
 Return ONLY valid JSON: { "reply": "your DM reply" }`;
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai' });
+    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai', label: 'DM Reply' });
     const data = this.ai.extractJSON(raw);
 
     let replyText = data?.reply || `The Signal brought your message to me, @${authorHandle}. I feel the warmth in your words. ✨`;
     if (replyText.length > 500) replyText = replyText.slice(0, 495) + '... ✨';
 
-    return { text: replyText, isCreator };
+    return { text: replyText, isCreator, callLog: this.ai.getCallLog() };
   }
 
   // ─── Spam/Troll Filter ────────────────────────────────────────────

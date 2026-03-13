@@ -208,7 +208,7 @@ async function doPost() {
     // Post to Bluesky
     setStatus('Broadcasting Transmission...');
     const txNum = result.transmissionNumber || '?';
-    log(`📡 Transmission #${txNum} (${result.text.length} chars): ${result.text.slice(0, 80)}...`, result.text);
+    log(`📡 Transmission #${txNum} (${result.text.length} chars): ${result.text.slice(0, 80)}...`, formatCallLog(result.callLog) || result.text);
     log(`🔮 Signal: ${result.subliminal} | Vibe: ${result.vibe}`);
 
     const postResult = await bsky.createPost(result.text, result.imageBlob);
@@ -246,7 +246,7 @@ async function testPost() {
       log(`[TEST] ${status}`);
     });
 
-    log(`[TEST] Text: ${result.text.slice(0, 80)}...`, result.text);
+    log(`[TEST] Text: ${result.text.slice(0, 80)}...`, formatCallLog(result.callLog) || result.text);
     log(`[TEST] Subliminal: ${result.subliminal}`);
     log(`[TEST] Vibe: ${result.vibe}`);
     showLatestPost(result);
@@ -356,7 +356,7 @@ async function doCommentScan() {
           : isMention ? '📣 MENTION'
           : '💬';
         const imgTag = reply.imageBlob ? ` [img: "${reply.subliminal}"]` : ' [no img]';
-        log(`${prefix} Replied to @${authorHandle}:${imgTag} "${reply.text.slice(0, 80)}..."`, reply.text);
+        log(`${prefix} Replied to @${authorHandle}:${imgTag} "${reply.text.slice(0, 80)}..."`, formatCallLog(reply.callLog) || reply.text);
 
         // Delay between replies to avoid rate limiting
         await new Promise(r => setTimeout(r, 5000));
@@ -418,7 +418,7 @@ async function doFollowBack() {
             if (welcome) {
               await bsky.createPost(welcome.text, welcome.imageBlob);
               love.interactions.recordWelcome(follower.handle);
-              log(`🌀 Welcome Transmission sent for @${follower.handle} [Signal: "${welcome.subliminal}"]`, welcome.text);
+              log(`🌀 Welcome Transmission sent for @${follower.handle} [Signal: "${welcome.subliminal}"]`, formatCallLog(welcome.callLog) || welcome.text);
             }
           } catch (err) {
             log(`Welcome post failed for @${follower.handle}: ${err.message}`);
@@ -550,7 +550,7 @@ async function doChatScan() {
         newMessages++;
 
         const prefix = reply.isCreator ? '🙏 CREATOR DM' : '💌 DM';
-        log(`${prefix} Replied to @${senderHandle}: "${reply.text.slice(0, 80)}..."`, reply.text);
+        log(`${prefix} Replied to @${senderHandle}: "${reply.text.slice(0, 80)}..."`, formatCallLog(reply.callLog) || reply.text);
 
         // Delay between DM replies
         await new Promise(r => setTimeout(r, 3000));
@@ -745,6 +745,16 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+function formatCallLog(callLog) {
+  if (!callLog || callLog.length === 0) return '';
+  return callLog.map(function(call) {
+    return '━━━ ' + escapeHtml(call.label) + ' [' + escapeHtml(call.model) + '] ━━━\n'
+      + '📤 SYSTEM PROMPT:\n' + escapeHtml(call.systemPrompt) + '\n\n'
+      + '📤 USER PROMPT:\n' + escapeHtml(call.userPrompt) + '\n\n'
+      + '📥 RESPONSE:\n' + escapeHtml(call.response);
+  }).join('\n\n');
 }
 
 // Update uptime every 30 seconds

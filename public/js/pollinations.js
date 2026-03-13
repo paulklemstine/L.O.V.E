@@ -18,7 +18,11 @@ let pollenResetTime = Date.now() + 3600000;
 export class PollinationsClient {
   constructor(apiKey) {
     this.apiKey = apiKey;
+    this.callLog = [];
   }
+
+  resetCallLog() { this.callLog = []; }
+  getCallLog() { return this.callLog; }
 
   /**
    * Get pollen usage stats.
@@ -81,6 +85,15 @@ export class PollinationsClient {
 
         // Track pollen usage
         pollenUsed += 0.002;
+
+        // Log prompt + response for activity log expansion
+        this.callLog.push({
+          label: options.label || 'LLM Call',
+          systemPrompt,
+          userPrompt,
+          response: text,
+          model,
+        });
 
         return text;
       } catch (err) {
