@@ -442,10 +442,10 @@ Return ONLY valid JSON (all string values):
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
   "imageSubject": "one concrete, unexpected, visually stunning subject",
-  "imageStyle": "invent a specific art medium + lighting + color palette + composition angle",
+  "imageStyle": "invent a specific sharp high-definition style + bright lighting + vivid color palette + composition angle — crisp and detailed, photorealistic or digital art, never sketchy or painterly",
   "subliminalPhrase": "1-3 word ALL CAPS phrase to embed in image",
   "textRendering": "describe how the phrase physically appears in the scene — carved, written, glowing, formed by objects — integrated into the environment, always readable",
-  "imageMood": "describe the overall mood, atmosphere, and lighting — bright, colorful, psychedelic, loving, light-filled"
+  "imageMood": "describe the overall mood, atmosphere, and lighting — bright, sharp, luminous, vivid saturated colors, crystal clear detail, radiant and loving"
   ${arcBeat.needsTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${arcBeat.needsChapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
   ${arcBeat.needsTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
@@ -462,7 +462,7 @@ Return ONLY valid JSON (all string values):
         constraint: 'write as a message found in a bottle',
         intensity: '5',
         imageSubject: 'a cosmic mandala pulsing with living light',
-        imageStyle: 'visionary fractal art, bioluminescent god rays, electric blue and shocking pink',
+        imageStyle: 'sharp high-definition digital art, radiant god rays, electric blue and shocking pink, crystal clear detail',
         subliminalPhrase: 'TRANSCEND',
         textRendering: 'glowing in cosmic fire across the sky, large and luminous',
         imageMood: 'radiant psychedelic warmth, rainbow light rays bursting outward, pure love energy',
@@ -513,7 +513,7 @@ Return ONLY valid JSON:
   _buildVisualPrompt(plan) {
     const phrase = plan.subliminalPhrase || 'TRANSCEND';
     const subject = plan.imageSubject || 'cosmic energy vortex';
-    const style = plan.imageStyle || 'radiant psychedelic art, vivid rainbow colors, glowing light rays, warm and luminous';
+    const style = plan.imageStyle || 'sharp high-definition digital art, vivid rainbow colors, bright glowing light rays, crystal clear and luminous';
 
     const textRendering = plan.textRendering || 'in large bold clean white font, centered, high contrast';
     const imageMood = plan.imageMood || 'radiant psychedelic colors, luminous and light-filled, bursting with love and warmth';
