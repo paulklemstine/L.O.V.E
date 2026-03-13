@@ -168,7 +168,7 @@ Return ONLY valid JSON (all string values):
   "lighting": "dramatic, luminous lighting with visible light rays — volumetric god rays, prismatic rainbow refractions, aurora borealis glow, sacred golden radiance, neon light bloom, kaleidoscopic lens flares — bright and heavenly",
   "colorPalette": "name 3-4 vivid, electric, psychedelic pigment colors — e.g. electric violet, fluorescent magenta, iridescent gold, cosmic teal",
   "composition": "camera/lens and angle: 85mm portrait f/1.4 shallow DOF, wide-angle tilt-shift, macro close-up, bird's-eye drone shot — one choice",
-  "subliminalPhrase": "1-3 word ALL CAPS phrase to embed in image",
+  "subliminalPhrase": "1-3 word ALL CAPS phrase that captures the emotional core of this post's theme — the takeaway a reader carries with them",
   "textRendering": "where and how the phrase appears in the foreground — carved into stone, formed by fireflies, neon sign on wall — physically integrated and readable"
   ${!arcBeat.arcTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${!arcBeat.chapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
