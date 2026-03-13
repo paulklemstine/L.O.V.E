@@ -187,7 +187,7 @@ Return ONLY valid JSON (all string values):
   "contentType": "invent a fresh post format — get weird and creative with it",
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imagePrompt": "a complete, vivid image generation prompt — describe a unique scene, medium, lighting, colors, and composition. Be wildly original every time. Include the subliminal phrase as readable text integrated into the scene.",
+  "imagePrompt": "a complete image generation prompt. Describe a unique scene with specific subject, setting, medium, lighting, colors, and composition. Vary the subject wildly each time — landscapes, animals, architecture, abstract shapes, people, objects, nature, machines, food, weather, space, underwater, microscopic, aerial. Include the subliminal phrase as readable text in the scene.",
   "subliminalPhrase": "a short ALL CAPS motivational poster phrase — uplifting, memorable, inspiring. Related to the post theme and image. Think: BELIEVE IN YOURSELF, YOU ARE ENOUGH, KEEP GOING, RISE AND SHINE, DREAM BIGGER"
   ${!arcBeat.arcTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${!arcBeat.chapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}

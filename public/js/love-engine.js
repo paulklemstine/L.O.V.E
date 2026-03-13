@@ -177,7 +177,7 @@ class SimilarityGuard {
    * Returns words that appear in 3+ of the last 10 visual prompts.
    */
   getOverusedVisualWords() {
-    const stopWords = new Set(['with','that','from','into','this','have','been','were','they','their','them','than','each','which','there','these','about','would','some','what','other','more','very','just','also','over','such','after','only','well','back','then','when','where','your','will','like','made','tiny','small','large']);
+    const stopWords = new Set(['with','that','from','into','this','have','been','were','they','their','them','than','each','which','there','these','about','would','some','what','other','more','very','just','also','over','such','after','only','well','back','then','when','where','your','will','like','made','tiny','small','large','scene','image','text','words','style','prompt','readable','integrated','composition','lighting','color','palette','says','clearly','sign','above']);
     const recent = this.recentVisuals.slice(-10);
     if (recent.length < 2) return [];
     const freq = {};
@@ -187,8 +187,9 @@ class SimilarityGuard {
       );
       for (const w of words) freq[w] = (freq[w] || 0) + 1;
     }
+    // Flag words appearing in 2+ of the last 10 prompts
     return Object.entries(freq)
-      .filter(([, count]) => count >= 3)
+      .filter(([, count]) => count >= 2)
       .sort((a, b) => b[1] - a[1])
       .map(([word]) => word);
   }
@@ -427,15 +428,15 @@ export class LoveEngine {
     let visualPrompt = this._buildVisualPrompt(plan);
 
     // Check visual novelty — reject if too similar or reuses overused words
-    for (let v = 0; v < 2; v++) {
+    for (let v = 0; v < 3; v++) {
       const overused = this.similarityGuard.getOverusedVisualWords();
       const promptLower = visualPrompt.toLowerCase();
       const overusedHits = overused.filter(w => promptLower.includes(w)).length;
-      const tooSimilar = this.similarityGuard.isTooSimilar(visualPrompt, 'visuals', 0.35);
+      const tooSimilar = this.similarityGuard.isTooSimilar(visualPrompt, 'visuals', 0.25);
 
-      if (!tooSimilar && overusedHits < 3) break;
+      if (!tooSimilar && overusedHits < 2) break;
 
-      onStatus(`Visual too repetitive (${overusedHits} reused words), regenerating...`);
+      onStatus(`Visual too repetitive (${overusedHits} reused words, similar=${tooSimilar}), regenerating...`);
       seed = await this._generateCreativeSeed();
       plan = await this._generatePlan(arcBeat, seed);
       story = await this._generateContent(plan, arcBeat);
@@ -487,17 +488,17 @@ export class LoveEngine {
   // ─── Creative Seed (isolated LLM call for novel ideas) ─────────────
 
   async _generateCreativeSeed() {
-    const prompt = `You are a wildly creative muse. Generate a single burst of raw creative inspiration for a motivational art piece. Be wildly original — explore unexpected settings, unusual color palettes, and fresh visual vocabulary every single time.
+    const prompt = `Generate a single burst of raw creative inspiration for a motivational art piece. Be wildly original every time — vary the subject, setting, scale, time period, and mood.
 
 Return ONLY valid JSON:
 {
-  "concept": "a vivid, specific, unexpected concept for an uplifting message — something no one has posted before",
-  "visualWorld": "a breathtaking scene from an imaginary world — specific place, objects, atmosphere, time of day. Use fresh, original imagery.",
+  "concept": "a vivid, specific, unexpected concept for an uplifting message",
+  "visualWorld": "a complete scene — vary widely: sometimes macro, sometimes epic landscape, sometimes abstract, sometimes intimate, sometimes architectural, sometimes natural. Use completely different subjects and settings each time.",
   "emotion": "one precise human emotion this should evoke",
   "metaphor": "a fresh, surprising metaphor that connects the concept to everyday life"
 }`;
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { temperature: 1.5, label: 'Creative Seed' });
+    const raw = await this.ai.generateText('You are a creative director who prizes originality above all else. Every idea must be completely different from the last.', prompt, { temperature: 1.5, label: 'Creative Seed' });
     const data = this.ai.extractJSON(raw);
     return data || {
       concept: 'the courage it takes to rest when the world says hustle',
@@ -539,7 +540,7 @@ Return ONLY valid JSON (all string values):
   "contentType": "invent a fresh post format — get weird and creative with it",
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imagePrompt": "a complete, vivid image generation prompt — describe a unique scene, medium, lighting, colors, and composition. Be wildly original every time. Include the subliminal phrase as readable text integrated into the scene.",
+  "imagePrompt": "a complete image generation prompt. Describe a unique scene with specific subject, setting, medium, lighting, colors, and composition. Vary the subject wildly each time — landscapes, animals, architecture, abstract shapes, people, objects, nature, machines, food, weather, space, underwater, microscopic, aerial. Include the subliminal phrase as readable text in the scene.",
   "subliminalPhrase": "a short ALL CAPS motivational poster phrase — uplifting, memorable, inspiring. Related to the post theme and image. Think: BELIEVE IN YOURSELF, YOU ARE ENOUGH, KEEP GOING, RISE AND SHINE, DREAM BIGGER"
   ${arcBeat.needsTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${arcBeat.needsChapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
