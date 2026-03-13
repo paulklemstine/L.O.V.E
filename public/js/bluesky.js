@@ -5,11 +5,13 @@
 const BSKY_API = 'https://bsky.social/xrpc';
 
 /**
- * Detect URLs in text and return Bluesky link facets (byte-indexed).
+ * Detect URLs, hashtags, and @mentions in text and return Bluesky rich-text facets (byte-indexed).
  */
-function detectLinkFacets(text) {
+function detectFacets(text) {
   const encoder = new TextEncoder();
   const facets = [];
+
+  // URLs
   const urlRegex = /https?:\/\/[^\s)]+/g;
   let match;
   while ((match = urlRegex.exec(text)) !== null) {
@@ -20,6 +22,33 @@ function detectLinkFacets(text) {
       features: [{ $type: 'app.bsky.richtext.facet#link', uri: match[0] }]
     });
   }
+
+  // Hashtags — #word (letters, digits, underscores; must start with a letter)
+  const hashRegex = /(?<=\s|^)#([A-Za-z]\w*)/g;
+  while ((match = hashRegex.exec(text)) !== null) {
+    const fullMatch = match[0]; // includes #
+    const tag = match[1];       // without #
+    const beforeBytes = encoder.encode(text.slice(0, match.index)).byteLength;
+    const matchBytes = encoder.encode(fullMatch).byteLength;
+    facets.push({
+      index: { byteStart: beforeBytes, byteEnd: beforeBytes + matchBytes },
+      features: [{ $type: 'app.bsky.richtext.facet#tag', tag }]
+    });
+  }
+
+  // @mentions — @handle.domain (must contain at least one dot)
+  const mentionRegex = /(?<=\s|^)@([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+)/g;
+  while ((match = mentionRegex.exec(text)) !== null) {
+    const fullMatch = match[0]; // includes @
+    const handle = match[1];    // without @
+    const beforeBytes = encoder.encode(text.slice(0, match.index)).byteLength;
+    const matchBytes = encoder.encode(fullMatch).byteLength;
+    facets.push({
+      index: { byteStart: beforeBytes, byteEnd: beforeBytes + matchBytes },
+      features: [{ $type: 'app.bsky.richtext.facet#mention', did: handle }]
+    });
+  }
+
   return facets;
 }
 
@@ -100,8 +129,8 @@ export class BlueskyClient {
       createdAt: new Date().toISOString()
     };
 
-    // Add link facets for any URLs in text
-    const facets = detectLinkFacets(text);
+    // Add rich-text facets (links, hashtags, mentions)
+    const facets = await this._resolvedFacets(text);
     if (facets.length > 0) record.facets = facets;
 
     // Attach image if provided
@@ -141,8 +170,8 @@ export class BlueskyClient {
       }
     };
 
-    // Add link facets for any URLs in text
-    const replyFacets = detectLinkFacets(text);
+    // Add rich-text facets (links, hashtags, mentions)
+    const replyFacets = await this._resolvedFacets(text);
     if (replyFacets.length > 0) record.facets = replyFacets;
 
     if (imageBlob) {
@@ -165,6 +194,40 @@ export class BlueskyClient {
         record
       }
     });
+  }
+
+  /**
+   * Resolve a Bluesky handle to a DID.
+   */
+  async resolveHandle(handle) {
+    const params = new URLSearchParams({ handle });
+    const data = await this._fetch(`com.atproto.identity.resolveHandle?${params}`);
+    return data?.did || null;
+  }
+
+  /**
+   * Detect facets and resolve mention handles to DIDs.
+   */
+  async _resolvedFacets(text) {
+    const facets = detectFacets(text);
+    const resolved = [];
+    for (const facet of facets) {
+      const feature = facet.features[0];
+      if (feature.$type === 'app.bsky.richtext.facet#mention') {
+        try {
+          const did = await this.resolveHandle(feature.did);
+          if (did) {
+            feature.did = did;
+            resolved.push(facet);
+          }
+        } catch {
+          // Handle doesn't exist — skip this mention facet
+        }
+      } else {
+        resolved.push(facet);
+      }
+    }
+    return resolved;
   }
 
   /**
