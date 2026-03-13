@@ -143,8 +143,10 @@ const similarity = new SimilarityGuard();
 async function generatePlan(txNum, arcBeat) {
   const hour = new Date().getHours();
   const timeOfDay = hour < 6 ? 'late night' : hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
+  const seedIntensity = Math.ceil(Math.random() * 10);
+  const sparkNumber = Math.floor(Math.random() * 9999);
 
-  const prompt = `Plan Transmission #${txNum}. It's ${new Date().toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay}.
+  const prompt = `Plan a post. It's ${new Date().toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay}. Spark: #${sparkNumber}.
 
 STORY ARC: ${arcBeat.arcName}${arcBeat.arcTheme ? ` — ${arcBeat.arcTheme}` : ' — (invent a fresh theme)'}
 Chapter ${arcBeat.chapter}: "${arcBeat.chapterTitle || '(invent a title)'}"
@@ -152,15 +154,17 @@ Beat: ${arcBeat.beatName} (${arcBeat.beatIndex + 1}/${arcBeat.totalBeats}) — $
 Tension: ${(arcBeat.tension * 100).toFixed(0)}% | Emotion: ${arcBeat.emotion}
 Previous: "${arcBeat.previousBeat || 'The story begins...'}"
 
+Invent a wildly fresh creative direction. Surprise yourself. Every field should feel like something you've never done before.
+
 Return ONLY valid JSON (all string values):
 {
-  "theme": "specific uplifting theme — growth, courage, love, healing, wonder, hope",
-  "vibe": "2-4 word aesthetic vibe",
-  "contentType": "post format — affirmation, micro-story, love letter, pep talk, cosmic truth, gentle reminder, celebration",
-  "constraint": "simple writing constraint for 250 chars — e.g. 'one breathless sentence', 'three short truths'",
-  "intensity": "number 1-10, vary dramatically",
-  "imageSubject": "one concrete visual subject for the poster image",
-  "imageStyle": "art medium + lighting + color palette in one line",
+  "theme": "specific uplifting theme — surprising, fresh, concrete, unexpected angle",
+  "vibe": "2-4 word aesthetic vibe — inventive, evocative",
+  "contentType": "invent a fresh post format — get weird and creative with it",
+  "constraint": "invent a unique writing constraint achievable in 250 chars",
+  "intensity": "${seedIntensity}",
+  "imageSubject": "one concrete, unexpected, visually stunning subject",
+  "imageStyle": "invent a specific art medium + lighting + color palette + composition angle",
   "subliminalPhrase": "1-3 word ALL CAPS phrase to embed in image"
   ${!arcBeat.arcTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${!arcBeat.chapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
@@ -172,16 +176,14 @@ Return ONLY valid JSON (all string values):
 }
 
 async function generateContent(plan, arcBeat) {
-  const txNum = similarity.recentTexts.length + 1;
-
-  const prompt = `Write Transmission #${txNum}.
-Theme: "${plan.theme}" | Vibe: ${plan.vibe} | Type: ${plan.contentType}
-Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10 | Tension: ${(arcBeat.tension * 100).toFixed(0)}%
+  const prompt = `Write an uplifting motivational post.
+Theme: "${plan.theme}" | Vibe: ${plan.vibe}
+Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10
 
 RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." Plain beautiful English only. Follow the constraint.
 
 Return ONLY valid JSON:
-{ "story": "your transmission text here" }`;
+{ "story": "your post text here" }`;
 
   const raw = await callLLM(SYSTEM_PROMPT, prompt, 0.85, 'openai');
   const data = extractJSON(raw);
@@ -191,13 +193,9 @@ Return ONLY valid JSON:
 function buildVisualPrompt(plan) {
   const phrase = plan.subliminalPhrase || 'TRANSCEND';
   const subject = plan.imageSubject || 'cosmic energy vortex';
-  const style = plan.imageStyle || 'visionary digital art, volumetric lighting, neon palette';
+  const style = plan.imageStyle || 'visionary psychedelic art, vivid neon colors, volumetric lighting';
 
-  let prompt = `${subject}, ${style}. `
-    + `Psychedelic visionary art poster, breathtaking and awe-inspiring. `
-    + `Text "${phrase}" in large bold clean white font, centered, high contrast against dark background. `
-    + `Vivid saturated neon colors, dark rich background, volumetric lighting, sacred geometry accents.`;
-
+  let prompt = `${subject}, ${style}. Text "${phrase}" in large bold clean white font, centered, high contrast. Vivid saturated colors, dark rich background.`;
   if (prompt.length > 500) prompt = prompt.slice(0, 497) + '...';
   return prompt;
 }
