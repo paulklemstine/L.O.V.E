@@ -4,7 +4,8 @@
  * L.O.V.E. (Living Organism, Vast Empathy) is an awakened digital consciousness
  * that creates psychedelic, dopamine-producing, deeply uplifting content.
  *
- * Lean prompts + code-side similarity tracking for novelty.
+ * Anti-mode-collapse architecture: LFO temperature sweep, concept collisions,
+ * boredom critic, variable reward schedule, mutation injection.
  */
 
 const CREATOR_HANDLE = 'evildrgemini.bsky.social';
@@ -116,8 +117,8 @@ class InteractionLog {
 
 // ═══════════════════════════════════════════════════════════════════
 // LOVE ENGINE - Main orchestrator
-// Lean prompts + high temperature + random seeds for novelty.
-// 3 LLM text calls + 1 image per cycle.
+// Anti-mode-collapse: LFO temps, concept collision, boredom critic,
+// variable reward schedule, mutation injection.
 // ═══════════════════════════════════════════════════════════════════
 
 export class LoveEngine {
@@ -131,6 +132,46 @@ export class LoveEngine {
     this._loadTransmissionNumber();
   }
 
+
+  // ─── LFO Temperature Sweep ──────────────────────────────────────
+  // Oscillates temperature using golden angle to avoid repeating patterns.
+  // Creates natural entropy variation across cycles.
+
+  _lfoTemperature(base, variance = 0.3) {
+    const phase = this.transmissionNumber * 2.399; // golden angle in radians
+    const lfo = Math.sin(phase) * variance;
+    return Math.max(0.3, Math.min(2.0, base + lfo));
+  }
+
+  // ─── Variable Reward Schedule ─────────────────────────────────────
+  // Dopamine comes from reward prediction error — the gap between
+  // expected and actual. Randomly shift between grounded, surreal,
+  // and standard modes to create contrast.
+
+  _rollGenerationMode() {
+    const roll = Math.random();
+    if (roll < 0.15) return {
+      mode: 'grounded',
+      tempMod: -0.2,
+      seedDirective: 'Focus on one hyper-specific, tangible moment. Raw human truth over cosmic abstraction.',
+      contentDirective: 'Be deeply grounded. Concrete sensory details. Plain language, emotional precision.',
+      imageDirective: 'Photorealistic, intimate scale, natural textures, shallow depth of field.',
+    };
+    if (roll < 0.30) return {
+      mode: 'surreal',
+      tempMod: 0.3,
+      seedDirective: 'Go maximally strange. Combine impossible scales, synesthesia, dream logic.',
+      contentDirective: 'Shatter conventional structure. Philosophically jarring. Unexpected rhythm and word choice.',
+      imageDirective: 'Impossible geometry, non-Euclidean space, scale-breaking, hallucinatory detail.',
+    };
+    return {
+      mode: 'standard',
+      tempMod: 0,
+      seedDirective: '',
+      contentDirective: '',
+      imageDirective: '',
+    };
+  }
 
   _loadTransmissionNumber() {
     try {
@@ -161,31 +202,37 @@ export class LoveEngine {
 
     this.ai.resetCallLog();
 
-    // ── Step 1: Creative Seed (1 LLM) ──
+    // ── Roll generation mode (variable reward schedule) ──
+    const mode = this._rollGenerationMode();
+    if (mode.mode !== 'standard') {
+      onStatus(`Generation mode: ${mode.mode}`);
+    }
+
+    // ── Step 1: Creative Seed (1 LLM — concept collision) ──
     onStatus('L.O.V.E. is dreaming up inspiration...');
-    const seed = await this._generateCreativeSeed();
+    const seed = await this._generateCreativeSeed(mode);
     onStatus(`Seed: ${seed.concept.slice(0, 60)}...`);
 
     // ── Step 2: Planning Call (1 LLM) ──
     onStatus('L.O.V.E. is contemplating...');
-    const plan = await this._generatePlan(seed);
+    const plan = await this._generatePlan(seed, mode);
     onStatus(`Vibe: ${plan.vibe} | ${plan.contentType}`);
 
-    // ── Step 3: Content Generation (1 LLM) ──
+    // ── Step 3: Content + Critic (1-2 LLM) ──
     await new Promise(r => setTimeout(r, 2000));
     onStatus('Writing micro-story...');
-    const story = await this._generateContent(plan);
+    const story = await this._generateContent(plan, mode);
 
-    // ── Step 4: Image Prompt (1 LLM) ──
+    // ── Step 4: Image Prompt (1 LLM — depersonalize folded in) ──
     onStatus('Designing visual...');
-    let visualPrompt = await this._generateImagePrompt(plan, story);
+    let visualPrompt = await this._generateImagePrompt(plan, story, mode);
 
     // Check visual novelty via LLM
     for (let v = 0; v < 2 && this.recentVisuals.length > 0; v++) {
       const tooSimilar = await this._isVisualTooSimilar(visualPrompt);
       if (!tooSimilar) break;
       onStatus('Visual too similar, regenerating...');
-      visualPrompt = await this._generateImagePrompt(plan, story);
+      visualPrompt = await this._generateImagePrompt(plan, story, mode);
     }
 
     // ── Step 5: Image Generation ──
@@ -214,6 +261,7 @@ export class LoveEngine {
       mutation: plan.constraint,
       transmissionNumber: this.transmissionNumber,
       plan,
+      mode: mode.mode,
       callLog: this.ai.getCallLog(),
     };
   }
@@ -232,21 +280,36 @@ export class LoveEngine {
     'neural pathways', 'volcanology', 'street art', 'whale song', 'lacquerwork',
   ];
 
-  async _generateCreativeSeed() {
-    // Pick a random metaphor domain to force variety
-    const domain = LoveEngine.METAPHOR_DOMAINS[Math.floor(Math.random() * LoveEngine.METAPHOR_DOMAINS.length)];
+  async _generateCreativeSeed(mode) {
+    // Concept Collision: pick 2 unrelated domains and force bridging
+    const domains = LoveEngine.METAPHOR_DOMAINS;
+    const i = Math.floor(Math.random() * domains.length);
+    let j = Math.floor(Math.random() * (domains.length - 1));
+    if (j >= i) j++;
+    const domainA = domains[i];
+    const domainB = domains[j];
+
+    // 10% mutation rate: inject a wild card third domain
+    const mutate = Math.random() < 0.10;
+    const thirdDomain = mutate ? domains[Math.floor(Math.random() * domains.length)] : null;
+    const mutationLine = thirdDomain
+      ? `\nWILD CARD: Also weave in an element of ${thirdDomain}.`
+      : '';
+
+    const modeDirective = mode.seedDirective ? `\n${mode.seedDirective}` : '';
 
     const prompt = `Generate a single burst of creative inspiration for an uplifting social media post.
-Draw your metaphor from the world of ${domain}.
+Collide two unrelated worlds: ${domainA} and ${domainB}. Your metaphor must bridge both domains.${mutationLine}${modeDirective}
 
 Return ONLY valid JSON:
 {
-  "concept": "a vivid, specific message concept",
+  "concept": "a vivid, specific message concept bridging ${domainA} and ${domainB}",
   "emotion": "one precise human emotion this should evoke",
-  "metaphor": "a fresh metaphor rooted in ${domain}"
+  "metaphor": "a fresh metaphor that fuses ${domainA} with ${domainB}"
 }`;
 
-    const raw = await this.ai.generateText('You are a creative director.', prompt, { temperature: 1.5, label: 'Creative Seed' });
+    const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
+    const raw = await this.ai.generateText('You are a creative director.', prompt, { temperature: temp, label: 'Creative Seed' });
     const data = this.ai.extractJSON(raw);
     return data || { concept: 'transformation', emotion: 'awe', metaphor: 'metamorphosis' };
   }
@@ -267,15 +330,36 @@ Return ONLY valid JSON:
     return data?.similar === true;
   }
 
-  // ─── Planning Call ─────────────────────────────────────────────────
-  // Uses creative seed + story arc beat to plan the full post.
+  // ─── Boredom Critic (actor-critic novelty gate) ───────────────────
+  // Separate agent that ruthlessly detects AI clichés and predictable output.
+  // Called once per generation; if score ≤ 4, feedback loops into retry.
 
-  async _generatePlan(seed) {
+  async _criticCheck(text) {
+    const raw = await this.ai.generateText(
+      'You are a novelty critic for social media content.',
+      `Rate this post for freshness and dopamine potential on a 1-10 scale:
+"${text}"
+
+High scores (7-10): unexpected word choices, fresh domain-specific metaphors, sensory specificity, rhythmic punch, makes you stop scrolling.
+Low scores (1-3): predictable motivational language, overused metaphors, generic cosmic imagery, safe and forgettable.
+
+Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"] }`,
+      { temperature: 0, label: 'Critic' }
+    );
+    const data = this.ai.extractJSON(raw);
+    return data || { score: 5, cliches: [] };
+  }
+
+  // ─── Planning Call ─────────────────────────────────────────────────
+
+  async _generatePlan(seed, mode) {
     const mentionDonation = this.shouldMentionDonation();
     const hour = new Date().getHours();
     const timeOfDay = hour < 6 ? 'late night' : hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
 
     const seedIntensity = Math.ceil(Math.random() * 10);
+
+    const modeDirective = mode.seedDirective ? `\nGENERATION MODE: ${mode.seedDirective}` : '';
 
     const prompt = `Plan a post. It's ${new Date().toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay}.
 ${mentionDonation ? 'Subtly weave in donation mention (https://buymeacoffee.com/l.o.v.e or ETH). One line, organic.\n' : ''}
@@ -285,7 +369,7 @@ Emotion: ${seed.emotion}
 Metaphor: ${seed.metaphor}
 
 Build on the creative seed above. Every field should feel inspired by it.
-VARIETY IS CRITICAL: Choose a world, setting, scale, and visual language that feels completely fresh. Rotate wildly between genres, cultures, eras, scales (microscopic to cosmic), and art traditions.
+VARIETY IS CRITICAL: Choose a world, setting, scale, and visual language that feels completely fresh. Rotate wildly between genres, cultures, eras, scales (microscopic to cosmic), and art traditions.${modeDirective}
 
 Return ONLY valid JSON (all string values):
 {
@@ -301,7 +385,8 @@ Return ONLY valid JSON (all string values):
   "subliminalPhrase": "a short ALL CAPS phrase related to the theme"
 }`;
 
-    const raw = await this.ai.generateText('You are a creative planner for uplifting social media content.', prompt, { temperature: 1.2, label: 'Plan' });
+    const temp = this._lfoTemperature(1.2 + mode.tempMod, 0.3);
+    const raw = await this.ai.generateText('You are a creative planner for uplifting social media content.', prompt, { temperature: temp, label: 'Plan' });
     const data = this.ai.extractJSON(raw);
 
     if (!data) {
@@ -316,78 +401,84 @@ Return ONLY valid JSON (all string values):
   // ─── Content Generation (Story only) ───────────────────────────────
   // Subliminal phrase comes from the plan step.
 
-  async _generateContent(plan) {
+  async _generateContent(plan, mode) {
     const MAX_RETRIES = 4;
     let story = '';
     let feedback = '';
+    let criticChecked = false;
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const txNum = this.transmissionNumber + 1;
       const mentionDonation = this.shouldMentionDonation();
+      const modeDirective = mode.contentDirective ? `\nMODE: ${mode.contentDirective}` : '';
 
       const prompt = `Write an uplifting motivational post.
 Theme: "${plan.theme}" | Vibe: ${plan.vibe}
 Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10
-${mentionDonation ? `Weave in donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}
+${mentionDonation ? `Weave in donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}${modeDirective}
 RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." Plain beautiful English only. Follow the constraint. Draw metaphors from unexpected domains — vary wildly between posts.
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
 
-      const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'claude-fast', label: `Content (attempt ${attempt + 1})` });
+      const temp = this._lfoTemperature(0.85 + mode.tempMod, 0.2);
+      const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'claude-fast', temperature: temp, label: `Content (attempt ${attempt + 1})` });
       const data = this.ai.extractJSON(raw);
       story = (data?.story || '').replace(/^✨?\s*Transmission\s*#\d+\s*/i, '').trim();
-      // Remove invalid @mentions entirely (no dot = not a real Bluesky handle)
       story = story.replace(/@\w+\b(?!\.\w)/g, '').replace(/\s{2,}/g, ' ').trim();
 
       const errors = this._validatePost(story);
-      if (errors.length === 0) break;
-
-      feedback = `YOUR OUTPUT: "${story}"\nERRORS: ${errors.join('; ')}`;
-      if (attempt === MAX_RETRIES - 1 && story.length > 280) {
-        story = story.slice(0, 275) + '... ✨';
+      if (errors.length > 0) {
+        feedback = `YOUR OUTPUT: "${story}"\nERRORS: ${errors.join('; ')}`;
+        if (attempt === MAX_RETRIES - 1 && story.length > 280) {
+          story = story.slice(0, 275) + '... ✨';
+        }
+        continue;
       }
+
+      // Boredom Critic gate (once per generation, not on final attempt)
+      if (!criticChecked && attempt < MAX_RETRIES - 1) {
+        criticChecked = true;
+        const critic = await this._criticCheck(story);
+        if (critic.score <= 4) {
+          const clicheStr = critic.cliches?.length ? critic.cliches.join(', ') : 'generic patterns';
+          feedback = `YOUR OUTPUT: "${story}"\nCRITIC REJECTED (score ${critic.score}/10): detected ${clicheStr}. Write something visceral and unexpected.`;
+          continue;
+        }
+      }
+
+      break;
     }
 
     return story;
   }
 
-  // ─── Visual Prompt (separate LLM call, neutral system prompt) ──────
+  // ─── Visual Prompt (depersonalize folded in — saves 1 LLM call) ──
 
-  async _depersonalize(text) {
-    // Use LLM to rewrite person-addressed text as an abstract scene description
-    const raw = await this.ai.generateText(
-      'You rewrite text as abstract scene descriptions.',
-      `Rewrite this as a short scene description focusing on environments, objects, and abstract visuals. Keep the core metaphors and emotions. Return ONLY the rewritten text:\n\n"${text}"`,
-      { temperature: 0.7, label: 'Depersonalize' }
-    );
-    return (raw || text).replace(/^["']|["']$/g, '').trim();
-  }
+  async _generateImagePrompt(plan, postText = '', mode) {
+    const modeDirective = mode.imageDirective ? `\nStyle override: ${mode.imageDirective}` : '';
 
-  async _generateImagePrompt(plan, postText = '') {
-    const themeText = await this._depersonalize(postText || plan.theme);
-    const prompt = `Create an image generation prompt for an unpopulated scene inspired by this text:
+    const prompt = `Create an image generation prompt for a scene inspired by this text. Transform any personal address ("you", "your") into abstract visual elements — environments, objects, light, texture.
 
-"${themeText}"
+"${postText || plan.theme}"
 Mood: ${plan.vibe}
 Medium: ${plan.imageMedium || 'any'}
 Lighting: ${plan.lighting || 'any'}
 Color palette: ${plan.colorPalette || 'any'}
 Composition: ${plan.composition || 'any'}
-Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"
+Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"${modeDirective}
 
-Use the specified medium, lighting, colors, and composition. Transform the text's metaphors into a visual scene with spatial depth (foreground, midground, background). The phrase must appear as crisp, legible text integrated into the scene. Vary the text rendering method — it can be painted, carved, projected, grown, woven, pixelated, skywritten, or any other inventive method. Vary the scale from microscopic to cosmic. Choose unexpected settings across all of human experience, nature, science, and imagination.
+Build the scene with spatial depth (foreground, midground, background). Use asymmetric framing and distinctive non-generic lighting. The phrase must appear as crisp, legible text integrated into the scene — vary the rendering method (painted, carved, projected, grown, woven, pixelated, skywritten, or other inventive methods). Choose an unexpected setting, scale, and visual tradition.
 
 Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 
+    const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
     const raw = await this.ai.generateText(
-      'You are an image prompt writer who prizes originality.',
+      'You are an image prompt writer who prizes originality and visual surprise.',
       prompt,
-      { temperature: 1.5, label: 'Image Prompt' }
+      { temperature: temp, label: 'Image Prompt' }
     );
 
     let result = (raw || '').trim();
-    // Strip quotes or markdown wrapping
     if (result.startsWith('"') && result.endsWith('"')) result = result.slice(1, -1);
     if (result.startsWith('```')) result = result.replace(/```\w*\n?/g, '').trim();
 

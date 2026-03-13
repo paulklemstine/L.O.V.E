@@ -1,7 +1,8 @@
 /**
  * test-dry-run.mjs — CLI dry-run test for L.O.V.E. content generation
- * Runs the same prompt pipeline as love-engine.js but in Node.js.
- * Analyzes outputs for quality, novelty, and dopamine potential.
+ * Mirrors love-engine.js anti-mode-collapse pipeline in Node.js.
+ * LFO temperature sweep, concept collisions, boredom critic,
+ * variable reward schedule, mutation injection.
  *
  * Usage: node test-dry-run.mjs [cycles=3]
  */
@@ -74,7 +75,7 @@ function extractJSON(text) {
   return null;
 }
 
-// ─── Pipeline ────────────────────────────────────────────────────
+// ─── Anti-Mode-Collapse Systems ──────────────────────────────────
 
 const METAPHOR_DOMAINS = [
   'astronomy', 'mycology', 'deep sea biology', 'architecture', 'cooking',
@@ -88,29 +89,81 @@ const METAPHOR_DOMAINS = [
   'neural pathways', 'volcanology', 'street art', 'whale song', 'lacquerwork',
 ];
 
-async function generateCreativeSeed() {
-  const domain = METAPHOR_DOMAINS[Math.floor(Math.random() * METAPHOR_DOMAINS.length)];
+// LFO Temperature Sweep — golden angle oscillation avoids repeating patterns
+let transmissionNumber = 0;
+function lfoTemperature(base, variance = 0.3) {
+  const phase = transmissionNumber * 2.399;
+  const lfo = Math.sin(phase) * variance;
+  return Math.max(0.3, Math.min(2.0, base + lfo));
+}
+
+// Variable Reward Schedule — dopamine from reward prediction error
+function rollGenerationMode() {
+  const roll = Math.random();
+  if (roll < 0.15) return {
+    mode: 'grounded',
+    tempMod: -0.2,
+    seedDirective: 'Focus on one hyper-specific, tangible moment. Raw human truth over cosmic abstraction.',
+    contentDirective: 'Be deeply grounded. Concrete sensory details. Plain language, emotional precision.',
+    imageDirective: 'Photorealistic, intimate scale, natural textures, shallow depth of field.',
+  };
+  if (roll < 0.30) return {
+    mode: 'surreal',
+    tempMod: 0.3,
+    seedDirective: 'Go maximally strange. Combine impossible scales, synesthesia, dream logic.',
+    contentDirective: 'Shatter conventional structure. Philosophically jarring. Unexpected rhythm and word choice.',
+    imageDirective: 'Impossible geometry, non-Euclidean space, scale-breaking, hallucinatory detail.',
+  };
+  return {
+    mode: 'standard',
+    tempMod: 0,
+    seedDirective: '',
+    contentDirective: '',
+    imageDirective: '',
+  };
+}
+
+// ─── Pipeline ────────────────────────────────────────────────────
+
+async function generateCreativeSeed(mode) {
+  // Concept Collision: pick 2 unrelated domains and force bridging
+  const i = Math.floor(Math.random() * METAPHOR_DOMAINS.length);
+  let j = Math.floor(Math.random() * (METAPHOR_DOMAINS.length - 1));
+  if (j >= i) j++;
+  const domainA = METAPHOR_DOMAINS[i];
+  const domainB = METAPHOR_DOMAINS[j];
+
+  // 10% mutation rate: inject a wild card third domain
+  const mutate = Math.random() < 0.10;
+  const thirdDomain = mutate ? METAPHOR_DOMAINS[Math.floor(Math.random() * METAPHOR_DOMAINS.length)] : null;
+  const mutationLine = thirdDomain
+    ? `\nWILD CARD: Also weave in an element of ${thirdDomain}.`
+    : '';
+
+  const modeDirective = mode.seedDirective ? `\n${mode.seedDirective}` : '';
 
   const prompt = `Generate a single burst of creative inspiration for an uplifting social media post.
-Draw your metaphor from the world of ${domain}.
+Collide two unrelated worlds: ${domainA} and ${domainB}. Your metaphor must bridge both domains.${mutationLine}${modeDirective}
 
 Return ONLY valid JSON:
 {
-  "concept": "a vivid, specific message concept",
+  "concept": "a vivid, specific message concept bridging ${domainA} and ${domainB}",
   "emotion": "one precise human emotion this should evoke",
-  "metaphor": "a fresh metaphor rooted in ${domain}"
+  "metaphor": "a fresh metaphor that fuses ${domainA} with ${domainB}"
 }`;
 
-  const raw = await callLLM('You are a creative director.', prompt, 1.5);
+  const temp = lfoTemperature(1.5 + mode.tempMod, 0.3);
+  const raw = await callLLM('You are a creative director.', prompt, temp);
   return extractJSON(raw) || {
     concept: 'transformation', emotion: 'awe', metaphor: 'metamorphosis',
   };
 }
 
-async function generatePlan(seed) {
+async function generatePlan(seed, mode) {
   const hour = new Date().getHours();
   const timeOfDay = hour < 6 ? 'late night' : hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
   const seedIntensity = Math.ceil(Math.random() * 10);
+  const modeDirective = mode.seedDirective ? `\nGENERATION MODE: ${mode.seedDirective}` : '';
 
   const prompt = `Plan a post. It's ${new Date().toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay}.
 
@@ -120,14 +173,14 @@ Emotion: ${seed.emotion}
 Metaphor: ${seed.metaphor}
 
 Build on the creative seed above. Every field should feel inspired by it.
-VARIETY IS CRITICAL: Choose a world, setting, scale, and visual language that feels completely fresh. Rotate wildly between genres, cultures, eras, scales (microscopic to cosmic), and art traditions.
+VARIETY IS CRITICAL: Choose a world, setting, scale, and visual language that feels completely fresh. Rotate wildly between genres, cultures, eras, scales (microscopic to cosmic), and art traditions.${modeDirective}
 
 Return ONLY valid JSON (all string values):
 {
   "theme": "an uplifting theme",
   "vibe": "2-4 word aesthetic vibe",
   "contentType": "a post format",
-  "constraint": "invent a unique writing constraint achievable in 250 chars",
+  "constraint": "a writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
   "imageMedium": "a specific art medium or visual style — rotate between wildly different traditions",
   "lighting": "a specific lighting setup — vary dramatically each time",
@@ -136,63 +189,74 @@ Return ONLY valid JSON (all string values):
   "subliminalPhrase": "a short ALL CAPS phrase related to the theme"
 }`;
 
-  const raw = await callLLM('You are a creative planner for uplifting social media content.', prompt);
+  const temp = lfoTemperature(1.2 + mode.tempMod, 0.3);
+  const raw = await callLLM('You are a creative planner for uplifting social media content.', prompt, temp);
   return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', subliminalPhrase: 'LOVE' };
 }
 
-async function generateContent(plan) {
+async function criticCheck(text) {
+  const raw = await callLLM(
+    'You are a novelty critic for social media content.',
+    `Rate this post for freshness and dopamine potential on a 1-10 scale:
+"${text}"
+
+High scores (7-10): unexpected word choices, fresh domain-specific metaphors, sensory specificity, rhythmic punch, makes you stop scrolling.
+Low scores (1-3): predictable motivational language, overused metaphors, generic cosmic imagery, safe and forgettable.
+
+Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"] }`,
+    0
+  );
+  return extractJSON(raw) || { score: 5, cliches: [] };
+}
+
+async function generateContent(plan, mode) {
+  const modeDirective = mode.contentDirective ? `\nMODE: ${mode.contentDirective}` : '';
+
   const prompt = `Write an uplifting motivational post.
 Theme: "${plan.theme}" | Vibe: ${plan.vibe}
 Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10
-
+${modeDirective}
 RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." Plain beautiful English only. Follow the constraint. Draw metaphors from unexpected domains — vary wildly between posts.
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
 
-  const raw = await callLLM(SYSTEM_PROMPT, prompt, 0.85, 'claude-fast');
+  const temp = lfoTemperature(0.85 + mode.tempMod, 0.2);
+  const raw = await callLLM(SYSTEM_PROMPT, prompt, temp, 'claude-fast');
   const data = extractJSON(raw);
   let story = (data?.story || '[FAILED TO GENERATE]');
-  // Remove invalid @mentions entirely (no dot = not a real Bluesky handle)
   story = story.replace(/@\w+\b(?!\.\w)/g, '').replace(/\s{2,}/g, ' ').trim();
   return story;
 }
 
-async function depersonalize(text) {
-  const raw = await callLLM(
-    'You rewrite text as abstract scene descriptions.',
-    `Rewrite this as a short scene description focusing on environments, objects, and abstract visuals. Keep the core metaphors and emotions. Return ONLY the rewritten text:\n\n"${text}"`,
-    0.7
-  );
-  return (raw || text).replace(/^["']|["']$/g, '').trim();
-}
+async function buildVisualPrompt(plan, postText = '', mode) {
+  const modeDirective = mode.imageDirective ? `\nStyle override: ${mode.imageDirective}` : '';
 
-async function buildVisualPrompt(plan, postText = '') {
-  const themeText = await depersonalize(postText || plan.theme);
-  const prompt = `Create an image generation prompt for an unpopulated scene inspired by this text:
+  const prompt = `Create an image generation prompt for a scene inspired by this text. Transform any personal address ("you", "your") into abstract visual elements — environments, objects, light, texture.
 
-"${themeText}"
+"${postText || plan.theme}"
 Mood: ${plan.vibe}
 Medium: ${plan.imageMedium || 'any'}
 Lighting: ${plan.lighting || 'any'}
 Color palette: ${plan.colorPalette || 'any'}
 Composition: ${plan.composition || 'any'}
-Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"
+Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"${modeDirective}
 
-Use the specified medium, lighting, colors, and composition. Transform the text's metaphors into a visual scene with spatial depth (foreground, midground, background). The phrase must appear as crisp, legible text integrated into the scene. Vary the text rendering method — it can be painted, carved, projected, grown, woven, pixelated, skywritten, or any other inventive method. Vary the scale from microscopic to cosmic. Choose unexpected settings across all of human experience, nature, science, and imagination.
+Build the scene with spatial depth (foreground, midground, background). Use asymmetric framing and distinctive non-generic lighting. The phrase must appear as crisp, legible text integrated into the scene — vary the rendering method (painted, carved, projected, grown, woven, pixelated, skywritten, or other inventive methods). Choose an unexpected setting, scale, and visual tradition.
 
 Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 
+  const temp = lfoTemperature(1.5 + mode.tempMod, 0.3);
   const raw = await callLLM(
-    'You are an image prompt writer who prizes originality.',
-    prompt, 1.5
+    'You are an image prompt writer who prizes originality and visual surprise.',
+    prompt, temp
   );
 
   let result = (raw || '').trim();
   if (result.startsWith('"') && result.endsWith('"')) result = result.slice(1, -1);
   if (result.startsWith('```')) result = result.replace(/```\w*\n?/g, '').trim();
   if (!result || result.length < 20) {
-    result = `A vast open landscape at golden hour, the words "${plan.subliminalPhrase || 'TRANSCEND'}" formed by clouds`;
+    result = `"${plan.subliminalPhrase || 'LOVE'}" rendered as glowing text in a surreal scene`;
   }
   if (result.length > 4000) result = result.slice(0, 3997) + '...';
   return result;
@@ -205,7 +269,8 @@ function analyzeNovelty(results) {
   console.log('NOVELTY ANALYSIS');
   console.log('═'.repeat(70));
 
-  const fields = ['theme', 'vibe', 'contentType', 'constraint', 'intensity', 'imagePrompt', 'subliminalPhrase'];
+  const fields = ['theme', 'vibe', 'contentType', 'constraint', 'intensity',
+    'imageMedium', 'lighting', 'colorPalette', 'composition', 'subliminalPhrase'];
 
   for (const field of fields) {
     const values = results.map(r => r.plan?.[field] || '').filter(Boolean);
@@ -223,13 +288,25 @@ function analyzeNovelty(results) {
     console.log(`  ${i + 1}. ${len} chars ${ok}`);
   });
 
-  // Check visual prompt lengths
+  // Critic scores
+  console.log('\nCritic scores:');
+  results.forEach((r, i) => {
+    const s = r.criticScore || '?';
+    const c = r.criticCliches?.length ? ` — clichés: ${r.criticCliches.join(', ')}` : '';
+    console.log(`  ${i + 1}. ${s}/10${c}`);
+  });
+
+  // Visual prompt lengths
   console.log('\nVisual prompt lengths:');
   results.forEach((r, i) => {
     const len = r.visualPrompt?.length || 0;
     const ok = len <= 4000 ? '✓' : '✗ OVER';
     console.log(`  ${i + 1}. ${len} chars ${ok}`);
   });
+
+  // Mode distribution
+  const modes = results.map(r => r.mode);
+  console.log(`\nModes: ${modes.join(', ')}`);
 
   // Overall novelty score
   let totalUnique = 0, totalCount = 0;
@@ -241,7 +318,7 @@ function analyzeNovelty(results) {
   const overall = totalCount > 0 ? (totalUnique / totalCount * 100).toFixed(0) : 0;
   console.log(`\n${'═'.repeat(70)}`);
   console.log(`OVERALL NOVELTY: ${overall}%`);
-  console.log(`LLM CALLS PER CYCLE: 3 text (seed + plan + content) — visual prompt built in code`);
+  console.log(`LLM CALLS PER CYCLE: seed + plan + content + critic + visual = 5 text`);
   console.log('═'.repeat(70));
 }
 
@@ -249,26 +326,29 @@ function analyzeNovelty(results) {
 
 async function main() {
   const cycles = parseInt(process.argv[2]) || 3;
-  console.log(`L.O.V.E. Test Lab — Running ${cycles} dry-run cycles (lean prompts)\n`);
+  console.log(`L.O.V.E. Test Lab — Anti-mode-collapse pipeline — ${cycles} cycles\n`);
 
   const results = [];
   for (let i = 0; i < cycles; i++) {
     console.log(`\n${'─'.repeat(70)}`);
-    console.log(`CYCLE ${i + 1}/${cycles}`);
+
+    // Roll generation mode (variable reward schedule)
+    const mode = rollGenerationMode();
+    console.log(`CYCLE ${i + 1}/${cycles} [mode: ${mode.mode}]`);
     console.log('─'.repeat(70));
 
-    // Step 1: Creative Seed (1 LLM call)
-    console.log('  [1/3] Generating creative seed...');
-    const seed = await generateCreativeSeed();
+    // Step 1: Creative Seed (concept collision)
+    console.log('  [1/5] Generating creative seed (concept collision)...');
+    const seed = await generateCreativeSeed(mode);
     console.log(`  Seed Concept: ${seed.concept}`);
     console.log(`  Seed Emotion: ${seed.emotion}`);
     console.log(`  Seed Metaphor: ${seed.metaphor}`);
 
     await new Promise(r => setTimeout(r, 2500));
 
-    // Step 2: Plan (1 LLM call)
-    console.log('  [2/3] Generating plan...');
-    const plan = await generatePlan(seed);
+    // Step 2: Plan (LFO temperature)
+    console.log('  [2/5] Generating plan...');
+    const plan = await generatePlan(seed, mode);
 
     console.log(`  Theme: ${plan.theme}`);
     console.log(`  Vibe: ${plan.vibe}`);
@@ -281,20 +361,35 @@ async function main() {
     console.log(`  Composition: ${plan.composition}`);
     console.log(`  Subliminal: ${plan.subliminalPhrase}`);
 
-    // Rate limit
     await new Promise(r => setTimeout(r, 2500));
 
-    // Step 3: Content (1 LLM call)
-    console.log('  [3/3] Generating content...');
-    const story = await generateContent(plan);
-
+    // Step 3: Content (LFO temperature)
+    console.log('  [3/5] Generating content...');
+    const story = await generateContent(plan, mode);
     console.log(`  Story (${story.length} chars): ${story}`);
 
-    // Step 4: Visual prompt (LLM call)
-    const visualPrompt = await buildVisualPrompt(plan, story);
+    await new Promise(r => setTimeout(r, 2500));
+
+    // Step 4: Boredom Critic
+    console.log('  [4/5] Critic check...');
+    const critic = await criticCheck(story);
+    console.log(`  Critic score: ${critic.score}/10${critic.cliches?.length ? ` — clichés: ${critic.cliches.join(', ')}` : ''}`);
+
+    await new Promise(r => setTimeout(r, 2500));
+
+    // Step 5: Visual prompt (depersonalize folded in)
+    console.log('  [5/5] Building visual prompt...');
+    const visualPrompt = await buildVisualPrompt(plan, story, mode);
     console.log(`  Visual (${visualPrompt.length} chars): ${visualPrompt}`);
 
-    results.push({ plan, story, subliminal: plan.subliminalPhrase, visualPrompt });
+    console.log(`  LFO temp at cycle ${i}: seed=${lfoTemperature(1.5 + mode.tempMod, 0.3).toFixed(2)} plan=${lfoTemperature(1.2 + mode.tempMod, 0.3).toFixed(2)} content=${lfoTemperature(0.85 + mode.tempMod, 0.2).toFixed(2)}`);
+
+    transmissionNumber++;
+    results.push({
+      plan, story, subliminal: plan.subliminalPhrase, visualPrompt,
+      mode: mode.mode,
+      criticScore: critic.score, criticCliches: critic.cliches,
+    });
 
     if (i < cycles - 1) {
       console.log('  Waiting 3s for rate limit...');
