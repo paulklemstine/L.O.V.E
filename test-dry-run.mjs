@@ -164,7 +164,7 @@ Return ONLY valid JSON (all string values):
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
   "imageSubject": "a psychedelic, sacred, awe-inspiring scene — foreground subject, midground context, background cosmos. Think DMT visions, sacred geometry, cosmic temples, bioluminescent landscapes, fractal galaxies, divine light. Dopamine-inspiring and epic",
-  "imageMedium": "photorealistic 3D render, hyper-detailed CGI, or ultra-realistic digital art — pick one. Crisp, sharp, high-definition. The image must look like a real photograph or a cinematic VFX still, never a painting or illustration",
+  "imageMedium": "photorealistic 3D render, hyper-detailed CGI, or ultra-realistic digital art — pick one. Crisp, sharp, high-definition. The image must look like a real photograph or a cinematic VFX still",
   "lighting": "dramatic, luminous lighting with visible light rays — volumetric god rays, prismatic rainbow refractions, aurora borealis glow, sacred golden radiance, neon light bloom, kaleidoscopic lens flares — bright and heavenly",
   "colorPalette": "name 3-4 vivid, electric, psychedelic pigment colors — e.g. electric violet, fluorescent magenta, iridescent gold, cosmic teal",
   "composition": "camera/lens and angle: 85mm portrait f/1.4 shallow DOF, wide-angle tilt-shift, macro close-up, bird's-eye drone shot — one choice",
