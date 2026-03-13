@@ -5,7 +5,7 @@
  * Pollen budget: 10 pollen/day = 5/12 pollen/hour (~0.417/hr)
  * Text planning: openai (GPT-5 Mini) - reliable structured JSON output
  * Text content: claude-fast (Claude Haiku 4.5) - superior creative writing
- * Image model: klein-large (FLUX.2 Klein 9B) - high quality free model
+ * Image model: imagen-4 (Google Imagen 4) - high quality free model
  */
 
 const TEXT_URL = 'https://gen.pollinations.ai/v1/chat/completions';
@@ -108,10 +108,10 @@ export class PollinationsClient {
   /**
    * Generate an image and return it as a Blob.
    * GET /image/{prompt} — returns binary image.
-   * Model: klein-large (FLUX.2 Klein 9B) - high quality free model
+   * Model: imagen-4 (Google Imagen 4) - high quality free model
    */
   async generateImage(prompt, options = {}) {
-    const { width = 1024, height = 1024, subliminalText = null, model = 'klein-large' } = options;
+    const { width = 1024, height = 1024, subliminalText = null, model = 'imagen-4' } = options;
 
     let fullPrompt = prompt;
     if (subliminalText) {
@@ -132,8 +132,8 @@ export class PollinationsClient {
       throw new Error(`Pollinations image ${response.status}`);
     }
 
-    // Track pollen (~0.015 per image for klein-large)
-    pollenUsed += 0.015;
+    // Track pollen (~0.0025 per image for imagen-4)
+    pollenUsed += 0.0025;
 
     return await response.blob();
   }
