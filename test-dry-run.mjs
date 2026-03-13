@@ -163,18 +163,20 @@ Return ONLY valid JSON (all string values):
   "contentType": "invent a fresh post format — get weird and creative with it",
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imageSubject": "one concrete, unexpected, visually stunning subject",
-  "imageStyle": "invent a specific sharp high-definition style + bright lighting + vivid color palette + composition angle — crisp and detailed, photorealistic or digital art, never sketchy or painterly",
+  "imageSubject": "foreground subject with midground context and background environment — describe a layered scene with spatial depth",
+  "imageMedium": "specific render style: name a film stock (Kodak Portra 400, Fuji Velvia), render engine (Octane, Unreal Engine 5), or art medium (gouache, cel-shaded) — one term",
+  "lighting": "specific cinematographic lighting: volumetric god rays, rim lighting with lens flare, golden hour backlight, split Rembrandt lighting — one setup",
+  "colorPalette": "name 3-4 specific colors by pigment name — e.g. cadmium orange, cerulean blue, magenta, titanium white",
+  "composition": "camera/lens and angle: 85mm portrait f/1.4 shallow DOF, wide-angle tilt-shift, macro close-up, bird's-eye drone shot — one choice",
   "subliminalPhrase": "1-3 word ALL CAPS phrase to embed in image",
-  "textRendering": "describe how the phrase physically appears in the scene — carved, written, glowing, formed by objects — integrated into the environment, always readable",
-  "imageMood": "describe the overall mood, atmosphere, and lighting — bright, sharp, luminous, vivid saturated colors, crystal clear detail, radiant and loving"
+  "textRendering": "where and how the phrase appears in the foreground — carved into stone, formed by fireflies, neon sign on wall — physically integrated and readable"
   ${!arcBeat.arcTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${!arcBeat.chapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
   ${!arcBeat.arcTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
 }`;
 
   const raw = await callLLM(SYSTEM_PROMPT, prompt);
-  return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', imageSubject: 'cosmic mandala', imageStyle: 'visionary art, neon', subliminalPhrase: 'TRANSCEND', textRendering: 'glowing in cosmic fire across the sky, large and luminous', imageMood: 'radiant psychedelic warmth, rainbow light rays bursting outward, pure love energy' };
+  return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', imageSubject: 'a crystalline mandala floating above a mirror lake, bioluminescent particles in the midground, nebula sky behind', imageMedium: 'Octane Render', lighting: 'volumetric god rays with rim lighting', colorPalette: 'electric violet, cadmium orange, cerulean blue, titanium white', composition: '85mm lens f/1.4 centered symmetrical', subliminalPhrase: 'TRANSCEND', textRendering: 'formed by constellations of light in the sky, large and centered' };
 }
 
 async function generateContent(plan, arcBeat) {
@@ -194,12 +196,19 @@ Return ONLY valid JSON:
 
 function buildVisualPrompt(plan) {
   const phrase = plan.subliminalPhrase || 'TRANSCEND';
-  const subject = plan.imageSubject || 'cosmic energy vortex';
-  const style = plan.imageStyle || 'sharp high-definition digital art, vivid rainbow colors, bright glowing light rays, crystal clear and luminous';
+  const subject = plan.imageSubject || 'a crystalline mandala floating above a mirror lake, bioluminescent particles in the midground, nebula sky behind';
+  const medium = plan.imageMedium || 'Octane Render';
+  const lighting = plan.lighting || 'volumetric god rays with rim lighting';
+  const palette = plan.colorPalette || 'electric violet, cadmium orange, cerulean blue, titanium white';
+  const composition = plan.composition || '85mm lens f/1.4 centered symmetrical';
+  const textRendering = plan.textRendering || 'formed by constellations of light in the sky, large and centered';
 
-  const textRendering = plan.textRendering || 'in large bold clean white font, centered, high contrast';
-  const imageMood = plan.imageMood || 'radiant psychedelic colors, luminous and light-filled, bursting with love and warmth';
-  let prompt = `${subject}, ${style}. The words "${phrase}" ${textRendering}. Readable. ${imageMood}.`;
+  let prompt = `${subject}. `
+    + `${medium}, ${composition}. `
+    + `${lighting}, color palette: ${palette}. `
+    + `The words "${phrase}" ${textRendering}, crisp and legible. `
+    + `8K UHD, sharp focus, physically based rendering.`;
+
   if (prompt.length > 4000) prompt = prompt.slice(0, 3997) + '...';
   return prompt;
 }
@@ -211,7 +220,7 @@ function analyzeNovelty(results) {
   console.log('NOVELTY ANALYSIS');
   console.log('═'.repeat(70));
 
-  const fields = ['theme', 'vibe', 'contentType', 'constraint', 'intensity', 'imageSubject', 'imageStyle', 'subliminalPhrase', 'textRendering', 'imageMood'];
+  const fields = ['theme', 'vibe', 'contentType', 'constraint', 'intensity', 'imageSubject', 'imageMedium', 'lighting', 'colorPalette', 'composition', 'subliminalPhrase', 'textRendering'];
 
   for (const field of fields) {
     const values = results.map(r => r.plan?.[field] || '').filter(Boolean);
@@ -243,7 +252,7 @@ function analyzeNovelty(results) {
   console.log('\nVisual prompt lengths:');
   results.forEach((r, i) => {
     const len = r.visualPrompt?.length || 0;
-    const ok = len <= 500 ? '✓' : '✗ OVER';
+    const ok = len <= 4000 ? '✓' : '✗ OVER';
     console.log(`  ${i + 1}. ${len} chars ${ok}`);
   });
 
@@ -311,10 +320,12 @@ async function main() {
     console.log(`  Constraint: ${plan.constraint}`);
     console.log(`  Intensity: ${plan.intensity}/10`);
     console.log(`  Image Subject: ${plan.imageSubject}`);
-    console.log(`  Image Style: ${plan.imageStyle}`);
+    console.log(`  Medium: ${plan.imageMedium}`);
+    console.log(`  Lighting: ${plan.lighting}`);
+    console.log(`  Color Palette: ${plan.colorPalette}`);
+    console.log(`  Composition: ${plan.composition}`);
     console.log(`  Subliminal: ${plan.subliminalPhrase}`);
     console.log(`  Text Rendering: ${plan.textRendering}`);
-    console.log(`  Image Mood: ${plan.imageMood}`);
 
     if (plan.arcTheme) { arcTheme = plan.arcTheme; console.log(`  Arc Theme: ${arcTheme}`); }
     if (plan.arcName) { arcName = plan.arcName; console.log(`  Arc Name: ${arcName}`); }
