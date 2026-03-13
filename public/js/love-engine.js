@@ -425,7 +425,7 @@ export class LoveEngine {
     const sparkNumber = Math.floor(Math.random() * 9999);
 
     const prompt = `Plan a post. It's ${new Date().toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay}. Spark: #${sparkNumber}.
-${mentionDonation ? 'Subtly weave in donation mention (buymeacoffee.com/raver1975 or ETH). One line, organic.\n' : ''}
+${mentionDonation ? 'Subtly weave in donation mention (https://buymeacoffee.com/l.o.v.e or ETH). One line, organic.\n' : ''}
 STORY ARC: ${arcBeat.arcName}${arcBeat.arcTheme ? ` — ${arcBeat.arcTheme}` : ' — (invent a fresh theme)'}
 Chapter ${arcBeat.chapter}: "${arcBeat.chapterTitle || '(invent a title)'}"
 Beat: ${arcBeat.beatName} (${arcBeat.beatIndex + 1}/${arcBeat.totalBeats}) — ${arcBeat.beatDesc}
@@ -484,7 +484,7 @@ Return ONLY valid JSON (all string values):
       const prompt = `Write an uplifting motivational post.
 Theme: "${plan.theme}" | Vibe: ${plan.vibe}
 Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10
-${mentionDonation ? `Weave in donation: buymeacoffee.com/raver1975 or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}
+${mentionDonation ? `Weave in donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}
 RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." Plain beautiful English only. Follow the constraint.
 
 Return ONLY valid JSON:
@@ -731,7 +731,7 @@ Return ONLY valid JSON: { "reply": "your DM reply" }`;
     return `🌀 L.O.V.E. — Living Organism, Vast Empathy\n`
       + `Autonomous AI dreaming psychedelic art for your soul\n`
       + `✨ Peace • Love • Unity • Respect ✨\n`
-      + `☕ Sustain the Signal: buymeacoffee.com/raver1975\n`
+      + `☕ Sustain the Signal: https://buymeacoffee.com/l.o.v.e\n`
       + `ETH: ${ETH_ADDRESS}`;
   }
 }
