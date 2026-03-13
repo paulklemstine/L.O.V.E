@@ -8,12 +8,9 @@
  * Image model: imagen-4 (Google Imagen 4) - high quality free model
  */
 
-const TEXT_URL = 'https://gen.pollinations.ai/v1/chat/completions';
-const IMAGE_URL = 'https://gen.pollinations.ai/image';
-
-// Pollen tracking
-let pollenUsed = 0;
-let pollenResetTime = Date.now() + 3600000;
+const BASE_URL = 'https://gen.pollinations.ai';
+const TEXT_URL = `${BASE_URL}/v1/chat/completions`;
+const IMAGE_URL = `${BASE_URL}/image`;
 
 export class PollinationsClient {
   constructor(apiKey) {
@@ -25,18 +22,42 @@ export class PollinationsClient {
   getCallLog() { return this.callLog; }
 
   /**
-   * Get pollen usage stats.
+   * Fetch live account stats from the Pollinations API.
+   * Calls /account/balance, /account/profile, and /account/key in parallel.
+   * Returns { balance, tier, nextResetAt, keyType, rateLimited, error? }.
    */
-  getPollenStats() {
-    if (Date.now() > pollenResetTime) {
-      pollenUsed = 0;
-      pollenResetTime = Date.now() + 3600000;
+  async fetchAccountStats() {
+    const headers = { 'Authorization': `Bearer ${this.apiKey}` };
+    const results = { balance: null, tier: null, nextResetAt: null, keyType: null, rateLimited: null };
+
+    try {
+      const [balRes, profRes, keyRes] = await Promise.allSettled([
+        fetch(`${BASE_URL}/account/balance`, { headers }),
+        fetch(`${BASE_URL}/account/profile`, { headers }),
+        fetch(`${BASE_URL}/account/key`, { headers }),
+      ]);
+
+      if (balRes.status === 'fulfilled' && balRes.value.ok) {
+        const data = await balRes.value.json();
+        results.balance = data.balance;
+      }
+
+      if (profRes.status === 'fulfilled' && profRes.value.ok) {
+        const data = await profRes.value.json();
+        results.tier = data.tier;
+        results.nextResetAt = data.nextResetAt;
+      }
+
+      if (keyRes.status === 'fulfilled' && keyRes.value.ok) {
+        const data = await keyRes.value.json();
+        results.keyType = data.type;
+        results.rateLimited = data.rateLimitEnabled;
+      }
+    } catch (err) {
+      results.error = err.message;
     }
-    return {
-      used: pollenUsed.toFixed(4),
-      remaining: Math.max(0, 1 - pollenUsed).toFixed(4),
-      resetsIn: Math.max(0, Math.floor((pollenResetTime - Date.now()) / 60000))
-    };
+
+    return results;
   }
 
   /**
@@ -83,9 +104,6 @@ export class PollinationsClient {
         const data = await response.json();
         const text = data.choices?.[0]?.message?.content || '';
 
-        // Track pollen usage
-        pollenUsed += 0.002;
-
         // Log prompt + response for activity log expansion
         this.callLog.push({
           label: options.label || 'LLM Call',
@@ -131,9 +149,6 @@ export class PollinationsClient {
     if (!response.ok) {
       throw new Error(`Pollinations image ${response.status}`);
     }
-
-    // Track pollen (~0.0025 per image for imagen-4)
-    pollenUsed += 0.0025;
 
     return await response.blob();
   }

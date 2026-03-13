@@ -692,6 +692,43 @@ function setStatus(text) {
   if (el) el.textContent = text;
 }
 
+let lastPollenFetch = 0;
+const POLLEN_FETCH_INTERVAL = 60000; // Fetch live stats at most every 60s
+
+async function refreshPollenStats() {
+  if (Date.now() - lastPollenFetch < POLLEN_FETCH_INTERVAL) return;
+  lastPollenFetch = Date.now();
+
+  try {
+    const acct = await ai.fetchAccountStats();
+
+    const balEl = document.getElementById('stat-pollen-balance');
+    if (balEl && acct.balance !== null) {
+      balEl.textContent = Number(acct.balance).toFixed(2);
+    }
+
+    const tierEl = document.getElementById('stat-tier');
+    if (tierEl && acct.tier) {
+      tierEl.textContent = acct.tier;
+    }
+
+    const resetEl = document.getElementById('stat-reset');
+    if (resetEl && acct.nextResetAt) {
+      const resetDate = new Date(acct.nextResetAt);
+      const diff = resetDate - Date.now();
+      if (diff > 0) {
+        const h = Math.floor(diff / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        resetEl.textContent = `${h}h ${m}m`;
+      } else {
+        resetEl.textContent = 'now';
+      }
+    }
+  } catch {
+    // Silently fail — stats are non-critical
+  }
+}
+
 function updateUI() {
   document.getElementById('stat-posts').textContent = stats.posts;
   document.getElementById('stat-replies').textContent = stats.replies;
@@ -715,10 +752,9 @@ function updateUI() {
     document.getElementById('stat-uptime').textContent = `${h}h ${m}m`;
   }
 
-  // Pollen usage
-  if (ai) {
-    const pollen = ai.getPollenStats();
-    document.getElementById('stat-pollen').textContent = `${pollen.used}`;
+  // Live pollen stats (fetched async, updates DOM when ready)
+  if (ai && isRunning) {
+    refreshPollenStats();
   }
 }
 
