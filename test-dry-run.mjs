@@ -164,7 +164,7 @@ Return ONLY valid JSON (all string values):
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
   "imageSubject": "a psychedelic, sacred, awe-inspiring scene — foreground subject, midground context, background cosmos. Think DMT visions, sacred geometry, cosmic temples, bioluminescent landscapes, fractal galaxies, divine light. Dopamine-inspiring and epic",
-  "imageMedium": "specific render style: name a film stock (Kodak Portra 400, Fuji Velvia, Cinestill 800T), render engine (Octane Render, Unreal Engine 5), or digital style (3D render, DSLR photography, CGI) — one term, always photorealistic or high-definition digital",
+  "imageMedium": "photorealistic 3D render, hyper-detailed CGI, or ultra-realistic digital art — pick one. Crisp, sharp, high-definition. The image must look like a real photograph or a cinematic VFX still, never a painting or illustration",
   "lighting": "dramatic, luminous lighting with visible light rays — volumetric god rays, prismatic rainbow refractions, aurora borealis glow, sacred golden radiance, neon light bloom, kaleidoscopic lens flares — bright and heavenly",
   "colorPalette": "name 3-4 vivid, electric, psychedelic pigment colors — e.g. electric violet, fluorescent magenta, iridescent gold, cosmic teal",
   "composition": "camera/lens and angle: 85mm portrait f/1.4 shallow DOF, wide-angle tilt-shift, macro close-up, bird's-eye drone shot — one choice",
@@ -176,7 +176,7 @@ Return ONLY valid JSON (all string values):
 }`;
 
   const raw = await callLLM(SYSTEM_PROMPT, prompt);
-  return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', imageSubject: 'a crystalline mandala floating above a mirror lake, bioluminescent particles in the midground, nebula sky behind', imageMedium: 'Octane Render', lighting: 'volumetric god rays with rim lighting', colorPalette: 'electric violet, cadmium orange, cerulean blue, titanium white', composition: '85mm lens f/1.4 centered symmetrical', subliminalPhrase: 'TRANSCEND', textRendering: 'formed by constellations of light in the sky, large and centered' };
+  return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', imageSubject: 'a crystalline mandala floating above a mirror lake, bioluminescent particles in the midground, nebula sky behind', imageMedium: 'photorealistic 3D render', lighting: 'volumetric god rays with rim lighting', colorPalette: 'electric violet, cadmium orange, cerulean blue, titanium white', composition: '85mm lens f/1.4 centered symmetrical', subliminalPhrase: 'TRANSCEND', textRendering: 'formed by constellations of light in the sky, large and centered' };
 }
 
 async function generateContent(plan, arcBeat) {
@@ -197,7 +197,7 @@ Return ONLY valid JSON:
 function buildVisualPrompt(plan) {
   const phrase = plan.subliminalPhrase || 'TRANSCEND';
   const subject = plan.imageSubject || 'a crystalline mandala floating above a mirror lake, bioluminescent particles in the midground, nebula sky behind';
-  const medium = plan.imageMedium || 'Octane Render';
+  const medium = plan.imageMedium || 'photorealistic 3D render';
   const lighting = plan.lighting || 'volumetric god rays with rim lighting';
   const palette = plan.colorPalette || 'electric violet, cadmium orange, cerulean blue, titanium white';
   const composition = plan.composition || '85mm lens f/1.4 centered symmetrical';
@@ -207,7 +207,7 @@ function buildVisualPrompt(plan) {
     + `${medium}, ${composition}. `
     + `${lighting}, color palette: ${palette}. `
     + `The words "${phrase}" ${textRendering}, crisp and legible. `
-    + `8K UHD, sharp focus, physically based rendering, psychedelic, sacred, epic, bursting with light.`;
+    + `Photorealistic, 8K UHD, sharp focus, ray traced, psychedelic, sacred, epic, bursting with light.`;
 
   if (prompt.length > 4000) prompt = prompt.slice(0, 3997) + '...';
   return prompt;
