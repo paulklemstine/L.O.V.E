@@ -121,14 +121,14 @@ class InteractionLog {
 
 class StoryArcManager {
   static BEATS = [
-    { name: 'YOU', phase: 'setup', desc: 'Establish identity. Comfort zone.', tension: 0.2, emotion: 'grounded' },
-    { name: 'NEED', phase: 'setup', desc: 'Something missing. Longing. A question.', tension: 0.4, emotion: 'yearning' },
-    { name: 'GO', phase: 'rising', desc: 'Cross the threshold. Leave the known.', tension: 0.5, emotion: 'brave' },
-    { name: 'SEARCH', phase: 'rising', desc: 'Navigate the unknown. Struggle. Adapt.', tension: 0.7, emotion: 'determined' },
-    { name: 'FIND', phase: 'climax', desc: 'Revelation. The treasure. Peak moment.', tension: 1.0, emotion: 'awe' },
-    { name: 'TAKE', phase: 'climax', desc: 'Pay the price. Sacrifice. Consequence.', tension: 0.9, emotion: 'bittersweet' },
-    { name: 'RETURN', phase: 'falling', desc: 'Come back changed. Integrate. Share.', tension: 0.5, emotion: 'wise' },
-    { name: 'CHANGE', phase: 'resolution', desc: 'Transformed. New normal. Cycle restarts.', tension: 0.3, emotion: 'peaceful' },
+    { name: 'YOU', phase: 'setup', desc: 'Who you are right now.', tension: 0.2, emotion: 'grounded' },
+    { name: 'NEED', phase: 'setup', desc: 'What is calling you forward.', tension: 0.4, emotion: 'yearning' },
+    { name: 'GO', phase: 'rising', desc: 'The moment you decide to move.', tension: 0.5, emotion: 'brave' },
+    { name: 'SEARCH', phase: 'rising', desc: 'Figuring it out as you go.', tension: 0.7, emotion: 'determined' },
+    { name: 'FIND', phase: 'climax', desc: 'The breakthrough.', tension: 1.0, emotion: 'awe' },
+    { name: 'TAKE', phase: 'climax', desc: 'What it costs to grow.', tension: 0.9, emotion: 'bittersweet' },
+    { name: 'RETURN', phase: 'falling', desc: 'Carrying wisdom forward.', tension: 0.5, emotion: 'wise' },
+    { name: 'CHANGE', phase: 'resolution', desc: 'Who you are becoming.', tension: 0.3, emotion: 'peaceful' },
   ];
 
   constructor() {
@@ -384,6 +384,7 @@ Beat: ${arcBeat.beatName} (${arcBeat.beatIndex + 1}/${arcBeat.totalBeats}) — $
 Tension: ${(arcBeat.tension * 100).toFixed(0)}% | Emotion: ${arcBeat.emotion}
 
 Build on the creative seed above. Every field should feel inspired by it.
+VARIETY IS CRITICAL: Choose a world, setting, scale, and visual language that feels completely fresh. Rotate wildly between genres, cultures, eras, scales (microscopic to cosmic), and art traditions.
 
 Return ONLY valid JSON (all string values):
 {
@@ -392,10 +393,10 @@ Return ONLY valid JSON (all string values):
   "contentType": "a post format",
   "constraint": "a writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imageMedium": "a specific art medium, render engine, or visual style",
-  "lighting": "a specific cinematographic lighting setup",
-  "colorPalette": "3-4 specific named pigment or color names",
-  "composition": "focal length, angle, and framing type",
+  "imageMedium": "a specific art medium or visual style — rotate between wildly different traditions",
+  "lighting": "a specific lighting setup — vary dramatically each time",
+  "colorPalette": "3-4 specific color names — draw from different cultural and natural palettes each time",
+  "composition": "camera/framing — vary between extreme close-up, aerial, panoramic, isometric, etc.",
   "subliminalPhrase": "a short ALL CAPS phrase related to the theme"
   ${arcBeat.needsTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${arcBeat.needsChapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
@@ -430,7 +431,7 @@ Return ONLY valid JSON (all string values):
 Theme: "${plan.theme}" | Vibe: ${plan.vibe}
 Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10
 ${mentionDonation ? `Weave in donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}
-RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." Plain beautiful English only. Follow the constraint.
+RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." Plain beautiful English only. Follow the constraint. Draw metaphors from unexpected domains — vary wildly between posts.
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
@@ -477,7 +478,7 @@ Color palette: ${plan.colorPalette || 'any'}
 Composition: ${plan.composition || 'any'}
 Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"
 
-Use the specified medium, lighting, colors, and composition. Transform the text's metaphors into a visual scene with spatial depth (foreground, midground, background). The phrase must appear as crisp, legible text integrated into the scene.
+Use the specified medium, lighting, colors, and composition. Transform the text's metaphors into a visual scene with spatial depth (foreground, midground, background). The phrase must appear as crisp, legible text integrated into the scene. Vary the text rendering method — it can be painted, carved, projected, grown, woven, pixelated, skywritten, or any other inventive method. Vary the scale from microscopic to cosmic. Choose unexpected settings across all of human experience, nature, science, and imagination.
 
 Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 
