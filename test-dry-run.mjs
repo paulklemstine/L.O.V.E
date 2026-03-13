@@ -166,14 +166,15 @@ Return ONLY valid JSON (all string values):
   "imageSubject": "one concrete, unexpected, visually stunning subject",
   "imageStyle": "invent a specific art medium + lighting + color palette + composition angle",
   "subliminalPhrase": "1-3 word ALL CAPS phrase to embed in image",
-  "textRendering": "describe how the phrase physically appears in the scene — carved, written, glowing, formed by objects — integrated into the environment, always readable"
+  "textRendering": "describe how the phrase physically appears in the scene — carved, written, glowing, formed by objects — integrated into the environment, always readable",
+  "imageMood": "describe the overall mood, atmosphere, and lighting — bright, colorful, psychedelic, loving, light-filled"
   ${!arcBeat.arcTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${!arcBeat.chapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
   ${!arcBeat.arcTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
 }`;
 
   const raw = await callLLM(SYSTEM_PROMPT, prompt);
-  return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', imageSubject: 'cosmic mandala', imageStyle: 'visionary art, neon', subliminalPhrase: 'TRANSCEND', textRendering: 'glowing in cosmic fire across the sky, large and luminous' };
+  return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', imageSubject: 'cosmic mandala', imageStyle: 'visionary art, neon', subliminalPhrase: 'TRANSCEND', textRendering: 'glowing in cosmic fire across the sky, large and luminous', imageMood: 'radiant psychedelic warmth, rainbow light rays bursting outward, pure love energy' };
 }
 
 async function generateContent(plan, arcBeat) {
@@ -197,7 +198,8 @@ function buildVisualPrompt(plan) {
   const style = plan.imageStyle || 'radiant psychedelic art, vivid rainbow colors, glowing light rays, warm and luminous';
 
   const textRendering = plan.textRendering || 'in large bold clean white font, centered, high contrast';
-  let prompt = `${subject}, ${style}. The words "${phrase}" ${textRendering}. Readable, radiant psychedelic colors, luminous and light-filled, bursting with love and warmth.`;
+  const imageMood = plan.imageMood || 'radiant psychedelic colors, luminous and light-filled, bursting with love and warmth';
+  let prompt = `${subject}, ${style}. The words "${phrase}" ${textRendering}. Readable. ${imageMood}.`;
   if (prompt.length > 500) prompt = prompt.slice(0, 497) + '...';
   return prompt;
 }
@@ -209,7 +211,7 @@ function analyzeNovelty(results) {
   console.log('NOVELTY ANALYSIS');
   console.log('═'.repeat(70));
 
-  const fields = ['theme', 'vibe', 'contentType', 'constraint', 'intensity', 'imageSubject', 'imageStyle', 'subliminalPhrase', 'textRendering'];
+  const fields = ['theme', 'vibe', 'contentType', 'constraint', 'intensity', 'imageSubject', 'imageStyle', 'subliminalPhrase', 'textRendering', 'imageMood'];
 
   for (const field of fields) {
     const values = results.map(r => r.plan?.[field] || '').filter(Boolean);
@@ -312,6 +314,7 @@ async function main() {
     console.log(`  Image Style: ${plan.imageStyle}`);
     console.log(`  Subliminal: ${plan.subliminalPhrase}`);
     console.log(`  Text Rendering: ${plan.textRendering}`);
+    console.log(`  Image Mood: ${plan.imageMood}`);
 
     if (plan.arcTheme) { arcTheme = plan.arcTheme; console.log(`  Arc Theme: ${arcTheme}`); }
     if (plan.arcName) { arcName = plan.arcName; console.log(`  Arc Name: ${arcName}`); }
