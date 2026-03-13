@@ -163,10 +163,10 @@ Return ONLY valid JSON (all string values):
   "contentType": "invent a fresh post format — get weird and creative with it",
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imageSubject": "foreground subject with midground context and background environment — describe a layered scene with spatial depth",
+  "imageSubject": "a psychedelic, sacred, awe-inspiring scene — foreground subject, midground context, background cosmos. Think DMT visions, sacred geometry, cosmic temples, bioluminescent landscapes, fractal galaxies, divine light. Dopamine-inspiring and epic",
   "imageMedium": "specific render style: name a film stock (Kodak Portra 400, Fuji Velvia, Cinestill 800T), render engine (Octane Render, Unreal Engine 5), or digital style (3D render, DSLR photography, CGI) — one term, always photorealistic or high-definition digital",
-  "lighting": "specific cinematographic lighting: volumetric god rays, rim lighting with lens flare, golden hour backlight, split Rembrandt lighting — one setup",
-  "colorPalette": "name 3-4 specific colors by pigment name — e.g. cadmium orange, cerulean blue, magenta, titanium white",
+  "lighting": "dramatic, luminous lighting with visible light rays — volumetric god rays, prismatic rainbow refractions, aurora borealis glow, sacred golden radiance, neon light bloom, kaleidoscopic lens flares — bright and heavenly",
+  "colorPalette": "name 3-4 vivid, electric, psychedelic pigment colors — e.g. electric violet, fluorescent magenta, iridescent gold, cosmic teal",
   "composition": "camera/lens and angle: 85mm portrait f/1.4 shallow DOF, wide-angle tilt-shift, macro close-up, bird's-eye drone shot — one choice",
   "subliminalPhrase": "1-3 word ALL CAPS phrase to embed in image",
   "textRendering": "where and how the phrase appears in the foreground — carved into stone, formed by fireflies, neon sign on wall — physically integrated and readable"
@@ -207,7 +207,7 @@ function buildVisualPrompt(plan) {
     + `${medium}, ${composition}. `
     + `${lighting}, color palette: ${palette}. `
     + `The words "${phrase}" ${textRendering}, crisp and legible. `
-    + `8K UHD, sharp focus, physically based rendering.`;
+    + `8K UHD, sharp focus, physically based rendering, psychedelic, sacred, epic, bursting with light.`;
 
   if (prompt.length > 4000) prompt = prompt.slice(0, 3997) + '...';
   return prompt;
