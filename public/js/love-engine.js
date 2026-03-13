@@ -422,9 +422,9 @@ export class LoveEngine {
 
     // Log the code-built visual prompt for transparency
     this.ai.callLog.push({
-      label: 'Visual Prompt (code template)',
-      systemPrompt: '(none — built in code)',
-      userPrompt: `imageSubject: ${plan.imageSubject}\nimageMedium: ${plan.imageMedium}\nlighting: ${plan.lighting}\ncolorPalette: ${plan.colorPalette}\ncomposition: ${plan.composition}\nsubliminalPhrase: ${plan.subliminalPhrase}\ntextRendering: ${plan.textRendering}`,
+      label: 'Visual Prompt (from plan)',
+      systemPrompt: '(none — from LLM plan)',
+      userPrompt: `subliminalPhrase: ${plan.subliminalPhrase}`,
       response: visualPrompt,
       model: 'n/a',
     });
@@ -517,13 +517,8 @@ Return ONLY valid JSON (all string values):
   "contentType": "invent a fresh post format — get weird and creative with it",
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imageSubject": "a striking, awe-inspiring scene with spatial depth — foreground subject, midground context, background environment",
-  "imageMedium": "a specific visual medium or render style — your choice",
-  "lighting": "a specific lighting setup that fits the mood",
-  "colorPalette": "name 3-4 specific colors that suit the emotion",
-  "composition": "camera angle and framing — your choice",
-  "subliminalPhrase": "1-3 word ALL CAPS phrase that captures the emotional core of this post's theme — the takeaway a reader carries with them",
-  "textRendering": "how the text physically appears — start with a verb: carved into stone, formed by fireflies, glowing on the wall, etched in frost, woven from light — physically integrated into the scene"
+  "imagePrompt": "a complete, vivid image generation prompt — describe a unique scene, medium, lighting, colors, and composition. Be wildly original every time. Include the subliminal phrase as readable text integrated into the scene.",
+  "subliminalPhrase": "1-3 word ALL CAPS phrase that captures the emotional core of this post's theme"
   ${arcBeat.needsTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${arcBeat.needsChapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
   ${arcBeat.needsTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
@@ -539,13 +534,8 @@ Return ONLY valid JSON (all string values):
         contentType: 'transmission',
         constraint: 'write as a message found in a bottle',
         intensity: '5',
-        imageSubject: 'a vast open landscape at golden hour with a lone tree on a hill',
-        imageMedium: 'digital painting',
-        lighting: 'warm golden hour sunlight',
-        colorPalette: 'amber, sky blue, sage green, soft white',
-        composition: 'wide angle centered',
+        imagePrompt: 'A vast open landscape at golden hour with a lone tree on a hill, the words "TRANSCEND" formed by clouds in the sky',
         subliminalPhrase: 'TRANSCEND',
-        textRendering: 'formed by clouds in the sky, large and centered',
       };
     }
     return data;
@@ -588,22 +578,10 @@ Return ONLY valid JSON:
     return story;
   }
 
-  // ─── Visual Prompt (code template, no LLM call) ────────────────────
+  // ─── Visual Prompt (passthrough from LLM plan) ────────────────────
 
   _buildVisualPrompt(plan) {
-    const phrase = plan.subliminalPhrase || 'TRANSCEND';
-    const subject = plan.imageSubject || 'a vast open landscape at golden hour with a lone tree on a hill';
-    const medium = plan.imageMedium || 'digital painting';
-    const lighting = plan.lighting || 'warm golden hour sunlight';
-    const palette = plan.colorPalette || 'amber, sky blue, sage green, soft white';
-    const composition = plan.composition || 'wide angle centered';
-    const textRendering = plan.textRendering || 'formed by clouds in the sky, large and centered';
-
-    let prompt = `${subject}. `
-      + `${medium}, ${composition}. `
-      + `${lighting}, color palette: ${palette}. `
-      + `The words "${phrase}" ${textRendering}, crisp and legible.`;
-
+    let prompt = plan.imagePrompt || `A vast open landscape at golden hour with a lone tree on a hill, the words "${plan.subliminalPhrase || 'TRANSCEND'}" formed by clouds`;
     if (prompt.length > 4000) prompt = prompt.slice(0, 3997) + '...';
     return prompt;
   }

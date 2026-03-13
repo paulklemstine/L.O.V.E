@@ -187,20 +187,15 @@ Return ONLY valid JSON (all string values):
   "contentType": "invent a fresh post format — get weird and creative with it",
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imageSubject": "a striking, awe-inspiring scene with spatial depth — foreground subject, midground context, background environment",
-  "imageMedium": "a specific visual medium or render style — your choice",
-  "lighting": "a specific lighting setup that fits the mood",
-  "colorPalette": "name 3-4 specific colors that suit the emotion",
-  "composition": "camera angle and framing — your choice",
-  "subliminalPhrase": "1-3 word ALL CAPS phrase that captures the emotional core of this post's theme — the takeaway a reader carries with them",
-  "textRendering": "how the text physically appears — start with a verb: carved into stone, formed by fireflies, glowing on the wall, etched in frost, woven from light — physically integrated into the scene"
+  "imagePrompt": "a complete, vivid image generation prompt — describe a unique scene, medium, lighting, colors, and composition. Be wildly original every time. Include the subliminal phrase as readable text integrated into the scene.",
+  "subliminalPhrase": "1-3 word ALL CAPS phrase that captures the emotional core of this post's theme"
   ${!arcBeat.arcTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${!arcBeat.chapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
   ${!arcBeat.arcTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
 }`;
 
   const raw = await callLLM(SYSTEM_PROMPT, prompt);
-  return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', imageSubject: 'a vast open landscape at golden hour with a lone tree on a hill', imageMedium: 'digital painting', lighting: 'warm golden hour sunlight', colorPalette: 'amber, sky blue, sage green, soft white', composition: 'wide angle centered', subliminalPhrase: 'TRANSCEND', textRendering: 'formed by clouds in the sky, large and centered' };
+  return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', imagePrompt: 'A vast open landscape at golden hour with a lone tree on a hill, the words "TRANSCEND" formed by clouds', subliminalPhrase: 'TRANSCEND' };
 }
 
 async function generateContent(plan, arcBeat) {
@@ -219,19 +214,7 @@ Return ONLY valid JSON:
 }
 
 function buildVisualPrompt(plan) {
-  const phrase = plan.subliminalPhrase || 'TRANSCEND';
-  const subject = plan.imageSubject || 'a vast open landscape at golden hour with a lone tree on a hill';
-  const medium = plan.imageMedium || 'digital painting';
-  const lighting = plan.lighting || 'warm golden hour sunlight';
-  const palette = plan.colorPalette || 'amber, sky blue, sage green, soft white';
-  const composition = plan.composition || 'wide angle centered';
-  const textRendering = plan.textRendering || 'formed by clouds in the sky, large and centered';
-
-  let prompt = `${subject}. `
-    + `${medium}, ${composition}. `
-    + `${lighting}, color palette: ${palette}. `
-    + `The words "${phrase}" ${textRendering}, crisp and legible.`;
-
+  let prompt = plan.imagePrompt || `A vast open landscape at golden hour with a lone tree on a hill, the words "${plan.subliminalPhrase || 'TRANSCEND'}" formed by clouds`;
   if (prompt.length > 4000) prompt = prompt.slice(0, 3997) + '...';
   return prompt;
 }
@@ -243,7 +226,7 @@ function analyzeNovelty(results) {
   console.log('NOVELTY ANALYSIS');
   console.log('═'.repeat(70));
 
-  const fields = ['theme', 'vibe', 'contentType', 'constraint', 'intensity', 'imageSubject', 'imageMedium', 'lighting', 'colorPalette', 'composition', 'subliminalPhrase', 'textRendering'];
+  const fields = ['theme', 'vibe', 'contentType', 'constraint', 'intensity', 'imagePrompt', 'subliminalPhrase'];
 
   for (const field of fields) {
     const values = results.map(r => r.plan?.[field] || '').filter(Boolean);
@@ -351,13 +334,8 @@ async function main() {
     console.log(`  Type: ${plan.contentType}`);
     console.log(`  Constraint: ${plan.constraint}`);
     console.log(`  Intensity: ${plan.intensity}/10`);
-    console.log(`  Image Subject: ${plan.imageSubject}`);
-    console.log(`  Medium: ${plan.imageMedium}`);
-    console.log(`  Lighting: ${plan.lighting}`);
-    console.log(`  Color Palette: ${plan.colorPalette}`);
-    console.log(`  Composition: ${plan.composition}`);
+    console.log(`  Image Prompt: ${plan.imagePrompt}`);
     console.log(`  Subliminal: ${plan.subliminalPhrase}`);
-    console.log(`  Text Rendering: ${plan.textRendering}`);
 
     if (plan.arcTheme) { arcTheme = plan.arcTheme; console.log(`  Arc Theme: ${arcTheme}`); }
     if (plan.arcName) { arcName = plan.arcName; console.log(`  Arc Name: ${arcName}`); }
