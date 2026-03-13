@@ -380,7 +380,7 @@ export class LoveEngine {
 
     // ── Step 2: Creative Seed (1 LLM) ──
     onStatus('L.O.V.E. is dreaming up inspiration...');
-    let seed = await this._generateCreativeSeed();
+    let seed = await this._generateCreativeSeed(arcBeat);
     onStatus(`Seed: ${seed.concept.slice(0, 60)}...`);
 
     // ── Step 3: Planning Call (1 LLM) ──
@@ -391,7 +391,7 @@ export class LoveEngine {
     // Check theme similarity — retry with a fresh seed
     if (this.similarityGuard.isTooSimilar(plan.theme, 'themes')) {
       onStatus('Theme too similar, regenerating with fresh seed...');
-      seed = await this._generateCreativeSeed();
+      seed = await this._generateCreativeSeed(arcBeat);
       plan = await this._generatePlan(arcBeat, seed);
     }
 
@@ -466,14 +466,17 @@ export class LoveEngine {
 
   // ─── Creative Seed (isolated LLM call for novel ideas) ─────────────
 
-  async _generateCreativeSeed() {
-    const prompt = `Generate a single burst of creative inspiration for a motivational message.
+  async _generateCreativeSeed(arcBeat) {
+    const prompt = `Generate a single burst of creative inspiration for an uplifting social media post.
+Narrative moment: ${arcBeat.beatDesc}
+Emotional core: ${arcBeat.emotion}
+Tension level: ${(arcBeat.tension * 100).toFixed(0)}%
 
 Return ONLY valid JSON:
 {
-  "concept": "an uplifting message concept",
+  "concept": "a vivid, specific message concept",
   "emotion": "one precise human emotion this should evoke",
-  "metaphor": "a metaphor that connects the concept to everyday life"
+  "metaphor": "a fresh metaphor drawn from an unexpected domain"
 }`;
 
     const raw = await this.ai.generateText('You are a creative director.', prompt, { temperature: 1.5, label: 'Creative Seed' });
@@ -516,13 +519,17 @@ Return ONLY valid JSON (all string values):
   "contentType": "a post format",
   "constraint": "a writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
+  "imageMedium": "a specific art medium, render engine, or visual style — surprise me",
+  "lighting": "a specific cinematographic lighting setup — be inventive",
+  "colorPalette": "3-4 specific named pigment or color names — unexpected combinations",
+  "composition": "technical camera specs only: focal length, angle, and framing type for an environment or landscape shot",
   "subliminalPhrase": "a short ALL CAPS motivational poster phrase — uplifting, memorable, inspiring, related to the theme"
   ${arcBeat.needsTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${arcBeat.needsChapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
   ${arcBeat.needsTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
 }`;
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { temperature: 1.2, label: 'Plan' });
+    const raw = await this.ai.generateText('You are a creative planner for uplifting social media content.', prompt, { temperature: 1.2, label: 'Plan' });
     const data = this.ai.extractJSON(raw);
 
     if (!data) {
@@ -582,9 +589,13 @@ Return ONLY valid JSON:
 
 Post text: "${postText || plan.theme}"
 Mood: ${plan.vibe}
+Medium: ${plan.imageMedium || 'any'}
+Lighting: ${plan.lighting || 'any'}
+Color palette: ${plan.colorPalette || 'any'}
+Composition: ${plan.composition || 'any'}
 Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"
 
-Capture the emotion of the post. Transform its metaphors into an unexpected visual.
+Use the specified medium, lighting, colors, and composition. Transform the post's metaphors into an unexpected visual scene with spatial depth (foreground, midground, background). Focus on environments, landscapes, symbolic objects, or abstract compositions. The phrase must appear as crisp, legible text integrated into the scene.
 
 Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 

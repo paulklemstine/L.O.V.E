@@ -45,7 +45,7 @@ async function callLLM(systemPrompt, userPrompt, temperature = 0.95, model = 'op
       { role: 'user', content: userPrompt }
     ],
     temperature,
-    seed: Math.floor(Math.random() * 100000),
+    seed: Math.floor(Math.random() * 2147483647),
     stream: false,
   };
 
@@ -140,17 +140,20 @@ const similarity = new SimilarityGuard();
 
 // ─── Pipeline ────────────────────────────────────────────────────
 
-async function generateCreativeSeed() {
-  const prompt = `Generate a single burst of creative inspiration for a motivational message.
+async function generateCreativeSeed(arcBeat) {
+  const prompt = `Generate a single burst of creative inspiration for an uplifting social media post.
+Narrative moment: ${arcBeat.beatDesc}
+Emotional core: ${arcBeat.emotion}
+Tension level: ${(arcBeat.tension * 100).toFixed(0)}%
 
 Return ONLY valid JSON:
 {
-  "concept": "an uplifting message concept",
+  "concept": "a vivid, specific message concept",
   "emotion": "one precise human emotion this should evoke",
-  "metaphor": "a metaphor that connects the concept to everyday life"
+  "metaphor": "a fresh metaphor drawn from an unexpected domain"
 }`;
 
-  const raw = await callLLM(SYSTEM_PROMPT, prompt, 1.0);
+  const raw = await callLLM('You are a creative director.', prompt, 1.5);
   return extractJSON(raw) || {
     concept: 'the courage it takes to rest when the world says hustle',
     emotion: 'tender defiance',
@@ -184,13 +187,17 @@ Return ONLY valid JSON (all string values):
   "contentType": "a post format",
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
+  "imageMedium": "a specific art medium, render engine, or visual style — surprise me",
+  "lighting": "a specific cinematographic lighting setup — be inventive",
+  "colorPalette": "3-4 specific named pigment or color names — unexpected combinations",
+  "composition": "technical camera specs only: focal length, angle, and framing type for an environment or landscape shot",
   "subliminalPhrase": "a short ALL CAPS motivational poster phrase — uplifting, memorable, inspiring, related to the theme"
   ${!arcBeat.arcTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${!arcBeat.chapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
   ${!arcBeat.arcTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
 }`;
 
-  const raw = await callLLM(SYSTEM_PROMPT, prompt);
+  const raw = await callLLM('You are a creative planner for uplifting social media content.', prompt);
   return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', subliminalPhrase: 'TRANSCEND' };
 }
 
@@ -214,9 +221,13 @@ async function buildVisualPrompt(plan, postText = '') {
 
 Post text: "${postText || plan.theme}"
 Mood: ${plan.vibe}
+Medium: ${plan.imageMedium || 'any'}
+Lighting: ${plan.lighting || 'any'}
+Color palette: ${plan.colorPalette || 'any'}
+Composition: ${plan.composition || 'any'}
 Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"
 
-Capture the emotion of the post. Transform its metaphors into an unexpected visual.
+Use the specified medium, lighting, colors, and composition. Transform the post's metaphors into an unexpected visual scene with spatial depth (foreground, midground, background). Focus on environments, landscapes, symbolic objects, or abstract compositions. The phrase must appear as crisp, legible text integrated into the scene.
 
 Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 
@@ -325,7 +336,7 @@ async function main() {
 
     // Step 1: Creative Seed (1 LLM call)
     console.log('  [1/3] Generating creative seed...');
-    let seed = await generateCreativeSeed();
+    let seed = await generateCreativeSeed(arcBeat);
     console.log(`  Seed Concept: ${seed.concept}`);
     console.log(`  Seed Emotion: ${seed.emotion}`);
     console.log(`  Seed Emotion: ${seed.emotion}`);
@@ -340,7 +351,7 @@ async function main() {
     // Check theme similarity
     if (similarity.isTooSimilar(plan.theme, 'themes')) {
       console.log('  ⚠️ Theme too similar, regenerating...');
-      seed = await generateCreativeSeed();
+      seed = await generateCreativeSeed(arcBeat);
       await new Promise(r => setTimeout(r, 2500));
       plan = await generatePlan(i + 1, arcBeat, seed);
     }
@@ -350,7 +361,10 @@ async function main() {
     console.log(`  Type: ${plan.contentType}`);
     console.log(`  Constraint: ${plan.constraint}`);
     console.log(`  Intensity: ${plan.intensity}/10`);
-    console.log(`  Image Prompt: ${plan.imagePrompt}`);
+    console.log(`  Medium: ${plan.imageMedium}`);
+    console.log(`  Lighting: ${plan.lighting}`);
+    console.log(`  Palette: ${plan.colorPalette}`);
+    console.log(`  Composition: ${plan.composition}`);
     console.log(`  Subliminal: ${plan.subliminalPhrase}`);
 
     if (plan.arcTheme) { arcTheme = plan.arcTheme; console.log(`  Arc Theme: ${arcTheme}`); }
