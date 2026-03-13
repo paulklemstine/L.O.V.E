@@ -146,14 +146,19 @@ async function generatePlan(txNum, arcBeat) {
   const seedIntensity = Math.ceil(Math.random() * 10);
   const sparkNumber = Math.floor(Math.random() * 9999);
 
+  // Recent themes for novelty
+  const recentThemes = similarity.recentThemes.slice(-5);
+  const recentHint = recentThemes.length > 0
+    ? `\nRECENT THEMES (go in a completely different direction): ${recentThemes.join(' | ')}\n`
+    : '';
+
   const prompt = `Plan a post. It's ${new Date().toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay}. Spark: #${sparkNumber}.
 
 STORY ARC: ${arcBeat.arcName}${arcBeat.arcTheme ? ` — ${arcBeat.arcTheme}` : ' — (invent a fresh theme)'}
 Chapter ${arcBeat.chapter}: "${arcBeat.chapterTitle || '(invent a title)'}"
 Beat: ${arcBeat.beatName} (${arcBeat.beatIndex + 1}/${arcBeat.totalBeats}) — ${arcBeat.beatDesc}
 Tension: ${(arcBeat.tension * 100).toFixed(0)}% | Emotion: ${arcBeat.emotion}
-Previous: "${arcBeat.previousBeat || 'The story begins...'}"
-
+${recentHint}
 Invent a wildly fresh creative direction. Surprise yourself. Every field should feel like something you've never done before.
 
 Return ONLY valid JSON (all string values):
