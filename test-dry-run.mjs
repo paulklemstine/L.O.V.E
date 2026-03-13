@@ -213,13 +213,26 @@ Return ONLY valid JSON:
 
   const raw = await callLLM(SYSTEM_PROMPT, prompt, 0.85, 'claude-fast');
   const data = extractJSON(raw);
-  return data?.story || '[FAILED TO GENERATE]';
+  let story = (data?.story || '[FAILED TO GENERATE]');
+  // Strip invalid @mentions (no dot = not a real Bluesky handle)
+  story = story.replace(/@(\w+)\b(?!\.\w)/g, '$1');
+  return story;
+}
+
+async function depersonalize(text) {
+  const raw = await callLLM(
+    'You rewrite text as abstract scene descriptions.',
+    `Rewrite this as a short scene description with no people, no human figures, no pronouns. Keep the core metaphors and emotions. Return ONLY the rewritten text:\n\n"${text}"`,
+    0.7
+  );
+  return (raw || text).replace(/^["']|["']$/g, '').trim();
 }
 
 async function buildVisualPrompt(plan, postText = '') {
-  const prompt = `Create an image generation prompt inspired by this post:
+  const themeText = await depersonalize(postText || plan.theme);
+  const prompt = `Create an image generation prompt for an unpopulated scene inspired by this text:
 
-Post text: "${postText || plan.theme}"
+"${themeText}"
 Mood: ${plan.vibe}
 Medium: ${plan.imageMedium || 'any'}
 Lighting: ${plan.lighting || 'any'}
@@ -227,7 +240,7 @@ Color palette: ${plan.colorPalette || 'any'}
 Composition: ${plan.composition || 'any'}
 Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"
 
-Use the specified medium, lighting, colors, and composition. Transform the post's metaphors into an unexpected visual scene with spatial depth (foreground, midground, background). Focus on environments, landscapes, symbolic objects, or abstract compositions. The phrase must appear as crisp, legible text integrated into the scene.
+Use the specified medium, lighting, colors, and composition. Transform the text's metaphors into an unexpected visual scene with spatial depth (foreground, midground, background). Focus exclusively on environments, landscapes, symbolic objects, or abstract compositions. The phrase must appear as crisp, legible text integrated into the scene.
 
 Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 
