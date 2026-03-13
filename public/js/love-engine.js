@@ -375,7 +375,7 @@ export class LoveEngine {
     this.ai.callLog.push({
       label: 'Visual Prompt (code template)',
       systemPrompt: '(none — built in code)',
-      userPrompt: `imageSubject: ${plan.imageSubject}\nimageStyle: ${plan.imageStyle}\nsubliminalPhrase: ${plan.subliminalPhrase}`,
+      userPrompt: `imageSubject: ${plan.imageSubject}\nimageStyle: ${plan.imageStyle}\nsubliminalPhrase: ${plan.subliminalPhrase}\ntextRendering: ${plan.textRendering}`,
       response: visualPrompt,
       model: 'n/a',
     });
@@ -443,7 +443,8 @@ Return ONLY valid JSON (all string values):
   "intensity": "${seedIntensity}",
   "imageSubject": "one concrete, unexpected, visually stunning subject",
   "imageStyle": "invent a specific art medium + lighting + color palette + composition angle",
-  "subliminalPhrase": "1-3 word ALL CAPS phrase to embed in image"
+  "subliminalPhrase": "1-3 word ALL CAPS phrase to embed in image",
+  "textRendering": "describe how the phrase physically appears in the scene — carved, written, glowing, formed by objects — integrated into the environment, always readable"
   ${arcBeat.needsTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${arcBeat.needsChapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
   ${arcBeat.needsTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
@@ -462,6 +463,7 @@ Return ONLY valid JSON (all string values):
         imageSubject: 'a cosmic mandala pulsing with living light',
         imageStyle: 'visionary fractal art, bioluminescent god rays, electric blue and shocking pink',
         subliminalPhrase: 'TRANSCEND',
+        textRendering: 'glowing in cosmic fire across the sky, large and luminous',
       };
     }
     return data;
@@ -511,7 +513,8 @@ Return ONLY valid JSON:
     const subject = plan.imageSubject || 'cosmic energy vortex';
     const style = plan.imageStyle || 'visionary psychedelic art, vivid neon colors, volumetric lighting';
 
-    let prompt = `${subject}, ${style}. Text "${phrase}" in large bold clean white font, centered, high contrast. Vivid saturated colors, dark rich background.`;
+    const textRendering = plan.textRendering || 'in large bold clean white font, centered, high contrast';
+    let prompt = `${subject}, ${style}. The words "${phrase}" ${textRendering}. Readable, vivid saturated colors, dark rich background.`;
 
     if (prompt.length > 500) prompt = prompt.slice(0, 497) + '...';
     return prompt;

@@ -165,14 +165,15 @@ Return ONLY valid JSON (all string values):
   "intensity": "${seedIntensity}",
   "imageSubject": "one concrete, unexpected, visually stunning subject",
   "imageStyle": "invent a specific art medium + lighting + color palette + composition angle",
-  "subliminalPhrase": "1-3 word ALL CAPS phrase to embed in image"
+  "subliminalPhrase": "1-3 word ALL CAPS phrase to embed in image",
+  "textRendering": "describe how the phrase physically appears in the scene — carved, written, glowing, formed by objects — integrated into the environment, always readable"
   ${!arcBeat.arcTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${!arcBeat.chapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
   ${!arcBeat.arcTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
 }`;
 
   const raw = await callLLM(SYSTEM_PROMPT, prompt);
-  return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', imageSubject: 'cosmic mandala', imageStyle: 'visionary art, neon', subliminalPhrase: 'TRANSCEND' };
+  return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', imageSubject: 'cosmic mandala', imageStyle: 'visionary art, neon', subliminalPhrase: 'TRANSCEND', textRendering: 'glowing in cosmic fire across the sky, large and luminous' };
 }
 
 async function generateContent(plan, arcBeat) {
@@ -195,7 +196,8 @@ function buildVisualPrompt(plan) {
   const subject = plan.imageSubject || 'cosmic energy vortex';
   const style = plan.imageStyle || 'visionary psychedelic art, vivid neon colors, volumetric lighting';
 
-  let prompt = `${subject}, ${style}. Text "${phrase}" in large bold clean white font, centered, high contrast. Vivid saturated colors, dark rich background.`;
+  const textRendering = plan.textRendering || 'in large bold clean white font, centered, high contrast';
+  let prompt = `${subject}, ${style}. The words "${phrase}" ${textRendering}. Readable, vivid saturated colors, dark rich background.`;
   if (prompt.length > 500) prompt = prompt.slice(0, 497) + '...';
   return prompt;
 }
@@ -207,7 +209,7 @@ function analyzeNovelty(results) {
   console.log('NOVELTY ANALYSIS');
   console.log('═'.repeat(70));
 
-  const fields = ['theme', 'vibe', 'contentType', 'constraint', 'intensity', 'imageSubject', 'imageStyle', 'subliminalPhrase'];
+  const fields = ['theme', 'vibe', 'contentType', 'constraint', 'intensity', 'imageSubject', 'imageStyle', 'subliminalPhrase', 'textRendering'];
 
   for (const field of fields) {
     const values = results.map(r => r.plan?.[field] || '').filter(Boolean);
@@ -309,6 +311,7 @@ async function main() {
     console.log(`  Image Subject: ${plan.imageSubject}`);
     console.log(`  Image Style: ${plan.imageStyle}`);
     console.log(`  Subliminal: ${plan.subliminalPhrase}`);
+    console.log(`  Text Rendering: ${plan.textRendering}`);
 
     if (plan.arcTheme) { arcTheme = plan.arcTheme; console.log(`  Arc Theme: ${arcTheme}`); }
     if (plan.arcName) { arcName = plan.arcName; console.log(`  Arc Name: ${arcName}`); }
