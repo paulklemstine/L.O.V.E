@@ -37,7 +37,7 @@ const BEATS = [
 
 // ─── API Helper ──────────────────────────────────────────────────
 
-async function callLLM(systemPrompt, userPrompt, temperature = 0.95, model = 'deepseek') {
+async function callLLM(systemPrompt, userPrompt, temperature = 0.95, model = 'openai') {
   const body = {
     model,
     messages: [
@@ -186,7 +186,7 @@ RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "y
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
 
-  const raw = await callLLM(SYSTEM_PROMPT, prompt, 0.85, 'openai');
+  const raw = await callLLM(SYSTEM_PROMPT, prompt, 0.85, 'claude-fast');
   const data = extractJSON(raw);
   return data?.story || '[FAILED TO GENERATE]';
 }

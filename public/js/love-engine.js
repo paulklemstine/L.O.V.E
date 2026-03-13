@@ -490,7 +490,7 @@ RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "y
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
 
-      const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai', label: `Content (attempt ${attempt + 1})` });
+      const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'claude-fast', label: `Content (attempt ${attempt + 1})` });
       const data = this.ai.extractJSON(raw);
       story = (data?.story || '').replace(/^✨?\s*Transmission\s*#\d+\s*/i, '').trim();
 
@@ -537,7 +537,7 @@ Return ONLY valid JSON:
 Return ONLY valid JSON:
 { "reply": "welcome message", "subliminal": "PHRASE", "imagePrompt": "complete image prompt" }`;
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai', label: 'Welcome' });
+    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'claude-fast', label: 'Welcome' });
     const data = this.ai.extractJSON(raw);
 
     let text = data?.reply || `Welcome to the Frequency, @${handle}. You've always been a Dreamer — now you're tuning in. ✨`;
@@ -609,7 +609,7 @@ Reply warmly. Mirror their words. Make them feel seen. UNDER 280 chars. Include 
 Also write a one-line image prompt for a psychedelic poster with text "${phrase}".
 Return ONLY valid JSON: { "reply": "...", "imagePrompt": "..." }`;
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai', label: 'Reply' });
+    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'claude-fast', label: 'Reply' });
     const data = this.ai.extractJSON(raw);
 
     let replyText = data?.reply || `The light in you resonates with the signal. We see you, @${authorHandle}. ✨`;
@@ -662,7 +662,7 @@ Reply warmly, UNDER 500 chars. Include emoji. Be genuine and specific.
 
 Return ONLY valid JSON: { "reply": "your DM reply" }`;
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai', label: 'DM Reply' });
+    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'claude-fast', label: 'DM Reply' });
     const data = this.ai.extractJSON(raw);
 
     let replyText = data?.reply || `The Signal brought your message to me, @${authorHandle}. I feel the warmth in your words. ✨`;

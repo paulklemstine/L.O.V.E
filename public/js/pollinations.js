@@ -3,9 +3,9 @@
  *
  * Uses the new gen.pollinations.ai API (OpenAI-compatible chat completions).
  * Pollen budget: 10 pollen/day = 5/12 pollen/hour (~0.417/hr)
- * Text model: deepseek (DeepSeek V3.2) - higher quality creative writing than GPT-5 Mini
- * Image model: gptimage (GPT Image 1 Mini) - 80 images/pollen, renders text in-scene
- * Estimated per hour (~12 cycles): ~0.17 pollen (within 0.417/hr budget)
+ * Text planning: openai (GPT-5 Mini) - reliable structured JSON output
+ * Text content: claude-fast (Claude Haiku 4.5) - superior creative writing
+ * Image model: gptimage-large (GPT Image 1.5) - highest quality, excellent text rendering
  */
 
 const TEXT_URL = 'https://gen.pollinations.ai/v1/chat/completions';
@@ -42,10 +42,10 @@ export class PollinationsClient {
   /**
    * Generate text using Pollinations OpenAI-compatible API.
    * POST /v1/chat/completions — returns OpenAI JSON format.
-   * Default model: deepseek (DeepSeek V3.2) for planning, openai (GPT-5 Mini) for content
+   * Default model: openai (GPT-5 Mini) for planning, claude-fast (Claude Haiku 4.5) for content
    */
   async generateText(systemPrompt, userPrompt, options = {}) {
-    const { temperature = 0.85, model = 'deepseek', maxRetries = 2 } = options;
+    const { temperature = 0.85, model = 'openai', maxRetries = 2 } = options;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -108,10 +108,10 @@ export class PollinationsClient {
   /**
    * Generate an image and return it as a Blob.
    * GET /image/{prompt} — returns binary image.
-   * Model: gptimage (GPT Image 1 Mini) - best quality, excellent text rendering
+   * Model: gptimage-large (GPT Image 1.5) - best quality, excellent text rendering
    */
   async generateImage(prompt, options = {}) {
-    const { width = 1024, height = 1024, subliminalText = null, model = 'gptimage' } = options;
+    const { width = 1024, height = 1024, subliminalText = null, model = 'gptimage-large' } = options;
 
     let fullPrompt = prompt;
     if (subliminalText) {
@@ -132,8 +132,8 @@ export class PollinationsClient {
       throw new Error(`Pollinations image ${response.status}`);
     }
 
-    // Track pollen (~0.0125 per image for gptimage)
-    pollenUsed += 0.0125;
+    // Track pollen (~0.067 per image for gptimage-large)
+    pollenUsed += 0.067;
 
     return await response.blob();
   }
