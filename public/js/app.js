@@ -130,6 +130,16 @@ async function startLoop() {
     } catch (err) {
       log(`Profile update skipped: ${err.message}`);
     }
+
+    // Seed novelty guard from actual recent posts
+    try {
+      const feed = await bsky.getAuthorFeed(20);
+      love.seedFromFeed(feed);
+      const n = feed?.feed?.length || 0;
+      log(`Novelty guard seeded from ${n} recent posts.`);
+    } catch (err) {
+      log(`Feed seed skipped: ${err.message}`);
+    }
   } catch (err) {
     log(`LOGIN FAILED: ${err.message}`);
     return;

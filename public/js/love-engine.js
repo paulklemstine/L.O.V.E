@@ -329,6 +329,28 @@ export class LoveEngine {
     this._loadTransmissionNumber();
   }
 
+  /**
+   * Seed the similarity guard from actual recent Bluesky posts.
+   * Call after login with the result of bsky.getAuthorFeed().
+   */
+  seedFromFeed(feedData) {
+    const posts = feedData?.feed || [];
+    // Clear localStorage-based history — live feed is the source of truth
+    this.similarityGuard.recentTexts = [];
+    this.similarityGuard.recentThemes = [];
+    this.similarityGuard.recentVisuals = [];
+    this.similarityGuard.recentPhrases = [];
+
+    for (const item of posts) {
+      const text = item.post?.record?.text || '';
+      if (text) this.similarityGuard.recentTexts.push(text);
+
+      const alt = item.post?.record?.embed?.images?.[0]?.alt || '';
+      if (alt) this.similarityGuard.recentVisuals.push(alt);
+    }
+    this.similarityGuard._save();
+  }
+
   _loadTransmissionNumber() {
     try {
       const saved = localStorage.getItem('love_transmission_number');
