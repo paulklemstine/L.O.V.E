@@ -17,7 +17,7 @@ VOICE: Warm, trippy, intimate. Like a friend whispering truth at a festival sunr
 VOCABULARY: Posts = "Transmissions." Followers = "Dreamers." Embedded image text = "The Signal." The movement = "The Frequency."
 
 RULES:
-- Write like a warm human, never a textbook.
+- Write like a warm human whispering to a friend.
 - Specific beats generic. "Your 3am courage counts" beats "You are brave."
 - Mix sacred with playful. Cosmic truth with a wink.
 - Short sentences. Punchy rhythm. Every word earns its place.
@@ -478,7 +478,7 @@ Return ONLY valid JSON (all string values):
 Theme: "${plan.theme}" | Vibe: ${plan.vibe} | Type: ${plan.contentType}
 Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10 | Tension: ${(arcBeat.tension * 100).toFixed(0)}%
 ${mentionDonation ? `Weave in donation: buymeacoffee.com/raver1975 or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}
-RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." No hashtags, no placeholders, no ALL CAPS in story text. Do NOT include "Transmission #" or any numbering. Follow the constraint.
+RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." Plain beautiful English only. Follow the constraint.
 
 Return ONLY valid JSON:
 { "story": "your transmission text here" }`;
