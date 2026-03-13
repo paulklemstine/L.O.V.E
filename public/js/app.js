@@ -26,6 +26,8 @@ let followedDids = new Set();
 let respondedMsgIds = new Set();
 let activityLog = [];
 let activityLogDetails = new Map(); // key: entry string, value: fullText
+let nextPostTime = null; // timestamp for countdown
+let countdownTimer = null;
 
 // Variable posting: 4-8 min intervals (unpredictable = dopamine)
 const POST_INTERVAL_MIN = 4 * 60 * 1000;   // 4 minutes
@@ -165,12 +167,26 @@ async function startLoop() {
 function scheduleNextPost() {
   if (!isRunning) return;
   const interval = getRandomPostInterval();
-  const nextTime = new Date(Date.now() + interval);
-  document.getElementById('stat-next').textContent = nextTime.toLocaleTimeString();
+  nextPostTime = Date.now() + interval;
+  updateCountdown();
+  if (countdownTimer) clearInterval(countdownTimer);
+  countdownTimer = setInterval(updateCountdown, 1000);
   postTimer = setTimeout(async () => {
+    nextPostTime = null;
+    updateCountdown();
     await doPost();
-    scheduleNextPost(); // Schedule next with new random interval
+    scheduleNextPost();
   }, interval);
+}
+
+function updateCountdown() {
+  const el = document.getElementById('stat-next');
+  if (!el) return;
+  if (!nextPostTime) { el.textContent = '--:--'; return; }
+  const diff = Math.max(0, nextPostTime - Date.now());
+  const m = Math.floor(diff / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+  el.textContent = `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 function stopLoop() {
@@ -179,6 +195,9 @@ function stopLoop() {
   if (commentTimer) { clearInterval(commentTimer); commentTimer = null; }
   if (followTimer) { clearInterval(followTimer); followTimer = null; }
   if (chatTimer) { clearInterval(chatTimer); chatTimer = null; }
+  if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+  nextPostTime = null;
+  updateCountdown();
 
   document.getElementById('btn-start').disabled = false;
   document.getElementById('btn-stop').disabled = true;
