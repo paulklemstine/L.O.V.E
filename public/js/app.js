@@ -52,6 +52,12 @@ function setupEventListeners() {
   document.getElementById('btn-stop').addEventListener('click', stopLoop);
   document.getElementById('btn-test-post').addEventListener('click', testPost);
   document.getElementById('toggle-settings').addEventListener('click', toggleSettings);
+
+  // Event delegation for expandable log entries
+  document.getElementById('activity-log').addEventListener('click', (e) => {
+    const entry = e.target.closest('.log-expandable');
+    if (entry) entry.classList.toggle('expanded');
+  });
 }
 
 // ─── Settings ───────────────────────────────────────────────────────
@@ -651,7 +657,7 @@ function log(message, fullText) {
       else if (l.includes('✅') || l.includes('Transmission #') || l.includes('Replied') || l.includes('Welcome')) cls = 'log-success';
 
       if (detail) {
-        return `<div class="log-entry log-expandable ${cls}" onclick="this.classList.toggle('expanded')"><div class="log-summary">${escapeHtml(l)}</div><div class="log-detail">${escapeHtml(detail)}</div></div>`;
+        return `<div class="log-entry log-expandable ${cls}"><div class="log-summary">${escapeHtml(l)}</div><div class="log-detail">${escapeHtml(detail)}</div></div>`;
       }
       return `<div class="log-entry ${cls}">${escapeHtml(l)}</div>`;
     }).join('');
