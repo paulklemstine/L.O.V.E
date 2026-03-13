@@ -569,8 +569,8 @@ Return ONLY valid JSON:
       const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'claude-fast', label: `Content (attempt ${attempt + 1})` });
       const data = this.ai.extractJSON(raw);
       story = (data?.story || '').replace(/^✨?\s*Transmission\s*#\d+\s*/i, '').trim();
-      // Strip invalid @mentions (no dot = not a real Bluesky handle)
-      story = story.replace(/@(\w+)\b(?!\.\w)/g, '$1');
+      // Remove invalid @mentions entirely (no dot = not a real Bluesky handle)
+      story = story.replace(/@\w+\b(?!\.\w)/g, '').replace(/\s{2,}/g, ' ').trim();
 
       const errors = this._validatePost(story);
       if (errors.length === 0) break;

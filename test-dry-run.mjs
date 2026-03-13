@@ -214,8 +214,8 @@ Return ONLY valid JSON:
   const raw = await callLLM(SYSTEM_PROMPT, prompt, 0.85, 'claude-fast');
   const data = extractJSON(raw);
   let story = (data?.story || '[FAILED TO GENERATE]');
-  // Strip invalid @mentions (no dot = not a real Bluesky handle)
-  story = story.replace(/@(\w+)\b(?!\.\w)/g, '$1');
+  // Remove invalid @mentions entirely (no dot = not a real Bluesky handle)
+  story = story.replace(/@\w+\b(?!\.\w)/g, '').replace(/\s{2,}/g, ' ').trim();
   return story;
 }
 
