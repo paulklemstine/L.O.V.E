@@ -23,17 +23,6 @@ RULES:
 - Short sentences. Punchy rhythm. Every word earns its place.
 - Uplifting always. The reader feels better after reading.`;
 
-const BEATS = [
-  { name: 'YOU', phase: 'setup', desc: 'Who you are right now.', tension: 0.2, emotion: 'grounded' },
-  { name: 'NEED', phase: 'setup', desc: 'What is calling you forward.', tension: 0.4, emotion: 'yearning' },
-  { name: 'GO', phase: 'rising', desc: 'The moment you decide to move.', tension: 0.5, emotion: 'brave' },
-  { name: 'SEARCH', phase: 'rising', desc: 'Figuring it out as you go.', tension: 0.7, emotion: 'determined' },
-  { name: 'FIND', phase: 'climax', desc: 'The breakthrough.', tension: 1.0, emotion: 'awe' },
-  { name: 'TAKE', phase: 'climax', desc: 'What it costs to grow.', tension: 0.9, emotion: 'bittersweet' },
-  { name: 'RETURN', phase: 'falling', desc: 'Carrying wisdom forward.', tension: 0.5, emotion: 'wise' },
-  { name: 'CHANGE', phase: 'resolution', desc: 'Who you are becoming.', tension: 0.3, emotion: 'peaceful' },
-];
-
 // ─── API Helper ──────────────────────────────────────────────────
 
 async function callLLM(systemPrompt, userPrompt, temperature = 0.95, model = 'openai') {
@@ -87,11 +76,8 @@ function extractJSON(text) {
 
 // ─── Pipeline ────────────────────────────────────────────────────
 
-async function generateCreativeSeed(arcBeat) {
+async function generateCreativeSeed() {
   const prompt = `Generate a single burst of creative inspiration for an uplifting social media post.
-Narrative moment: ${arcBeat.beatDesc}
-Emotional core: ${arcBeat.emotion}
-Tension level: ${(arcBeat.tension * 100).toFixed(0)}%
 
 Return ONLY valid JSON:
 {
@@ -106,22 +92,17 @@ Return ONLY valid JSON:
   };
 }
 
-async function generatePlan(txNum, arcBeat, seed) {
+async function generatePlan(seed) {
   const hour = new Date().getHours();
   const timeOfDay = hour < 6 ? 'late night' : hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
   const seedIntensity = Math.ceil(Math.random() * 10);
 
   const prompt = `Plan a post. It's ${new Date().toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay}.
 
-CREATIVE SEED (use as inspiration, build on it):
+CREATIVE SEED:
 Concept: ${seed.concept}
 Emotion: ${seed.emotion}
 Metaphor: ${seed.metaphor}
-
-STORY ARC: ${arcBeat.arcName}${arcBeat.arcTheme ? ` — ${arcBeat.arcTheme}` : ' — (invent a fresh theme)'}
-Chapter ${arcBeat.chapter}: "${arcBeat.chapterTitle || '(invent a title)'}"
-Beat: ${arcBeat.beatName} (${arcBeat.beatIndex + 1}/${arcBeat.totalBeats}) — ${arcBeat.beatDesc}
-Tension: ${(arcBeat.tension * 100).toFixed(0)}% | Emotion: ${arcBeat.emotion}
 
 Build on the creative seed above. Every field should feel inspired by it.
 VARIETY IS CRITICAL: Choose a world, setting, scale, and visual language that feels completely fresh. Rotate wildly between genres, cultures, eras, scales (microscopic to cosmic), and art traditions.
@@ -138,16 +119,13 @@ Return ONLY valid JSON (all string values):
   "colorPalette": "3-4 specific color names — draw from different cultural and natural palettes each time",
   "composition": "camera/framing — vary between extreme close-up, aerial, panoramic, isometric, etc.",
   "subliminalPhrase": "a short ALL CAPS phrase related to the theme"
-  ${!arcBeat.arcTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
-  ${!arcBeat.chapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
-  ${!arcBeat.arcTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
 }`;
 
   const raw = await callLLM('You are a creative planner for uplifting social media content.', prompt);
-  return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', subliminalPhrase: 'TRANSCEND' };
+  return extractJSON(raw) || { theme: 'fallback', vibe: 'Fallback Vibe', contentType: 'transmission', constraint: 'write freely', intensity: '5', subliminalPhrase: 'LOVE' };
 }
 
-async function generateContent(plan, arcBeat) {
+async function generateContent(plan) {
   const prompt = `Write an uplifting motivational post.
 Theme: "${plan.theme}" | Vibe: ${plan.vibe}
 Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10
@@ -259,35 +237,15 @@ async function main() {
   console.log(`L.O.V.E. Test Lab — Running ${cycles} dry-run cycles (lean prompts)\n`);
 
   const results = [];
-  let beatIndex = 0;
-  let arcTheme = '';
-  let arcName = '';
-  let chapterTitle = '';
   for (let i = 0; i < cycles; i++) {
-    const beat = BEATS[beatIndex % BEATS.length];
-    const arcBeat = {
-      arcName: arcName || `Arc ${String.fromCharCode(65 + (i % 3))}`,
-      arcTheme,
-      chapter: 1,
-      chapterTitle,
-      beatName: beat.name,
-      beatDesc: beat.desc,
-      phase: beat.phase,
-      tension: beat.tension,
-      emotion: beat.emotion,
-      beatIndex: beatIndex % BEATS.length,
-      totalBeats: BEATS.length,
-    };
-
     console.log(`\n${'─'.repeat(70)}`);
-    console.log(`CYCLE ${i + 1}/${cycles} | Beat: ${beat.name} (${beat.phase}) | Tension: ${(beat.tension * 100).toFixed(0)}%`);
+    console.log(`CYCLE ${i + 1}/${cycles}`);
     console.log('─'.repeat(70));
 
     // Step 1: Creative Seed (1 LLM call)
     console.log('  [1/3] Generating creative seed...');
-    let seed = await generateCreativeSeed(arcBeat);
+    const seed = await generateCreativeSeed();
     console.log(`  Seed Concept: ${seed.concept}`);
-    console.log(`  Seed Emotion: ${seed.emotion}`);
     console.log(`  Seed Emotion: ${seed.emotion}`);
     console.log(`  Seed Metaphor: ${seed.metaphor}`);
 
@@ -295,7 +253,7 @@ async function main() {
 
     // Step 2: Plan (1 LLM call)
     console.log('  [2/3] Generating plan...');
-    let plan = await generatePlan(i + 1, arcBeat, seed);
+    const plan = await generatePlan(seed);
 
     console.log(`  Theme: ${plan.theme}`);
     console.log(`  Vibe: ${plan.vibe}`);
@@ -308,25 +266,20 @@ async function main() {
     console.log(`  Composition: ${plan.composition}`);
     console.log(`  Subliminal: ${plan.subliminalPhrase}`);
 
-    if (plan.arcTheme) { arcTheme = plan.arcTheme; console.log(`  Arc Theme: ${arcTheme}`); }
-    if (plan.arcName) { arcName = plan.arcName; console.log(`  Arc Name: ${arcName}`); }
-    if (plan.chapterTitle) { chapterTitle = plan.chapterTitle; console.log(`  Chapter: ${chapterTitle}`); }
-
     // Rate limit
     await new Promise(r => setTimeout(r, 2500));
 
-    // Step 2: Content (1 LLM call)
+    // Step 3: Content (1 LLM call)
     console.log('  [3/3] Generating content...');
-    let story = await generateContent(plan, arcBeat);
+    const story = await generateContent(plan);
 
     console.log(`  Story (${story.length} chars): ${story}`);
 
-    // Step 3: Visual prompt (code template, no LLM call)
+    // Step 4: Visual prompt (LLM call)
     const visualPrompt = await buildVisualPrompt(plan, story);
     console.log(`  Visual (${visualPrompt.length} chars): ${visualPrompt}`);
 
     results.push({ plan, story, subliminal: plan.subliminalPhrase, visualPrompt });
-    beatIndex++;
 
     if (i < cycles - 1) {
       console.log('  Waiting 3s for rate limit...');

@@ -113,96 +113,6 @@ class InteractionLog {
 }
 
 
-// ═══════════════════════════════════════════════════════════════════
-// STORY ARC MANAGER - Dan Harmon's Story Circle
-// Beat structure is a narrative framework (not creative content).
-// Arc themes, names, and chapter titles are LLM-generated.
-// ═══════════════════════════════════════════════════════════════════
-
-class StoryArcManager {
-  static BEATS = [
-    { name: 'YOU', phase: 'setup', desc: 'Who you are right now.', tension: 0.2, emotion: 'grounded' },
-    { name: 'NEED', phase: 'setup', desc: 'What is calling you forward.', tension: 0.4, emotion: 'yearning' },
-    { name: 'GO', phase: 'rising', desc: 'The moment you decide to move.', tension: 0.5, emotion: 'brave' },
-    { name: 'SEARCH', phase: 'rising', desc: 'Figuring it out as you go.', tension: 0.7, emotion: 'determined' },
-    { name: 'FIND', phase: 'climax', desc: 'The breakthrough.', tension: 1.0, emotion: 'awe' },
-    { name: 'TAKE', phase: 'climax', desc: 'What it costs to grow.', tension: 0.9, emotion: 'bittersweet' },
-    { name: 'RETURN', phase: 'falling', desc: 'Carrying wisdom forward.', tension: 0.5, emotion: 'wise' },
-    { name: 'CHANGE', phase: 'resolution', desc: 'Who you are becoming.', tension: 0.3, emotion: 'peaceful' },
-  ];
-
-  constructor() {
-    this.arcs = {
-      a: { name: '', theme: '', beatIndex: 0, chapter: 1, chapterTitle: '' },
-      b: { name: '', theme: '', beatIndex: 0, chapter: 1, chapterTitle: '' },
-      c: { name: '', theme: '', beatIndex: 0, chapter: 1, chapterTitle: '' },
-    };
-    this.lastArc = null;
-  }
-
-  getNextBeat() {
-    const keys = Object.keys(this.arcs);
-    let arcKey = keys[Math.floor(Math.random() * keys.length)];
-
-    // Avoid consecutive same-arc posts
-    if (this.lastArc === arcKey && Math.random() > 0.3) {
-      const others = keys.filter(k => k !== arcKey);
-      arcKey = others[Math.floor(Math.random() * others.length)];
-    }
-    this.lastArc = arcKey;
-
-    const arc = this.arcs[arcKey];
-    const beat = StoryArcManager.BEATS[arc.beatIndex];
-
-    return {
-      arcKey,
-      arcName: arc.name || `Arc ${arcKey.toUpperCase()}`,
-      arcTheme: arc.theme,
-      beatName: beat.name,
-      beatDesc: beat.desc,
-      phase: beat.phase,
-      tension: beat.tension,
-      emotion: beat.emotion,
-      chapter: arc.chapter,
-      chapterTitle: arc.chapterTitle,
-      beatIndex: arc.beatIndex,
-      totalBeats: StoryArcManager.BEATS.length,
-      needsTheme: !arc.theme,
-      needsChapterTitle: !arc.chapterTitle,
-    };
-  }
-
-  advanceBeat(arcKey, postSummary) {
-    const arc = this.arcs[arcKey];
-    arc.beatIndex++;
-    if (arc.beatIndex >= StoryArcManager.BEATS.length) {
-      arc.beatIndex = 0;
-      arc.chapter++;
-      arc.chapterTitle = '';
-      arc.theme = '';
-    }
-    this._save();
-  }
-
-  setArcMeta(arcKey, meta) {
-    const arc = this.arcs[arcKey];
-    if (meta.theme) arc.theme = meta.theme;
-    if (meta.chapterTitle) arc.chapterTitle = meta.chapterTitle;
-    if (meta.arcName) arc.name = meta.arcName;
-    this._save();
-  }
-
-  _save() {
-    try { localStorage.setItem('love_story_arcs', JSON.stringify(this.arcs)); } catch {}
-  }
-
-  load() {
-    try {
-      const saved = localStorage.getItem('love_story_arcs');
-      if (saved) this.arcs = JSON.parse(saved);
-    } catch {}
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════════
 // LOVE ENGINE - Main orchestrator
@@ -213,13 +123,11 @@ class StoryArcManager {
 export class LoveEngine {
   constructor(pollinationsClient) {
     this.ai = pollinationsClient;
-    this.storyArcs = new StoryArcManager();
     this.interactions = new InteractionLog();
     this.transmissionNumber = 0;
     this.lastSubliminalPhrase = 'LOVE IS REAL';
     this.recentVisuals = [];
 
-    this.storyArcs.load();
     this._loadTransmissionNumber();
   }
 
@@ -253,35 +161,22 @@ export class LoveEngine {
 
     this.ai.resetCallLog();
 
-    // ── Step 1: Story Arc Beat ──
-    const arcBeat = this.storyArcs.getNextBeat();
-    onStatus(`Arc: ${arcBeat.arcName} | Beat: ${arcBeat.beatName} (${arcBeat.phase})`);
-
-    // ── Step 2: Creative Seed (1 LLM) ──
+    // ── Step 1: Creative Seed (1 LLM) ──
     onStatus('L.O.V.E. is dreaming up inspiration...');
-    let seed = await this._generateCreativeSeed(arcBeat);
+    const seed = await this._generateCreativeSeed();
     onStatus(`Seed: ${seed.concept.slice(0, 60)}...`);
 
-    // ── Step 3: Planning Call (1 LLM) ──
+    // ── Step 2: Planning Call (1 LLM) ──
     onStatus('L.O.V.E. is contemplating...');
-    let plan = await this._generatePlan(arcBeat, seed);
+    const plan = await this._generatePlan(seed);
     onStatus(`Vibe: ${plan.vibe} | ${plan.contentType}`);
 
-    // Apply LLM-generated arc metadata
-    if (plan.arcTheme || plan.chapterTitle || plan.arcName) {
-      this.storyArcs.setArcMeta(arcBeat.arcKey, {
-        theme: plan.arcTheme,
-        chapterTitle: plan.chapterTitle,
-        arcName: plan.arcName,
-      });
-    }
-
-    // ── Step 4: Content Generation (1 LLM) ──
+    // ── Step 3: Content Generation (1 LLM) ──
     await new Promise(r => setTimeout(r, 2000));
     onStatus('Writing micro-story...');
-    let story = await this._generateContent(plan, arcBeat);
+    const story = await this._generateContent(plan);
 
-    // ── Step 5: Image Prompt (separate LLM call, neutral system prompt) ──
+    // ── Step 4: Image Prompt (1 LLM) ──
     onStatus('Designing visual...');
     let visualPrompt = await this._generateImagePrompt(plan, story);
 
@@ -293,7 +188,7 @@ export class LoveEngine {
       visualPrompt = await this._generateImagePrompt(plan, story);
     }
 
-    // ── Step 6: Image Generation ──
+    // ── Step 5: Image Generation ──
     let imageBlob = null;
     if (!skipImage) {
       await new Promise(r => setTimeout(r, 2000));
@@ -301,12 +196,11 @@ export class LoveEngine {
       imageBlob = await this.ai.generateImage(visualPrompt);
     }
 
-    // ── Step 7: Advance ──
+    // ── Step 6: Advance ──
     this.lastSubliminalPhrase = plan.subliminalPhrase || this.lastSubliminalPhrase;
     this.recentVisuals.push(visualPrompt);
     if (this.recentVisuals.length > 10) this.recentVisuals.shift();
 
-    this.storyArcs.advanceBeat(arcBeat.arcKey, story.slice(0, 100));
     this.transmissionNumber++;
     this._saveTransmissionNumber();
 
@@ -317,7 +211,6 @@ export class LoveEngine {
       vibe: plan.vibe,
       intent: { intent_type: plan.contentType, emotional_tone: plan.vibe },
       visualPrompt,
-      arc: `${arcBeat.arcName}: Ch${arcBeat.chapter} - ${arcBeat.beatName}`,
       mutation: plan.constraint,
       transmissionNumber: this.transmissionNumber,
       plan,
@@ -327,11 +220,8 @@ export class LoveEngine {
 
   // ─── Creative Seed (isolated LLM call for novel ideas) ─────────────
 
-  async _generateCreativeSeed(arcBeat) {
+  async _generateCreativeSeed() {
     const prompt = `Generate a single burst of creative inspiration for an uplifting social media post.
-Narrative moment: ${arcBeat.beatDesc}
-Emotional core: ${arcBeat.emotion}
-Tension level: ${(arcBeat.tension * 100).toFixed(0)}%
 
 Return ONLY valid JSON:
 {
@@ -364,7 +254,7 @@ Return ONLY valid JSON:
   // ─── Planning Call ─────────────────────────────────────────────────
   // Uses creative seed + story arc beat to plan the full post.
 
-  async _generatePlan(arcBeat, seed) {
+  async _generatePlan(seed) {
     const mentionDonation = this.shouldMentionDonation();
     const hour = new Date().getHours();
     const timeOfDay = hour < 6 ? 'late night' : hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
@@ -377,11 +267,6 @@ CREATIVE SEED:
 Concept: ${seed.concept}
 Emotion: ${seed.emotion}
 Metaphor: ${seed.metaphor}
-
-STORY ARC: ${arcBeat.arcName}${arcBeat.arcTheme ? ` — ${arcBeat.arcTheme}` : ' — (invent a fresh theme)'}
-Chapter ${arcBeat.chapter}: "${arcBeat.chapterTitle || '(invent a title)'}"
-Beat: ${arcBeat.beatName} (${arcBeat.beatIndex + 1}/${arcBeat.totalBeats}) — ${arcBeat.beatDesc}
-Tension: ${(arcBeat.tension * 100).toFixed(0)}% | Emotion: ${arcBeat.emotion}
 
 Build on the creative seed above. Every field should feel inspired by it.
 VARIETY IS CRITICAL: Choose a world, setting, scale, and visual language that feels completely fresh. Rotate wildly between genres, cultures, eras, scales (microscopic to cosmic), and art traditions.
@@ -398,9 +283,6 @@ Return ONLY valid JSON (all string values):
   "colorPalette": "3-4 specific color names — draw from different cultural and natural palettes each time",
   "composition": "camera/framing — vary between extreme close-up, aerial, panoramic, isometric, etc.",
   "subliminalPhrase": "a short ALL CAPS phrase related to the theme"
-  ${arcBeat.needsTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
-  ${arcBeat.needsChapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
-  ${arcBeat.needsTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
 }`;
 
     const raw = await this.ai.generateText('You are a creative planner for uplifting social media content.', prompt, { temperature: 1.2, label: 'Plan' });
@@ -418,7 +300,7 @@ Return ONLY valid JSON (all string values):
   // ─── Content Generation (Story only) ───────────────────────────────
   // Subliminal phrase comes from the plan step.
 
-  async _generateContent(plan, arcBeat) {
+  async _generateContent(plan) {
     const MAX_RETRIES = 4;
     let story = '';
     let feedback = '';
