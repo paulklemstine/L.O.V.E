@@ -200,7 +200,7 @@ function buildVisualPrompt(plan) {
   const textRendering = plan.textRendering || 'in large bold clean white font, centered, high contrast';
   const imageMood = plan.imageMood || 'radiant psychedelic colors, luminous and light-filled, bursting with love and warmth';
   let prompt = `${subject}, ${style}. The words "${phrase}" ${textRendering}. Readable. ${imageMood}.`;
-  if (prompt.length > 500) prompt = prompt.slice(0, 497) + '...';
+  if (prompt.length > 4000) prompt = prompt.slice(0, 3997) + '...';
   return prompt;
 }
 

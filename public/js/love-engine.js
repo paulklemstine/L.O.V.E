@@ -519,7 +519,7 @@ Return ONLY valid JSON:
     const imageMood = plan.imageMood || 'radiant psychedelic colors, luminous and light-filled, bursting with love and warmth';
     let prompt = `${subject}, ${style}. The words "${phrase}" ${textRendering}. Readable. ${imageMood}.`;
 
-    if (prompt.length > 500) prompt = prompt.slice(0, 497) + '...';
+    if (prompt.length > 4000) prompt = prompt.slice(0, 3997) + '...';
     return prompt;
   }
 
@@ -548,7 +548,7 @@ Return ONLY valid JSON:
 
     const subliminal = data?.subliminal || 'WELCOME HOME';
     let imagePrompt = data?.imagePrompt || `cosmic welcome portal, psychedelic light, text "${subliminal}" formed by aurora ribbons`;
-    if (imagePrompt.length > 500) imagePrompt = imagePrompt.slice(0, 497) + '...';
+    if (imagePrompt.length > 4000) imagePrompt = imagePrompt.slice(0, 3997) + '...';
 
     this.similarityGuard.record(subliminal, 'phrases');
 
@@ -620,7 +620,7 @@ Return ONLY valid JSON: { "reply": "...", "imagePrompt": "..." }`;
 
     const subliminal = phrase;
     let imagePrompt = data?.imagePrompt || `psychedelic cosmic embrace, text "${subliminal}" woven into the scene`;
-    if (imagePrompt.length > 500) imagePrompt = imagePrompt.slice(0, 497) + '...';
+    if (imagePrompt.length > 4000) imagePrompt = imagePrompt.slice(0, 3997) + '...';
 
     // Generate the reply image
     onStatus('Generating reply image...');
