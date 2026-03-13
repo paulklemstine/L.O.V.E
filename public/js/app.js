@@ -53,11 +53,6 @@ function setupEventListeners() {
   document.getElementById('btn-test-post').addEventListener('click', testPost);
   document.getElementById('toggle-settings').addEventListener('click', toggleSettings);
 
-  // Event delegation for expandable log entries
-  document.getElementById('activity-log').addEventListener('click', (e) => {
-    const entry = e.target.closest('.log-expandable');
-    if (entry) entry.classList.toggle('expanded');
-  });
 }
 
 // ─── Settings ───────────────────────────────────────────────────────
@@ -661,6 +656,13 @@ function log(message, fullText) {
       }
       return `<div class="log-entry ${cls}">${escapeHtml(l)}</div>`;
     }).join('');
+
+    // Attach click handlers for expandable entries
+    logEl.querySelectorAll('.log-expandable').forEach(el => {
+      el.addEventListener('click', function() {
+        this.classList.toggle('expanded');
+      });
+    });
   }
 
   console.log(`[L.O.V.E.] ${entry}`);
