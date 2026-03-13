@@ -418,7 +418,7 @@ export class LoveEngine {
 
     // ── Step 5: Image Prompt (separate LLM call, neutral system prompt) ──
     onStatus('Designing visual...');
-    let visualPrompt = await this._generateImagePrompt(plan);
+    let visualPrompt = await this._generateImagePrompt(plan, story);
 
     // Check visual novelty — reject if too similar to recent prompts
     for (let v = 0; v < 3; v++) {
@@ -428,7 +428,7 @@ export class LoveEngine {
       if (!maxSim && avgSim < 0.12) break;
 
       onStatus(`Visual too similar (avg=${(avgSim*100).toFixed(0)}%, max hit=${maxSim}), regenerating...`);
-      visualPrompt = await this._generateImagePrompt(plan);
+      visualPrompt = await this._generateImagePrompt(plan, story);
     }
 
     // ── Step 6: Image Generation ──
@@ -580,15 +580,16 @@ Return ONLY valid JSON:
 
   // ─── Visual Prompt (separate LLM call, neutral system prompt) ──────
 
-  async _generateImagePrompt(plan) {
-    const prompt = `Create an image generation prompt for this theme:
-Theme: "${plan.theme}"
+  async _generateImagePrompt(plan, postText = '') {
+    const prompt = `Create an image generation prompt inspired by this post:
+
+Post text: "${postText || plan.theme}"
 Mood: ${plan.vibe}
-Text to include: "${plan.subliminalPhrase}"
+Motivational phrase to embed: "${plan.subliminalPhrase}"
 
-Write a single detailed image prompt. The text "${plan.subliminalPhrase}" must appear as readable text in the scene.
+The image should visually capture the feeling and meaning of the post. The phrase "${plan.subliminalPhrase}" must appear as readable text in the scene.
 
-Return ONLY the prompt text, nothing else.`;
+Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 
     const raw = await this.ai.generateText(
       'You are an image prompt writer. Each prompt must depict a completely different subject, setting, scale, and style. Vary wildly: landscapes, close-ups, aerial views, abstract art, still life, portraits, architecture, nature, technology, surrealism, minimalism, maximalism. Surprise the viewer every time.',

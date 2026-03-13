@@ -212,15 +212,16 @@ Return ONLY valid JSON:
   return data?.story || '[FAILED TO GENERATE]';
 }
 
-async function buildVisualPrompt(plan) {
-  const prompt = `Create an image generation prompt for this theme:
-Theme: "${plan.theme}"
+async function buildVisualPrompt(plan, postText = '') {
+  const prompt = `Create an image generation prompt inspired by this post:
+
+Post text: "${postText || plan.theme}"
 Mood: ${plan.vibe}
-Text to include: "${plan.subliminalPhrase}"
+Motivational phrase to embed: "${plan.subliminalPhrase}"
 
-Write a single detailed image prompt. The text "${plan.subliminalPhrase}" must appear as readable text in the scene.
+The image should visually capture the feeling and meaning of the post. The phrase "${plan.subliminalPhrase}" must appear as readable text in the scene.
 
-Return ONLY the prompt text, nothing else.`;
+Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 
   const raw = await callLLM(
     'You are an image prompt writer. Each prompt must depict a completely different subject, setting, scale, and style. Vary wildly: landscapes, close-ups, aerial views, abstract art, still life, portraits, architecture, nature, technology, surrealism, minimalism, maximalism. Surprise the viewer every time.',
@@ -376,7 +377,7 @@ async function main() {
     console.log(`  Story (${story.length} chars): ${story}`);
 
     // Step 3: Visual prompt (code template, no LLM call)
-    const visualPrompt = await buildVisualPrompt(plan);
+    const visualPrompt = await buildVisualPrompt(plan, story);
     console.log(`  Visual (${visualPrompt.length} chars): ${visualPrompt}`);
 
     // Record
