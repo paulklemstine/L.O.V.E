@@ -173,25 +173,18 @@ class SimilarityGuard {
   }
 
   /**
-   * Extract overused words from recent visual prompts.
-   * Returns words that appear in 3+ of the last 10 visual prompts.
+   * Compute the average Jaccard similarity of a new visual prompt
+   * against all recent visual prompts. This catches overall repetition
+   * better than individual word counting.
    */
-  getOverusedVisualWords() {
-    const stopWords = new Set(['with','that','from','into','this','have','been','were','they','their','them','than','each','which','there','these','about','would','some','what','other','more','very','just','also','over','such','after','only','well','back','then','when','where','your','will','like','made','tiny','small','large','scene','image','text','words','style','prompt','readable','integrated','composition','lighting','color','palette','says','clearly','sign','above']);
+  averageVisualSimilarity(text) {
     const recent = this.recentVisuals.slice(-10);
-    if (recent.length < 2) return [];
-    const freq = {};
-    for (const prompt of recent) {
-      const words = new Set(
-        prompt.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(w => w.length > 3 && !stopWords.has(w))
-      );
-      for (const w of words) freq[w] = (freq[w] || 0) + 1;
+    if (recent.length === 0) return 0;
+    let total = 0;
+    for (const prev of recent) {
+      total += this._jaccard(text, prev);
     }
-    // Flag words appearing in 2+ of the last 10 prompts
-    return Object.entries(freq)
-      .filter(([, count]) => count >= 2)
-      .sort((a, b) => b[1] - a[1])
-      .map(([word]) => word);
+    return total / recent.length;
   }
 
   _save() {
@@ -427,16 +420,14 @@ export class LoveEngine {
     onStatus('Designing visual...');
     let visualPrompt = this._buildVisualPrompt(plan);
 
-    // Check visual novelty — reject if too similar or reuses overused words
+    // Check visual novelty — reject if too similar to recent prompts
     for (let v = 0; v < 3; v++) {
-      const overused = this.similarityGuard.getOverusedVisualWords();
-      const promptLower = visualPrompt.toLowerCase();
-      const overusedHits = overused.filter(w => promptLower.includes(w)).length;
-      const tooSimilar = this.similarityGuard.isTooSimilar(visualPrompt, 'visuals', 0.25);
+      const avgSim = this.similarityGuard.averageVisualSimilarity(visualPrompt);
+      const maxSim = this.similarityGuard.isTooSimilar(visualPrompt, 'visuals', 0.3);
 
-      if (!tooSimilar && overusedHits < 2) break;
+      if (!maxSim && avgSim < 0.15) break;
 
-      onStatus(`Visual too repetitive (${overusedHits} reused words, similar=${tooSimilar}), regenerating...`);
+      onStatus(`Visual too similar (avg=${(avgSim*100).toFixed(0)}%, max hit=${maxSim}), regenerating...`);
       seed = await this._generateCreativeSeed();
       plan = await this._generatePlan(arcBeat, seed);
       story = await this._generateContent(plan, arcBeat);
