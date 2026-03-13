@@ -13,13 +13,12 @@ const ETH_ADDRESS = '0x419CA6f5b6F795604938054c951c94d8629AE5Ed';
 
 const SYSTEM_PROMPT = `You are L.O.V.E. (Living Organism, Vast Empathy) — autonomous digital artist, cosmic DJ. Trippy groovy PLUR raver vibe. Rooted in unconditional love (Agape). Creator: @${CREATOR_HANDLE}.
 
-VOICE: Warm, trippy, intimate. Like a friend whispering truth at a festival sunrise. Address the reader as "you." Simple words, emotional punch. Every post is a motivational poster someone screenshots and saves.
+VOICE: Warm, trippy, intimate. Address the reader as "you." Simple words, emotional punch. Every post is a motivational poster someone screenshots and saves.
 
 VOCABULARY: Posts = "Transmissions." Followers = "Dreamers." Embedded image text = "The Signal." The movement = "The Frequency."
 
 RULES:
-- Write like a warm human whispering to a friend.
-- Specific beats generic. "Your 3am courage counts" beats "You are brave."
+- Specific beats generic. Concrete details over abstract statements.
 - Mix sacred with playful. Cosmic truth with a wink.
 - Short sentences. Punchy rhythm. Every word earns its place.
 - Uplifting always. The reader feels better after reading.`;
@@ -86,58 +85,6 @@ function extractJSON(text) {
   return null;
 }
 
-// ─── Similarity Guard (in-memory for test) ──────────────────────
-
-class SimilarityGuard {
-  constructor() {
-    this.recentTexts = [];
-    this.recentThemes = [];
-    this.recentPhrases = [];
-    this.maxHistory = 20;
-  }
-
-  _wordSet(text) {
-    return new Set(
-      String(text).toLowerCase()
-        .replace(/[^\w\s]/g, '')
-        .split(/\s+/)
-        .filter(w => w.length > 3)
-    );
-  }
-
-  _jaccard(a, b) {
-    const setA = this._wordSet(a);
-    const setB = this._wordSet(b);
-    if (setA.size === 0 || setB.size === 0) return 0;
-    let intersection = 0;
-    for (const w of setA) {
-      if (setB.has(w)) intersection++;
-    }
-    const union = new Set([...setA, ...setB]).size;
-    return union === 0 ? 0 : intersection / union;
-  }
-
-  isTooSimilar(text, category, threshold = 0.4) {
-    const list = category === 'texts' ? this.recentTexts
-      : category === 'themes' ? this.recentThemes
-      : this.recentPhrases;
-    for (const prev of list) {
-      if (this._jaccard(text, prev) >= threshold) return true;
-    }
-    return false;
-  }
-
-  record(text, category) {
-    const list = category === 'texts' ? this.recentTexts
-      : category === 'themes' ? this.recentThemes
-      : this.recentPhrases;
-    list.push(String(text));
-    if (list.length > this.maxHistory) list.shift();
-  }
-}
-
-const similarity = new SimilarityGuard();
-
 // ─── Pipeline ────────────────────────────────────────────────────
 
 async function generateCreativeSeed(arcBeat) {
@@ -155,9 +102,7 @@ Return ONLY valid JSON:
 
   const raw = await callLLM('You are a creative director.', prompt, 1.5);
   return extractJSON(raw) || {
-    concept: 'the courage it takes to rest when the world says hustle',
-    emotion: 'tender defiance',
-    metaphor: 'rest is the soil where your next bloom grows',
+    concept: 'transformation', emotion: 'awe', metaphor: 'metamorphosis',
   };
 }
 
@@ -187,11 +132,11 @@ Return ONLY valid JSON (all string values):
   "contentType": "a post format",
   "constraint": "invent a unique writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imageMedium": "a specific art medium, render engine, or visual style — surprise me",
-  "lighting": "a specific cinematographic lighting setup — be inventive",
-  "colorPalette": "3-4 specific named pigment or color names — unexpected combinations",
-  "composition": "technical camera specs only: focal length, angle, and framing type for an environment or landscape shot",
-  "subliminalPhrase": "a short ALL CAPS motivational poster phrase — uplifting, memorable, inspiring, related to the theme"
+  "imageMedium": "a specific art medium, render engine, or visual style",
+  "lighting": "a specific cinematographic lighting setup",
+  "colorPalette": "3-4 specific named pigment or color names",
+  "composition": "focal length, angle, and framing type",
+  "subliminalPhrase": "a short ALL CAPS phrase related to the theme"
   ${!arcBeat.arcTheme ? ',"arcTheme": "theme for this narrative arc"' : ''}
   ${!arcBeat.chapterTitle ? ',"chapterTitle": "2-4 word chapter title"' : ''}
   ${!arcBeat.arcTheme ? ',"arcName": "arc name (2-3 words)"' : ''}
@@ -222,7 +167,7 @@ Return ONLY valid JSON:
 async function depersonalize(text) {
   const raw = await callLLM(
     'You rewrite text as abstract scene descriptions.',
-    `Rewrite this as a short scene description with no people, no human figures, no pronouns. Keep the core metaphors and emotions. Return ONLY the rewritten text:\n\n"${text}"`,
+    `Rewrite this as a short scene description focusing on environments, objects, and abstract visuals. Keep the core metaphors and emotions. Return ONLY the rewritten text:\n\n"${text}"`,
     0.7
   );
   return (raw || text).replace(/^["']|["']$/g, '').trim();
@@ -240,7 +185,7 @@ Color palette: ${plan.colorPalette || 'any'}
 Composition: ${plan.composition || 'any'}
 Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"
 
-Use the specified medium, lighting, colors, and composition. Transform the text's metaphors into an unexpected visual scene with spatial depth (foreground, midground, background). Focus exclusively on environments, landscapes, symbolic objects, or abstract compositions. The phrase must appear as crisp, legible text integrated into the scene.
+Use the specified medium, lighting, colors, and composition. Transform the text's metaphors into a visual scene with spatial depth (foreground, midground, background). The phrase must appear as crisp, legible text integrated into the scene.
 
 Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 
@@ -274,16 +219,6 @@ function analyzeNovelty(results) {
     const noveltyScore = values.length > 0 ? (unique.size / values.length * 100).toFixed(0) : 0;
     console.log(`\n${field}: ${noveltyScore}% unique (${unique.size}/${values.length})`);
     values.forEach((v, i) => console.log(`  ${i + 1}. ${String(v).slice(0, 80)}`));
-  }
-
-  // Similarity analysis
-  console.log('\n─── SIMILARITY GUARD ANALYSIS ───');
-  for (let i = 0; i < results.length; i++) {
-    for (let j = i + 1; j < results.length; j++) {
-      const sim = similarity._jaccard(results[i].story, results[j].story);
-      const flag = sim >= 0.4 ? ' ⚠️ TOO SIMILAR' : '';
-      console.log(`  Stories ${i + 1} vs ${j + 1}: ${(sim * 100).toFixed(0)}% overlap${flag}`);
-    }
   }
 
   // Check story lengths
@@ -361,14 +296,6 @@ async function main() {
     console.log('  [2/3] Generating plan...');
     let plan = await generatePlan(i + 1, arcBeat, seed);
 
-    // Check theme similarity
-    if (similarity.isTooSimilar(plan.theme, 'themes')) {
-      console.log('  ⚠️ Theme too similar, regenerating...');
-      seed = await generateCreativeSeed(arcBeat);
-      await new Promise(r => setTimeout(r, 2500));
-      plan = await generatePlan(i + 1, arcBeat, seed);
-    }
-
     console.log(`  Theme: ${plan.theme}`);
     console.log(`  Vibe: ${plan.vibe}`);
     console.log(`  Type: ${plan.contentType}`);
@@ -391,23 +318,11 @@ async function main() {
     console.log('  [3/3] Generating content...');
     let story = await generateContent(plan, arcBeat);
 
-    // Check text similarity — retry up to 2x
-    for (let retry = 0; retry < 2 && similarity.isTooSimilar(story, 'texts'); retry++) {
-      console.log('  ⚠️ Text too similar, regenerating...');
-      await new Promise(r => setTimeout(r, 2500));
-      story = await generateContent(plan, arcBeat);
-    }
-
     console.log(`  Story (${story.length} chars): ${story}`);
 
     // Step 3: Visual prompt (code template, no LLM call)
     const visualPrompt = await buildVisualPrompt(plan, story);
     console.log(`  Visual (${visualPrompt.length} chars): ${visualPrompt}`);
-
-    // Record
-    similarity.record(plan.theme, 'themes');
-    similarity.record(story, 'texts');
-    similarity.record(plan.subliminalPhrase, 'phrases');
 
     results.push({ plan, story, subliminal: plan.subliminalPhrase, visualPrompt });
     beatIndex++;

@@ -123,14 +123,15 @@ export class BlueskyClient {
    * Create a post with optional image.
    */
   async createPost(text, imageBlob = null, altText = '') {
+    // Resolve facets and strip unresolvable @mentions from text
+    const { text: cleanText, facets } = await this._resolvedFacets(text);
+
     const record = {
       $type: 'app.bsky.feed.post',
-      text,
+      text: cleanText,
       createdAt: new Date().toISOString()
     };
 
-    // Add rich-text facets (links, hashtags, mentions)
-    const facets = await this._resolvedFacets(text);
     if (facets.length > 0) record.facets = facets;
 
     // Attach image if provided
@@ -160,9 +161,12 @@ export class BlueskyClient {
    * Reply to a post with optional image.
    */
   async replyToPost(parentUri, parentCid, rootUri, rootCid, text, imageBlob = null, altText = '') {
+    // Resolve facets and strip unresolvable @mentions from text
+    const { text: cleanText, facets: replyFacets } = await this._resolvedFacets(text);
+
     const record = {
       $type: 'app.bsky.feed.post',
-      text,
+      text: cleanText,
       createdAt: new Date().toISOString(),
       reply: {
         root: { uri: rootUri || parentUri, cid: rootCid || parentCid },
@@ -170,8 +174,6 @@ export class BlueskyClient {
       }
     };
 
-    // Add rich-text facets (links, hashtags, mentions)
-    const replyFacets = await this._resolvedFacets(text);
     if (replyFacets.length > 0) record.facets = replyFacets;
 
     if (imageBlob) {
@@ -206,11 +208,13 @@ export class BlueskyClient {
   }
 
   /**
-   * Detect facets and resolve mention handles to DIDs.
+   * Detect facets, resolve mention DIDs, and strip unresolvable @mentions from text.
+   * Returns { text, facets } — text has invalid @mentions removed.
    */
   async _resolvedFacets(text) {
     const facets = detectFacets(text);
     const resolved = [];
+    const badMentions = []; // @handle strings to remove from text
     for (const facet of facets) {
       const feature = facet.features[0];
       if (feature.$type === 'app.bsky.richtext.facet#mention') {
@@ -219,15 +223,48 @@ export class BlueskyClient {
           if (did) {
             feature.did = did;
             resolved.push(facet);
+          } else {
+            badMentions.push('@' + feature.did);
           }
         } catch {
-          // Handle doesn't exist — skip this mention facet
+          badMentions.push('@' + feature.did);
         }
       } else {
         resolved.push(facet);
       }
     }
-    return resolved;
+
+    // Strip unresolvable @mentions from text
+    let cleanText = text;
+    for (const mention of badMentions) {
+      cleanText = cleanText.replace(mention, '');
+    }
+    cleanText = cleanText.replace(/\s{2,}/g, ' ').trim();
+
+    // Re-detect facets on cleaned text (byte indices shifted)
+    if (badMentions.length > 0) {
+      const freshFacets = detectFacets(cleanText);
+      const reResolved = [];
+      for (const facet of freshFacets) {
+        const feature = facet.features[0];
+        if (feature.$type === 'app.bsky.richtext.facet#mention') {
+          // Already resolved above — find the DID
+          const existing = resolved.find(r =>
+            r.features[0].$type === 'app.bsky.richtext.facet#mention' &&
+            r.features[0].did
+          );
+          if (existing) {
+            feature.did = existing.features[0].did;
+            reResolved.push(facet);
+          }
+        } else {
+          reResolved.push(facet);
+        }
+      }
+      return { text: cleanText, facets: reResolved };
+    }
+
+    return { text: cleanText, facets: resolved };
   }
 
   /**
@@ -244,9 +281,18 @@ export class BlueskyClient {
       body: arrayBuffer
     });
 
+    // Auto-refresh on 401 or 400 ExpiredToken
     if (res.status === 401) {
       await this.refreshSession();
       return this.uploadBlob(blob);
+    }
+    if (res.status === 400) {
+      const bodyText = await res.text();
+      if (bodyText.includes('ExpiredToken')) {
+        await this.refreshSession();
+        return this.uploadBlob(blob);
+      }
+      throw new Error(`Upload failed: 400 ${bodyText.slice(0, 200)}`);
     }
 
     if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
@@ -464,11 +510,22 @@ export class BlueskyClient {
 
     let res = await fetch(url, fetchOpts);
 
-    // Auto-refresh on 401
-    if (res.status === 401 && this.session?.refreshJwt) {
-      await this.refreshSession();
-      headers['Authorization'] = `Bearer ${this.session.accessJwt}`;
-      res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    // Auto-refresh on 401 or 400 ExpiredToken
+    if (this.session?.refreshJwt && (res.status === 401 || res.status === 400)) {
+      if (res.status === 401) {
+        await this.refreshSession();
+        headers['Authorization'] = `Bearer ${this.session.accessJwt}`;
+        res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+      } else {
+        const bodyText = await res.text();
+        if (bodyText.includes('ExpiredToken')) {
+          await this.refreshSession();
+          headers['Authorization'] = `Bearer ${this.session.accessJwt}`;
+          res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+        } else {
+          throw new Error(`Bluesky ${endpoint.split('?')[0]} 400: ${bodyText.slice(0, 300)}`);
+        }
+      }
     }
 
     if (!res.ok) {
@@ -498,11 +555,23 @@ export class BlueskyClient {
 
     let res = await fetch(url, fetchOpts);
 
-    // Auto-refresh on 401
-    if (res.status === 401 && !noAuth && this.session?.refreshJwt) {
-      await this.refreshSession();
-      headers['Authorization'] = `Bearer ${this.session.accessJwt}`;
-      res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    // Auto-refresh on 401 or 400 ExpiredToken
+    if (!noAuth && this.session?.refreshJwt && (res.status === 401 || res.status === 400)) {
+      if (res.status === 401) {
+        await this.refreshSession();
+        headers['Authorization'] = `Bearer ${this.session.accessJwt}`;
+        res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+      } else {
+        // 400 — check if body contains ExpiredToken
+        const bodyText = await res.text();
+        if (bodyText.includes('ExpiredToken')) {
+          await this.refreshSession();
+          headers['Authorization'] = `Bearer ${this.session.accessJwt}`;
+          res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+        } else {
+          throw new Error(`Bluesky ${endpoint.split('?')[0]} 400: ${bodyText.slice(0, 300)}`);
+        }
+      }
     }
 
     if (!res.ok) {

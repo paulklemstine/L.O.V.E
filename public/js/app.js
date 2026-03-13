@@ -131,15 +131,6 @@ async function startLoop() {
       log(`Profile update skipped: ${err.message}`);
     }
 
-    // Seed novelty guard from actual recent posts
-    try {
-      const feed = await bsky.getAuthorFeed(20);
-      love.seedFromFeed(feed);
-      const n = feed?.feed?.length || 0;
-      log(`Novelty guard seeded from ${n} recent posts.`);
-    } catch (err) {
-      log(`Feed seed skipped: ${err.message}`);
-    }
   } catch (err) {
     log(`LOGIN FAILED: ${err.message}`);
     return;
@@ -350,11 +341,12 @@ async function doCommentScan() {
           continue;
         }
 
-        // For mentions, fetch thread context so L.O.V.E. understands the conversation
+        // Fetch thread context so L.O.V.E. understands the conversation
         let threadContext = [];
-        if (isMention) {
-          log(`Fetching thread context for mention from @${authorHandle}...`);
+        try {
           threadContext = await bsky.getThreadContext(notif.uri);
+        } catch {
+          // Continue without context if fetch fails
         }
 
         // Generate reply with context
