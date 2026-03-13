@@ -76,14 +76,29 @@ function extractJSON(text) {
 
 // ─── Pipeline ────────────────────────────────────────────────────
 
+const METAPHOR_DOMAINS = [
+  'astronomy', 'mycology', 'deep sea biology', 'architecture', 'cooking',
+  'aviation', 'geology', 'dance', 'gardening', 'glassblowing',
+  'cartography', 'beekeeping', 'weaving', 'clockwork', 'surfing',
+  'photography', 'pottery', 'migration patterns', 'weather systems', 'archaeology',
+  'jazz improvisation', 'fermentation', 'wildfire ecology', 'tidal patterns', 'kite flying',
+  'blacksmithing', 'seed dispersal', 'coral reefs', 'radio transmission', 'bookbinding',
+  'circus arts', 'bioluminescence', 'erosion', 'quilting', 'sourdough baking',
+  'satellite orbits', 'ice formation', 'puppetry', 'letterpress printing', 'falconry',
+  'neural pathways', 'volcanology', 'street art', 'whale song', 'lacquerwork',
+];
+
 async function generateCreativeSeed() {
+  const domain = METAPHOR_DOMAINS[Math.floor(Math.random() * METAPHOR_DOMAINS.length)];
+
   const prompt = `Generate a single burst of creative inspiration for an uplifting social media post.
+Draw your metaphor from the world of ${domain}.
 
 Return ONLY valid JSON:
 {
   "concept": "a vivid, specific message concept",
   "emotion": "one precise human emotion this should evoke",
-  "metaphor": "a fresh metaphor drawn from an unexpected domain"
+  "metaphor": "a fresh metaphor rooted in ${domain}"
 }`;
 
   const raw = await callLLM('You are a creative director.', prompt, 1.5);
