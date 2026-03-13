@@ -217,14 +217,14 @@ async function buildVisualPrompt(plan, postText = '') {
 
 Post text: "${postText || plan.theme}"
 Mood: ${plan.vibe}
-Motivational phrase to embed: "${plan.subliminalPhrase}"
+Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"
 
-The image should visually capture the feeling and meaning of the post. The phrase "${plan.subliminalPhrase}" must appear as readable text in the scene.
+IMPORTANT: Capture the EMOTION of the post, not its literal metaphors. If the post mentions a match, paint a wildfire. If it mentions sewing, paint an ocean. Transform the metaphor into a completely different visual.
 
 Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 
   const raw = await callLLM(
-    'You are an image prompt writer. Each prompt must depict a completely different subject, setting, scale, and style. Vary wildly: landscapes, close-ups, aerial views, abstract art, still life, portraits, architecture, nature, technology, surrealism, minimalism, maximalism. Surprise the viewer every time.',
+    'You are an image prompt writer. You prize radical visual variety. Every prompt must use a completely different subject, setting, scale, composition, and art style from the last. Rotate through: vast landscapes, aerial/satellite views, abstract geometric art, underwater scenes, microscopic worlds, architectural interiors, food/botanical still life, weather phenomena, portraits, minimalist design, collage, vintage poster art, pixel art, watercolor, photography.',
     prompt, 1.5
   );
 
