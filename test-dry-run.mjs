@@ -141,20 +141,18 @@ const similarity = new SimilarityGuard();
 // ─── Pipeline ────────────────────────────────────────────────────
 
 async function generateCreativeSeed() {
-  const prompt = `Generate a single burst of raw creative inspiration for a motivational art piece.
+  const prompt = `Generate a single burst of creative inspiration for a motivational message.
 
 Return ONLY valid JSON:
 {
   "concept": "an uplifting message concept",
-  "visualWorld": "a complete scene for the concept",
   "emotion": "one precise human emotion this should evoke",
-  "metaphor": "a fresh metaphor that connects the concept to everyday life"
+  "metaphor": "a metaphor that connects the concept to everyday life"
 }`;
 
   const raw = await callLLM(SYSTEM_PROMPT, prompt, 1.0);
   return extractJSON(raw) || {
     concept: 'the courage it takes to rest when the world says hustle',
-    visualWorld: 'a temple made of frozen lightning bolts floating in a nebula',
     emotion: 'tender defiance',
     metaphor: 'rest is the soil where your next bloom grows',
   };
@@ -169,7 +167,6 @@ async function generatePlan(txNum, arcBeat, seed) {
 
 CREATIVE SEED (use as inspiration, build on it):
 Concept: ${seed.concept}
-Visual World: ${seed.visualWorld}
 Emotion: ${seed.emotion}
 Metaphor: ${seed.metaphor}
 
@@ -330,7 +327,7 @@ async function main() {
     console.log('  [1/3] Generating creative seed...');
     let seed = await generateCreativeSeed();
     console.log(`  Seed Concept: ${seed.concept}`);
-    console.log(`  Seed Visual: ${seed.visualWorld}`);
+    console.log(`  Seed Emotion: ${seed.emotion}`);
     console.log(`  Seed Emotion: ${seed.emotion}`);
     console.log(`  Seed Metaphor: ${seed.metaphor}`);
 

@@ -467,21 +467,19 @@ export class LoveEngine {
   // ─── Creative Seed (isolated LLM call for novel ideas) ─────────────
 
   async _generateCreativeSeed() {
-    const prompt = `Generate a single burst of raw creative inspiration for a motivational art piece.
+    const prompt = `Generate a single burst of creative inspiration for a motivational message.
 
 Return ONLY valid JSON:
 {
   "concept": "an uplifting message concept",
-  "visualWorld": "a complete scene for the concept",
   "emotion": "one precise human emotion this should evoke",
-  "metaphor": "a fresh metaphor that connects the concept to everyday life"
+  "metaphor": "a metaphor that connects the concept to everyday life"
 }`;
 
     const raw = await this.ai.generateText('You are a creative director.', prompt, { temperature: 1.5, label: 'Creative Seed' });
     const data = this.ai.extractJSON(raw);
     return data || {
       concept: 'the courage it takes to rest when the world says hustle',
-      visualWorld: 'a temple made of frozen lightning bolts floating in a nebula',
       emotion: 'tender defiance',
       metaphor: 'rest is the soil where your next bloom grows',
     };
@@ -499,9 +497,8 @@ Return ONLY valid JSON:
 
     const prompt = `Plan a post. It's ${new Date().toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay}.
 ${mentionDonation ? 'Subtly weave in donation mention (https://buymeacoffee.com/l.o.v.e or ETH). One line, organic.\n' : ''}
-CREATIVE SEED (use as inspiration, build on it):
+CREATIVE SEED:
 Concept: ${seed.concept}
-Visual World: ${seed.visualWorld}
 Emotion: ${seed.emotion}
 Metaphor: ${seed.metaphor}
 
