@@ -69,6 +69,9 @@ export class PollinationsClient {
     const { temperature = 0.85, model = 'openai', maxRetries = 2,
       frequencyPenalty = 0.4, presencePenalty = 0.3 } = options;
 
+    // Only claude models support penalty params on Pollinations
+    const penaltiesSupported = model.startsWith('claude');
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         const body = {
@@ -78,11 +81,14 @@ export class PollinationsClient {
             { role: 'user', content: userPrompt }
           ],
           temperature,
-          frequency_penalty: frequencyPenalty,
-          presence_penalty: presencePenalty,
           seed: Math.floor(Math.random() * 2147483647),
           stream: false,
         };
+
+        if (penaltiesSupported) {
+          body.frequency_penalty = frequencyPenalty;
+          body.presence_penalty = presencePenalty;
+        }
 
         // Force JSON output if prompt asks for JSON
         if (userPrompt.includes('Return ONLY valid JSON') || userPrompt.includes('Return ONLY raw JSON')) {
