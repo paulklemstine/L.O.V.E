@@ -257,6 +257,37 @@ export class LoveEngine {
     return [...new Set(words)].slice(0, 8);
   }
 
+  // ─── Aspect Ratio Rotation ─────────────────────────────────────
+  // Forces different compositions by changing the canvas shape.
+
+  static ASPECT_RATIOS = [
+    { width: 1024, height: 1024 },  // 1:1 square
+    { width: 1024, height: 768 },   // 4:3 landscape
+    { width: 768, height: 1024 },   // 3:4 portrait
+    { width: 1024, height: 576 },   // 16:9 cinematic
+    { width: 576, height: 1024 },   // 9:16 vertical
+  ];
+
+  _pickAspectRatio() {
+    const ratios = LoveEngine.ASPECT_RATIOS;
+    return ratios[this.transmissionNumber % ratios.length];
+  }
+
+  // ─── Recent Visual Object Tracking ────────────────────────────
+  // Extracts key objects from image prompts for negativePrompt generation.
+
+  _getRecentVisualObjects() {
+    const recent = this.recentVisuals.slice(-5);
+    if (recent.length === 0) return '';
+    const objects = new Set();
+    // Extract distinctive nouns from recent image prompts
+    for (const prompt of recent) {
+      const nouns = this._extractKeyNouns(prompt);
+      nouns.forEach(n => objects.add(n));
+    }
+    return [...objects].slice(0, 15).join(', ');
+  }
+
   // ─── Domain Exclusion Cooldown ─────────────────────────────────
   // Prevents reusing the same metaphor domains within last 30 picks.
 
@@ -446,12 +477,18 @@ export class LoveEngine {
       visualPrompt = await this._generateImagePrompt(plan, story, mode);
     }
 
-    // ── Step 5: Image Generation ──
+    // ── Step 5: Image Generation (aspect ratio rotation + negativePrompt) ──
     let imageBlob = null;
     if (!skipImage) {
       await new Promise(r => setTimeout(r, 2000));
-      onStatus('Generating image...');
-      imageBlob = await this.ai.generateImage(visualPrompt);
+      const aspect = this._pickAspectRatio();
+      onStatus(`Generating image (${aspect.width}x${aspect.height})...`);
+      const recentObjects = this._getRecentVisualObjects();
+      imageBlob = await this.ai.generateImage(visualPrompt, {
+        width: aspect.width,
+        height: aspect.height,
+        negativePrompt: recentObjects || null,
+      });
     }
 
     // ── Step 6: Advance ──
@@ -885,20 +922,21 @@ Return ONLY valid JSON:
     const modeDirective = mode.imageDirective ? `\nStyle override: ${mode.imageDirective}` : '';
     const recentStyles = this._getRecentImageStyleString();
     const styleAvoidLine = recentStyles
-      ? `\nRecent images already used: ${recentStyles}. Use a completely different medium, lighting, and composition.\n`
+      ? `\nRecent images used these — yours MUST differ completely: ${recentStyles}\n`
       : '';
 
     const prompt = `Create an image generation prompt for a scene inspired by this text. Replace all personal pronouns ("you", "your", "I", "me", "my", "we", "our") with abstract visual elements — environments, objects, light, texture. The scene must contain no people, no human figures, no implied viewer.
 
 "${postText || plan.theme}"
 Mood: ${plan.vibe}
-Medium: ${plan.imageMedium || 'any'}
-Lighting: ${plan.lighting || 'any'}
-Color palette: ${plan.colorPalette || 'any'}
-Composition: ${plan.composition || 'any'}
+YOU MUST USE EXACTLY THESE — they are mandatory, not suggestions:
+- Medium: ${plan.imageMedium}
+- Lighting: ${plan.lighting}
+- Color palette: ${plan.colorPalette}
+- Composition: ${plan.composition}
 Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"${modeDirective}
 ${styleAvoidLine}
-Build the scene with spatial depth (foreground, midground, background). Use asymmetric framing and distinctive non-generic lighting. The phrase must appear as crisp, legible text integrated into the scene. Choose an unexpected setting, scale, and visual tradition.
+The phrase must appear as crisp, legible text integrated into the scene. Vary HOW the text appears — it can be formed by any material, phenomenon, or environmental feature.
 
 Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 

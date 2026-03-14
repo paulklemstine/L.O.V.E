@@ -138,7 +138,7 @@ export class PollinationsClient {
    * Model: imagen-4 (Google Imagen 4) - high quality free model
    */
   async generateImage(prompt, options = {}) {
-    const { width = 1024, height = 1024, subliminalText = null, model = 'imagen-4' } = options;
+    const { width = 1024, height = 1024, subliminalText = null, model = 'imagen-4', negativePrompt = null } = options;
 
     let fullPrompt = prompt;
     if (subliminalText) {
@@ -149,7 +149,10 @@ export class PollinationsClient {
 
     const seed = Math.floor(Math.random() * 2147483647);
     const encoded = encodeURIComponent(fullPrompt);
-    const url = `${IMAGE_URL}/${encoded}?model=${model}&width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=false`;
+    let url = `${IMAGE_URL}/${encoded}?model=${model}&width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=false`;
+    if (negativePrompt) {
+      url += `&negative=${encodeURIComponent(negativePrompt)}`;
+    }
 
     const response = await fetch(url, {
       headers: { 'Authorization': `Bearer ${this.apiKey}` }
