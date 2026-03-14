@@ -749,7 +749,7 @@ Return ONLY valid JSON:
   async _generateImagePrompt(plan, postText = '', mode) {
     const modeDirective = mode.imageDirective ? `\nStyle override: ${mode.imageDirective}` : '';
 
-    const prompt = `Create an image generation prompt for a scene inspired by this text. Transform any personal address ("you", "your") into abstract visual elements — environments, objects, light, texture.
+    const prompt = `Create an image generation prompt for a scene inspired by this text. Replace all personal pronouns ("you", "your", "I", "me", "my", "we", "our") with abstract visual elements — environments, objects, light, texture. The scene must contain no people, no human figures, no implied viewer.
 
 "${postText || plan.theme}"
 Mood: ${plan.vibe}
