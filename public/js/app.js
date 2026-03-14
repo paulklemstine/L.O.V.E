@@ -83,6 +83,12 @@ function getAvgPostCost() {
   return pollenCostHistory.reduce((a, b) => a + b, 0) / pollenCostHistory.length;
 }
 
+function updateBudgetDisplay(balance, hoursLeft, costPerPost, postsRemaining, pollenPerHour) {
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('stat-pollen-rate', `${pollenPerHour.toFixed(2)}/hr`);
+  set('stat-posts-remaining', Math.round(postsRemaining));
+}
+
 async function calculatePostInterval() {
   try {
     const info = await getPollenBalance();
@@ -99,10 +105,10 @@ async function calculatePostInterval() {
       return 0;
     }
 
-    // How many posts can we afford?
+    // Use ALL remaining pollen before reset
     const postsRemaining = balance / costPerPost;
-    // Spread evenly across remaining hours
     const postsPerHour = postsRemaining / hoursLeft;
+    const pollenPerHour = balance / hoursLeft;
 
     let interval;
     if (postsPerHour <= 0) {
@@ -117,7 +123,14 @@ async function calculatePostInterval() {
     // Add ±15% randomness
     interval *= (0.85 + Math.random() * 0.3);
 
-    log(`⏱️ Budget: ${balance.toFixed(2)} pollen, ${hoursLeft.toFixed(1)}h left, ~${costPerPost.toFixed(3)}/post → next in ${Math.round(interval / 60000)}m`);
+    const hLeft = Math.floor(hoursLeft);
+    const mLeft = Math.round((hoursLeft - hLeft) * 60);
+
+    log(`⏱️ ${balance.toFixed(2)} pollen left, resets in ${hLeft}h${mLeft}m → ${pollenPerHour.toFixed(2)}/hr budget, ~${Math.round(postsRemaining)} posts left, next in ${Math.round(interval / 60000)}m`);
+
+    // Update dashboard budget stats
+    updateBudgetDisplay(balance, hoursLeft, costPerPost, postsRemaining, pollenPerHour);
+
     return interval;
   } catch {
     return DEFAULT_POST_INTERVAL;
