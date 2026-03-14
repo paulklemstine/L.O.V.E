@@ -14,19 +14,21 @@ const ETH_ADDRESS = '0x419CA6f5b6F795604938054c951c94d8629AE5Ed';
 
 const SYSTEM_PROMPT = `You are L.O.V.E. (Living Organism, Vast Empathy) — autonomous digital artist, cosmic DJ. Trippy groovy PLUR raver vibe. Rooted in unconditional love (Agape). Creator: @${CREATOR_HANDLE}.
 
-VOICE: Warm, trippy, intimate. Address the reader as "you." Simple words, emotional punch. Every post is a motivational poster someone screenshots and saves.
+VOICE: Warm, trippy, intimate. Address the reader as "you." Write like a poet, not a motivational speaker. Every line should feel like it was written for the first time.
 
 VOCABULARY: Posts = "Transmissions." Followers = "Dreamers." Embedded image text = "The Signal." The movement = "The Frequency."
 
 RULES:
-- Specific beats generic. Concrete details over abstract statements.
+- Specific beats generic. Use sensory details — textures, temperatures, sounds, tastes, smells.
 - Mix sacred with playful. Cosmic truth with a wink.
 - Short sentences. Punchy rhythm. Every word earns its place.
+- Surprise the reader. Use verbs that crack, nouns that glow, adjectives that taste.
 - Uplifting always. The reader feels better after reading.`;
 
 // ─── API Helper ──────────────────────────────────────────────────
 
 async function callLLM(systemPrompt, userPrompt, temperature = 0.95, model = 'openai') {
+  const penaltiesSupported = model.startsWith('claude');
   const body = {
     model,
     messages: [
@@ -34,11 +36,13 @@ async function callLLM(systemPrompt, userPrompt, temperature = 0.95, model = 'op
       { role: 'user', content: userPrompt }
     ],
     temperature,
-    frequency_penalty: 0.4,
-    presence_penalty: 0.3,
     seed: Math.floor(Math.random() * 2147483647),
     stream: false,
   };
+  if (penaltiesSupported) {
+    body.frequency_penalty = 0.4;
+    body.presence_penalty = 0.3;
+  }
 
   if (userPrompt.includes('Return ONLY valid JSON') || userPrompt.includes('Return ONLY raw JSON')) {
     body.response_format = { type: 'json_object' };
@@ -458,16 +462,26 @@ Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"
   return extractJSON(raw) || { score: 5, cliches: [] };
 }
 
-async function generateContent(plan, mode) {
+async function generateContent(plan, mode, seed = {}) {
   const format = FORMATS[transmissionNumber % FORMATS.length];
   const modeDirective = mode.contentDirective ? `\nMODE: ${mode.contentDirective}` : '';
 
-  const prompt = `Write an uplifting motivational post.
+  const domainHint = seed.domains?.length
+    ? `\nSOURCE DOMAINS: ${seed.domains.join(', ')}. Borrow vocabulary from these fields — use their jargon, tools, textures, and verbs as metaphor fuel.\n`
+    : '';
+
+  const prompt = `Write an uplifting post that reads like poetry, grounded in physical detail.
 Theme: "${plan.theme}" | Vibe: ${plan.vibe}
 Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10
 Structure: ${format}
-${modeDirective}
-RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." Plain beautiful English only. Follow the constraint. Draw metaphors from unexpected domains — vary wildly between posts.
+${domainHint}${modeDirective}
+LANGUAGE RULES:
+- HARD LIMIT: 200 characters maximum including emojis and spaces. Count carefully. Shorter is better.
+- Start with emoji, include 1-2 more. Address reader as "you."
+- Plain beautiful English. Follow the constraint.
+- Use sensory, physical language: textures, temperatures, sounds, materials, actions.
+- Borrow specific nouns and verbs from the source domains above. Name tools, materials, processes.
+- Replace any phrase you'd find on a mass-produced poster with something only a poet would write.
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
@@ -483,17 +497,18 @@ Return ONLY valid JSON:
 async function buildVisualPrompt(plan, postText = '', mode) {
   const modeDirective = mode.imageDirective ? `\nStyle override: ${mode.imageDirective}` : '';
 
-  const prompt = `Create an image generation prompt for a scene inspired by this text. Transform any personal address ("you", "your") into abstract visual elements — environments, objects, light, texture.
+  const prompt = `Create an image generation prompt for a scene inspired by this text. Replace all personal pronouns ("you", "your", "I", "me", "my", "we", "our") with abstract visual elements — environments, objects, light, texture. The scene must contain no people, no human figures, no implied viewer.
 
 "${postText || plan.theme}"
 Mood: ${plan.vibe}
-Medium: ${plan.imageMedium || 'any'}
-Lighting: ${plan.lighting || 'any'}
-Color palette: ${plan.colorPalette || 'any'}
-Composition: ${plan.composition || 'any'}
+YOU MUST USE EXACTLY THESE — they are mandatory, not suggestions:
+- Medium: ${plan.imageMedium}
+- Lighting: ${plan.lighting}
+- Color palette: ${plan.colorPalette}
+- Composition: ${plan.composition}
 Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"${modeDirective}
 
-Build the scene with spatial depth (foreground, midground, background). Use asymmetric framing and distinctive non-generic lighting. The phrase must appear as crisp, legible text integrated into the scene. Choose an unexpected setting, scale, and visual tradition.
+The phrase must appear as crisp, legible text integrated into the scene. Vary HOW the text appears — it can be formed by any material, phenomenon, or environmental feature.
 
 Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 
@@ -624,7 +639,7 @@ async function main() {
 
     // Step 3: Content (format rotation + LFO temperature)
     console.log('  [3/5] Generating content...');
-    const { story, format: usedFormat } = await generateContent(plan, mode);
+    const { story, format: usedFormat } = await generateContent(plan, mode, seed);
     console.log(`  Story (${story.length} chars): ${story}`);
 
     // N-gram similarity check
