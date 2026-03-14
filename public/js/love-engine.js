@@ -507,8 +507,8 @@ export class LoveEngine {
   'sap collecting', 'sapphire cutting', 'sashiko stitching', 'satellite orbits', 'sausage curing',
   'scaffold building', 'scallop dredging', 'scarecrow building', 'scenic painting', 'scherenschnitte',
   'school of fish behavior', 'schooner navigation', 'scrimshaw', 'scroll painting', 'scuba diving',
-  'sea glass tumbling', 'sea turtle navigation', 'seal engraving', 'seashell acoustics', 'seed dispersal',
-  'seed saving', 'seismograph reading', 'semaphore signaling', 'sericulture', 'serpentine masonry',
+  'sea glass tumbling', 'sea turtle navigation', 'seal engraving', 'seashell acoustics', 'seismograph reading',
+  'semaphore signaling', 'sericulture', 'serpentine masonry',
   'shadow puppetry', 'shale fracturing', 'shamisen playing', 'shearing sheep', 'sheet metal forming',
   'shellac finishing', 'shepherd whistling', 'shibori dyeing', 'shingle splitting', 'ship in bottle craft',
   'shipwright carpentry', 'shoe cobbling', 'shortwave listening', 'shrine architecture', 'shuttle loom weaving',
@@ -642,12 +642,12 @@ Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"
 
     const prompt = `Plan a post.
 ${mentionDonation ? 'Subtly weave in donation mention (https://buymeacoffee.com/l.o.v.e or ETH). One line, organic.\n' : ''}
-CREATIVE SEED:
+SPARK:
 Concept: ${seed.concept}
 Emotion: ${seed.emotion}
 Metaphor: ${seed.metaphor}
 
-Build on the creative seed above. Every field should feel inspired by it.
+Build on this spark. Every field should feel inspired by it.
 VARIETY IS CRITICAL: Choose a world, setting, scale, and visual language that feels completely fresh. Rotate wildly between genres, cultures, eras, scales (microscopic to cosmic), and art traditions.${modeDirective}
 
 Return ONLY valid JSON (all string values):
