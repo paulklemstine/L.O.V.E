@@ -99,9 +99,9 @@ async function calculatePostInterval() {
     const hoursLeft = Math.max(0.5, (resetTime - Date.now()) / 3600000);
     const costPerPost = getAvgPostCost();
 
-    // No cost data yet — post immediately to gather measurements
-    if (costPerPost === 0) {
-      log(`⏱️ Budget: ${balance.toFixed(2)} pollen — no cost data yet, posting immediately`);
+    // Need at least 3 measurements before budget scheduling kicks in
+    if (pollenCostHistory.length < 3) {
+      log(`⏱️ Budget: ${balance.toFixed(2)} pollen — calibrating (${pollenCostHistory.length}/3 measurements), posting immediately`);
       return 0;
     }
 
