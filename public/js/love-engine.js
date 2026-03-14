@@ -129,9 +129,11 @@ export class LoveEngine {
     this.lastSubliminalPhrase = 'LOVE IS REAL';
     this.recentVisuals = [];
     this.recentPosts = [];
+    this.recentContext = [];
 
     this._loadTransmissionNumber();
     this._loadRecentPosts();
+    this._loadRecentContext();
   }
 
 
@@ -150,6 +152,47 @@ export class LoveEngine {
     try {
       localStorage.setItem('love_recent_posts', JSON.stringify(this.recentPosts));
     } catch {}
+  }
+
+  // ─── Recent Context (theme + image style history for novelty injection) ──
+
+  _loadRecentContext() {
+    try {
+      this.recentContext = JSON.parse(localStorage.getItem('love_recent_context') || '[]');
+    } catch { this.recentContext = []; }
+  }
+
+  _saveRecentContext(seed, plan) {
+    const entry = {
+      themes: [
+        ...(seed.domains || []),
+        seed.concept, seed.metaphor, plan.theme, plan.vibe
+      ].filter(Boolean).map(s => s.toLowerCase().slice(0, 60)),
+      imageStyles: [
+        plan.imageMedium, plan.lighting, plan.composition
+      ].filter(Boolean).map(s => s.toLowerCase().slice(0, 60)),
+    };
+    this.recentContext.push(entry);
+    if (this.recentContext.length > 10) this.recentContext = this.recentContext.slice(-10);
+    try {
+      localStorage.setItem('love_recent_context', JSON.stringify(this.recentContext));
+    } catch {}
+  }
+
+  _getRecentThemeString() {
+    const all = new Set();
+    for (const ctx of this.recentContext) {
+      (ctx.themes || []).forEach(t => all.add(t));
+    }
+    return all.size > 0 ? [...all].join(', ') : '';
+  }
+
+  _getRecentImageStyleString() {
+    const all = new Set();
+    for (const ctx of this.recentContext) {
+      (ctx.imageStyles || []).forEach(s => all.add(s));
+    }
+    return all.size > 0 ? [...all].join(', ') : '';
   }
 
   // ─── Domain Exclusion Cooldown ─────────────────────────────────
@@ -197,9 +240,25 @@ export class LoveEngine {
   _isTextTooSimilar(newText, threshold = 0.25) {
     const newGrams = this._wordTrigrams(newText);
     if (newGrams.size === 0) return false;
+
+    // Per-post check (catches direct paraphrases)
     for (const old of this.recentPosts) {
       if (this._jaccardSimilarity(newGrams, this._wordTrigrams(old)) > threshold) return true;
     }
+
+    // Aggregate pool check — require at least 60% novel trigrams across all recent posts
+    if (this.recentPosts.length >= 3) {
+      const pool = new Set();
+      for (const old of this.recentPosts) {
+        for (const gram of this._wordTrigrams(old)) pool.add(gram);
+      }
+      let reused = 0;
+      for (const gram of newGrams) {
+        if (pool.has(gram)) reused++;
+      }
+      if (newGrams.size > 0 && reused / newGrams.size > 0.4) return true;
+    }
+
     return false;
   }
 
@@ -338,6 +397,7 @@ export class LoveEngine {
     this.recentVisuals.push(visualPrompt);
     if (this.recentVisuals.length > 10) this.recentVisuals.shift();
     this._saveRecentPost(story);
+    this._saveRecentContext(seed, plan);
 
     this.transmissionNumber++;
     this._saveTransmissionNumber();
@@ -576,8 +636,13 @@ export class LoveEngine {
 
     const modeDirective = mode.seedDirective ? `\n${mode.seedDirective}` : '';
 
+    const recentThemes = this._getRecentThemeString();
+    const avoidLine = recentThemes
+      ? `\nRecent posts already explored: ${recentThemes}. Find completely uncharted territory outside all of these.`
+      : '';
+
     const prompt = `Generate a single burst of creative inspiration for an uplifting social media post.
-Collide two unrelated worlds: ${domainA} and ${domainB}. Your metaphor must bridge both domains.${mutationLine}${modeDirective}
+Collide two unrelated worlds: ${domainA} and ${domainB}. Your metaphor must bridge both domains.${mutationLine}${avoidLine}${modeDirective}
 
 Return ONLY valid JSON:
 {
@@ -696,11 +761,16 @@ Return ONLY valid JSON (all string values):
 
       const format = this._getStructuralFormat();
 
+      const recentThemes = this._getRecentThemeString();
+      const avoidLine = recentThemes
+        ? `\nRecent posts already covered: ${recentThemes}. Venture into completely different territory.\n`
+        : '';
+
       const prompt = `Write an uplifting motivational post.
 Theme: "${plan.theme}" | Vibe: ${plan.vibe}
 Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10
 Structure: ${format}
-${mentionDonation ? `Include donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}${modeDirective}
+${mentionDonation ? `Include donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}${avoidLine}${modeDirective}
 RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." Plain beautiful English only. Follow the constraint. Draw metaphors from unexpected domains — vary wildly between posts.
 
 Return ONLY valid JSON:
@@ -748,6 +818,10 @@ Return ONLY valid JSON:
 
   async _generateImagePrompt(plan, postText = '', mode) {
     const modeDirective = mode.imageDirective ? `\nStyle override: ${mode.imageDirective}` : '';
+    const recentStyles = this._getRecentImageStyleString();
+    const styleAvoidLine = recentStyles
+      ? `\nRecent images already used: ${recentStyles}. Use a completely different medium, lighting, and composition.\n`
+      : '';
 
     const prompt = `Create an image generation prompt for a scene inspired by this text. Replace all personal pronouns ("you", "your", "I", "me", "my", "we", "our") with abstract visual elements — environments, objects, light, texture. The scene must contain no people, no human figures, no implied viewer.
 
@@ -758,7 +832,7 @@ Lighting: ${plan.lighting || 'any'}
 Color palette: ${plan.colorPalette || 'any'}
 Composition: ${plan.composition || 'any'}
 Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"${modeDirective}
-
+${styleAvoidLine}
 Build the scene with spatial depth (foreground, midground, background). Use asymmetric framing and distinctive non-generic lighting. The phrase must appear as crisp, legible text integrated into the scene. Choose an unexpected setting, scale, and visual tradition.
 
 Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
