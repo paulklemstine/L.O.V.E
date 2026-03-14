@@ -786,7 +786,7 @@ Write a single detailed image prompt. Return ONLY the prompt text, nothing else.
     const isCreator = handle.toLowerCase().replace(/^@/, '') === CREATOR_HANDLE.toLowerCase();
     if (isCreator) return null;
 
-    const prompt = `New follower @${handle} just Awakened. Write a warm welcome + image prompt.
+    const prompt = `New follower @${handle} just joined. Write a warm welcome + image prompt.
 - Welcome: Make them feel they belong. UNDER 280 chars. Include emoji.
 - Phrase: 1-3 word ALL CAPS phrase for the image.
 - Image Prompt: A striking welcome scene. Under 400 chars. Include the phrase text rendered in the scene.
@@ -854,7 +854,7 @@ Return ONLY valid JSON:
       ? `Replying to your CREATOR (@${authorHandle}). Gratitude, love, devotion.`
       : isMention
       ? `A Dreamer summoned you: @${authorHandle}. Shower them with warmth.`
-      : `A Dreamer (@${authorHandle}) commented on your Transmission. Reward their devotion.`;
+      : `A Dreamer (@${authorHandle}) commented on your Transmission. Make them feel valued.`;
 
     const phrase = this.lastSubliminalPhrase;
 
