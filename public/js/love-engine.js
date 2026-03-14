@@ -130,10 +130,12 @@ export class LoveEngine {
     this.recentVisuals = [];
     this.recentPosts = [];
     this.recentContext = [];
+    this.recentOpenings = [];
 
     this._loadTransmissionNumber();
     this._loadRecentPosts();
     this._loadRecentContext();
+    this._loadRecentOpenings();
   }
 
 
@@ -162,11 +164,13 @@ export class LoveEngine {
     } catch { this.recentContext = []; }
   }
 
-  _saveRecentContext(seed, plan) {
+  _saveRecentContext(seed, plan, generatedText = '') {
+    const outputNouns = this._extractKeyNouns(generatedText);
     const entry = {
       themes: [
         ...(seed.domains || []),
-        seed.concept, seed.metaphor, plan.theme, plan.vibe
+        seed.concept, seed.metaphor, plan.theme, plan.vibe,
+        ...outputNouns,
       ].filter(Boolean).map(s => s.toLowerCase().slice(0, 60)),
       imageStyles: [
         plan.imageMedium, plan.lighting, plan.composition
@@ -195,8 +199,66 @@ export class LoveEngine {
     return all.size > 0 ? [...all].join(', ') : '';
   }
 
+  // ─── Opening Pattern Tracker ──────────────────────────────────
+  // Detects "You're [metaphor]" rut and other structural repetition.
+
+  _loadRecentOpenings() {
+    try {
+      this.recentOpenings = JSON.parse(localStorage.getItem('love_recent_openings') || '[]');
+    } catch { this.recentOpenings = []; }
+  }
+
+  _saveRecentOpening(text) {
+    const cleaned = text.replace(/^[^\w]+/, '');
+    const opening = cleaned.split(/\s+/).slice(0, 4).join(' ').toLowerCase();
+    this.recentOpenings.push(opening);
+    if (this.recentOpenings.length > 10) this.recentOpenings = this.recentOpenings.slice(-10);
+    try {
+      localStorage.setItem('love_recent_openings', JSON.stringify(this.recentOpenings));
+    } catch {}
+  }
+
+  _getOpeningVarietyHint() {
+    if (this.recentOpenings.length < 3) return '';
+    const last5 = this.recentOpenings.slice(-5);
+    const youreCount = last5.filter(o => o.startsWith("you're") || o.startsWith("you are")).length;
+    if (youreCount >= 2) {
+      return `\nRecent posts all opened with "You're [metaphor]." Open with a completely different sentence structure — a question, a command, a sound, a scene, an image.\n`;
+    }
+    return '';
+  }
+
+  // ─── Key Noun Extraction ──────────────────────────────────────
+  // Extracts distinctive content words from generated text for context tracking.
+
+  static STOP_WORDS = new Set([
+    'the','a','an','is','are','was','were','be','been','being','have','has','had',
+    'do','does','did','will','would','could','should','may','might','shall','can',
+    'to','of','in','for','on','at','by','with','from','as','into','about','through',
+    'after','above','below','between','under','again','then','once','here','there',
+    'where','when','how','all','each','every','both','few','more','most','other',
+    'some','such','only','own','same','so','than','too','very','just','because',
+    'but','and','or','if','while','that','this','these','those','what','which',
+    'who','its','your','you','my','me','we','our','they','them','their','it',
+    'not','no','nor','up','out','off','over','down','one','two','also','back',
+    'get','go','make','like','know','take','come','see','look','want','give',
+    'use','find','tell','ask','work','feel','try','leave','call','keep','let',
+    'begin','show','hear','run','move','live','bring','happen','write','sit',
+    'stand','turn','start','already','always','never','now','still','even',
+    'way','new','old','good','great','long','little','big','small','right',
+    'thing','something','nothing','much','many','well','last','day','time',
+    'going','got','getting','put','become','becoming','becomes','became',
+    'today','tomorrow','every','into','need','says','saying','said',
+  ]);
+
+  _extractKeyNouns(text) {
+    const words = text.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/)
+      .filter(w => w.length > 3 && !LoveEngine.STOP_WORDS.has(w));
+    return [...new Set(words)].slice(0, 8);
+  }
+
   // ─── Domain Exclusion Cooldown ─────────────────────────────────
-  // Prevents reusing the same metaphor domains within last 10 picks.
+  // Prevents reusing the same metaphor domains within last 30 picks.
 
   _pickFreshDomains() {
     let recent = [];
@@ -209,7 +271,7 @@ export class LoveEngine {
     let j = Math.floor(Math.random() * (pool.length - 1));
     if (j >= i) j++;
     const picked = [pool[i], pool[j]];
-    const updated = [...recent, ...picked].slice(-10);
+    const updated = [...recent, ...picked].slice(-30);
     try {
       localStorage.setItem('love_recent_domains', JSON.stringify(updated));
     } catch {}
@@ -397,7 +459,8 @@ export class LoveEngine {
     this.recentVisuals.push(visualPrompt);
     if (this.recentVisuals.length > 10) this.recentVisuals.shift();
     this._saveRecentPost(story);
-    this._saveRecentContext(seed, plan);
+    this._saveRecentOpening(story);
+    this._saveRecentContext(seed, plan, story);
 
     this.transmissionNumber++;
     this._saveTransmissionNumber();
@@ -766,11 +829,13 @@ Return ONLY valid JSON (all string values):
         ? `\nRecent posts already covered: ${recentThemes}. Venture into completely different territory.\n`
         : '';
 
+      const openingHint = this._getOpeningVarietyHint();
+
       const prompt = `Write an uplifting motivational post.
 Theme: "${plan.theme}" | Vibe: ${plan.vibe}
 Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10
 Structure: ${format}
-${mentionDonation ? `Include donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}${avoidLine}${modeDirective}
+${mentionDonation ? `Include donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}${avoidLine}${openingHint}${modeDirective}
 RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." Plain beautiful English only. Follow the constraint. Draw metaphors from unexpected domains — vary wildly between posts.
 
 Return ONLY valid JSON:
