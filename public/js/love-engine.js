@@ -778,27 +778,44 @@ Write a single detailed image prompt. Return ONLY the prompt text, nothing else.
       result = `"${plan.subliminalPhrase || 'LOVE'}" rendered as glowing text in a surreal scene`;
     }
 
-    // Depersonalize + enhance with psychedelic lighting
-    result = await this._enhanceImagePrompt(result);
+    // Depersonalize, then enhance with psychedelic lighting
+    result = await this._depersonalizePrompt(result);
+    result = await this._psychedelicEnhance(result);
 
     if (result.length > 4000) result = result.slice(0, 3997) + '...';
     return result;
   }
 
-  // ─── Depersonalize + Psychedelic Enhancement ──────────────────────
+  // ─── Depersonalize Image Prompt ─────────────────────────────────
 
-  async _enhanceImagePrompt(prompt) {
+  async _depersonalizePrompt(prompt) {
     const raw = await this.ai.generateText(
       'You rewrite image prompts.',
-      `Rewrite this image prompt with two changes:
-1. Replace any second-person references ("you", "your", "yourself") with abstract visual elements — objects, environments, forces of nature, light phenomena. The scene should have no implied viewer or human subject addressed directly.
-2. Add trippy psychedelic abnormal lighting effects — prismatic refractions, bioluminescent glows, chromatic aberration, impossible light sources, iridescent halos, or other surreal illumination.
+      `Rewrite this image prompt replacing any second-person references ("you", "your", "yourself") with abstract visual elements — objects, environments, forces of nature, light phenomena. The scene should have no implied viewer or human subject addressed directly. Keep everything else unchanged.
 
-Original prompt:
 "${prompt}"
 
 Return ONLY the rewritten prompt text, nothing else.`,
-      { temperature: 0.7, label: 'Enhance Prompt' }
+      { temperature: 0.5, label: 'Depersonalize' }
+    );
+
+    let result = (raw || '').trim();
+    if (result.startsWith('"') && result.endsWith('"')) result = result.slice(1, -1);
+    if (result.startsWith('```')) result = result.replace(/```\w*\n?/g, '').trim();
+    return result || prompt;
+  }
+
+  // ─── Psychedelic Enhancement ──────────────────────────────────────
+
+  async _psychedelicEnhance(prompt) {
+    const raw = await this.ai.generateText(
+      'You enhance image prompts with lighting effects.',
+      `Enhance this image prompt by adding trippy psychedelic abnormal lighting effects. Keep the original scene and composition intact, but layer in surreal illumination.
+
+"${prompt}"
+
+Return ONLY the enhanced prompt text, nothing else.`,
+      { temperature: 0.9, label: 'Psychedelic Enhance' }
     );
 
     let result = (raw || '').trim();
