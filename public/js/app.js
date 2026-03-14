@@ -29,15 +29,50 @@ let activityLogDetails = new Map(); // key: entry string, value: fullText
 let nextPostTime = null; // timestamp for countdown
 let countdownTimer = null;
 
-// Variable posting: 4-8 min intervals (unpredictable = dopamine)
-const POST_INTERVAL_MIN = 4 * 60 * 1000;   // 4 minutes
-const POST_INTERVAL_MAX = 8 * 60 * 1000;   // 8 minutes
-const COMMENT_INTERVAL = 2 * 60 * 1000;    // 2 minutes
-const FOLLOW_INTERVAL = 3 * 60 * 1000;     // 3 minutes
-const CHAT_INTERVAL = 2.5 * 60 * 1000;    // 2.5 minutes
+// ── Pollen Budget-Aware Scheduling ──
+// 10 pollen/day = 5/12 pollen/hr ≈ 0.417/hr
+// Each post ≈ 0.5 pollen (5 LLM calls + 1 image). Replies/DMs ≈ 0.05 each.
+const ESTIMATED_POLLEN_PER_POST = 0.5;
+const MIN_POST_INTERVAL = 20 * 60 * 1000;   // 20 min floor (anti-spam)
+const MAX_POST_INTERVAL = 180 * 60 * 1000;  // 3 hour ceiling
+const DEFAULT_POST_INTERVAL = 72 * 60 * 1000; // ~72 min fallback (≈0.83 posts/hr)
+const COMMENT_INTERVAL = 5 * 60 * 1000;     // 5 minutes
+const FOLLOW_INTERVAL = 5 * 60 * 1000;      // 5 minutes
+const CHAT_INTERVAL = 5 * 60 * 1000;        // 5 minutes
 
-function getRandomPostInterval() {
-  return POST_INTERVAL_MIN + Math.random() * (POST_INTERVAL_MAX - POST_INTERVAL_MIN);
+async function calculatePostInterval() {
+  try {
+    if (!ai) return DEFAULT_POST_INTERVAL;
+    const acct = await ai.fetchAccountStats();
+    if (acct.balance === null || !acct.nextResetAt) return DEFAULT_POST_INTERVAL;
+
+    const balance = acct.balance;
+    const resetTime = new Date(acct.nextResetAt).getTime();
+    const hoursLeft = Math.max(0.5, (resetTime - Date.now()) / 3600000);
+
+    // How many posts can we afford with remaining balance?
+    const postsRemaining = balance / ESTIMATED_POLLEN_PER_POST;
+    // Spread them evenly across remaining hours
+    const postsPerHour = postsRemaining / hoursLeft;
+
+    let interval;
+    if (postsPerHour <= 0) {
+      interval = MAX_POST_INTERVAL; // Out of budget
+    } else {
+      interval = (60 / postsPerHour) * 60 * 1000; // ms per post
+    }
+
+    // Clamp to sane range
+    interval = Math.max(MIN_POST_INTERVAL, Math.min(MAX_POST_INTERVAL, interval));
+
+    // Add ±15% randomness for unpredictability
+    interval *= (0.85 + Math.random() * 0.3);
+
+    log(`⏱️ Budget: ${balance.toFixed(2)} pollen, ${hoursLeft.toFixed(1)}h left → next post in ${Math.round(interval / 60000)}m`);
+    return interval;
+  } catch {
+    return DEFAULT_POST_INTERVAL;
+  }
 }
 
 // ─── Initialization ─────────────────────────────────────────────────
@@ -158,16 +193,16 @@ async function startLoop() {
   // Immediate chat scan
   await doChatScan();
 
-  // Set up intervals — variable post timing for dopamine unpredictability
-  scheduleNextPost();
+  // Set up intervals — budget-aware post timing
+  await scheduleNextPost();
   commentTimer = setInterval(doCommentScan, COMMENT_INTERVAL);
   followTimer = setInterval(doFollowBack, FOLLOW_INTERVAL);
   chatTimer = setInterval(doChatScan, CHAT_INTERVAL);
 }
 
-function scheduleNextPost() {
+async function scheduleNextPost() {
   if (!isRunning) return;
-  const interval = getRandomPostInterval();
+  const interval = await calculatePostInterval();
   nextPostTime = Date.now() + interval;
   updateCountdown();
   if (countdownTimer) clearInterval(countdownTimer);
@@ -176,7 +211,7 @@ function scheduleNextPost() {
     nextPostTime = null;
     updateCountdown();
     await doPost();
-    scheduleNextPost();
+    await scheduleNextPost();
   }, interval);
 }
 
