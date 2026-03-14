@@ -333,6 +333,87 @@ body {
   border-color: rgba(0, 229, 255, 0.3);
 }
 
+/* ── Post Details Panel ── */
+
+.post-details {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.detail-group {
+  margin-bottom: 8px;
+}
+
+.detail-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.meta-tag {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  border: 1px solid;
+  line-height: 1.4;
+}
+
+.meta-tag b {
+  margin-right: 3px;
+  opacity: 0.7;
+}
+
+.tag-domain {
+  background: rgba(255, 107, 174, 0.12);
+  color: var(--accent-pink);
+  border-color: rgba(255, 107, 174, 0.3);
+}
+
+.tag-seed {
+  background: rgba(255, 215, 0, 0.1);
+  color: var(--accent-gold);
+  border-color: rgba(255, 215, 0, 0.25);
+}
+
+.tag-mode {
+  background: rgba(155, 89, 255, 0.15);
+  color: var(--accent-purple);
+  border-color: rgba(155, 89, 255, 0.3);
+}
+
+.tag-plan {
+  background: rgba(0, 229, 255, 0.08);
+  color: var(--accent-cyan);
+  border-color: rgba(0, 229, 255, 0.2);
+}
+
+.tag-vibe {
+  background: rgba(0, 229, 255, 0.12);
+  color: var(--accent-cyan);
+  border-color: rgba(0, 229, 255, 0.3);
+}
+
+.tag-subliminal {
+  background: rgba(155, 89, 255, 0.15);
+  color: var(--accent-purple);
+  border-color: rgba(155, 89, 255, 0.3);
+}
+
+.tag-visual {
+  background: rgba(255, 107, 174, 0.08);
+  color: var(--accent-pink);
+  border-color: rgba(255, 107, 174, 0.2);
+}
+
 /* ─── Activity Log ───────────────────────────────── */
 
 #activity-log {

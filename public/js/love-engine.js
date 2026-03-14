@@ -352,6 +352,7 @@ export class LoveEngine {
       mutation: plan.constraint,
       transmissionNumber: this.transmissionNumber,
       plan,
+      seed,
       mode: mode.mode,
       callLog: this.ai.getCallLog(),
     };
@@ -588,7 +589,10 @@ Return ONLY valid JSON:
     const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
     const raw = await this.ai.generateText('You are a creative director.', prompt, { temperature: temp, label: 'Creative Seed' });
     const data = this.ai.extractJSON(raw);
-    return data || { concept: 'transformation', emotion: 'awe', metaphor: 'metamorphosis' };
+    const result = data || { concept: 'transformation', emotion: 'awe', metaphor: 'metamorphosis' };
+    result.domains = [domainA, domainB];
+    if (thirdDomain) result.domains.push(thirdDomain);
+    return result;
   }
 
   // ─── Visual Similarity Check (LLM-based) ────────────────────────────

@@ -789,12 +789,47 @@ function showLatestPost(result) {
     imageUrl = URL.createObjectURL(result.imageBlob);
   }
 
+  const plan = result.plan || {};
+  const seed = result.seed || {};
+  const domains = seed.domains || [];
+
+  const tag = (label, value, cls) =>
+    value ? `<span class="meta-tag ${cls}"><b>${escapeHtml(label)}</b> ${escapeHtml(String(value))}</span>` : '';
+
   container.innerHTML = `
     ${imageUrl ? `<img src="${imageUrl}" alt="Generated image" class="post-image">` : ''}
     <div class="post-text">${escapeHtml(result.text)}</div>
-    <div class="post-meta">
-      <span class="subliminal-tag">Subliminal: ${escapeHtml(result.subliminal)}</span>
-      <span class="vibe-tag">Vibe: ${escapeHtml(result.vibe)}</span>
+    <div class="post-details">
+      <div class="detail-group">
+        <div class="detail-label">Seed</div>
+        <div class="detail-tags">
+          ${tag('Domains', domains.join(' \u00d7 '), 'tag-domain')}
+          ${tag('Concept', seed.concept, 'tag-seed')}
+          ${tag('Emotion', seed.emotion, 'tag-seed')}
+          ${tag('Metaphor', seed.metaphor, 'tag-seed')}
+        </div>
+      </div>
+      <div class="detail-group">
+        <div class="detail-label">Plan</div>
+        <div class="detail-tags">
+          ${tag('Mode', result.mode, 'tag-mode')}
+          ${tag('Theme', plan.theme, 'tag-plan')}
+          ${tag('Vibe', plan.vibe, 'tag-vibe')}
+          ${tag('Type', plan.contentType, 'tag-plan')}
+          ${tag('Constraint', plan.constraint, 'tag-plan')}
+          ${tag('Intensity', plan.intensity, 'tag-plan')}
+          ${tag('Subliminal', plan.subliminalPhrase, 'tag-subliminal')}
+        </div>
+      </div>
+      <div class="detail-group">
+        <div class="detail-label">Visual</div>
+        <div class="detail-tags">
+          ${tag('Medium', plan.imageMedium, 'tag-visual')}
+          ${tag('Lighting', plan.lighting, 'tag-visual')}
+          ${tag('Colors', plan.colorPalette, 'tag-visual')}
+          ${tag('Composition', plan.composition, 'tag-visual')}
+        </div>
+      </div>
     </div>
   `;
 }
