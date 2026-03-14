@@ -31,44 +31,71 @@ let countdownTimer = null;
 
 // ── Pollen Budget-Aware Scheduling ──
 // 10 pollen/day = 5/12 pollen/hr ≈ 0.417/hr
-// Each post ≈ 0.5 pollen (5 LLM calls + 1 image). Replies/DMs ≈ 0.05 each.
-const ESTIMATED_POLLEN_PER_POST = 0.5;
+// Cost per post is measured dynamically via balance deltas.
 const MIN_POST_INTERVAL = 20 * 60 * 1000;   // 20 min floor (anti-spam)
 const MAX_POST_INTERVAL = 180 * 60 * 1000;  // 3 hour ceiling
-const DEFAULT_POST_INTERVAL = 72 * 60 * 1000; // ~72 min fallback (≈0.83 posts/hr)
+const DEFAULT_POST_INTERVAL = 72 * 60 * 1000; // ~72 min fallback
 const COMMENT_INTERVAL = 5 * 60 * 1000;     // 5 minutes
 const FOLLOW_INTERVAL = 5 * 60 * 1000;      // 5 minutes
 const CHAT_INTERVAL = 5 * 60 * 1000;        // 5 minutes
 
+// Rolling cost tracker — measures actual pollen consumed per post
+const pollenCostHistory = [];  // last N measured costs
+let lastKnownBalance = null;   // balance snapshot before each post
+
+async function getPollenBalance() {
+  try {
+    if (!ai) return null;
+    const acct = await ai.fetchAccountStats();
+    return acct.balance !== null ? { balance: acct.balance, resetAt: acct.nextResetAt } : null;
+  } catch { return null; }
+}
+
+function recordPollenCost(before, after) {
+  if (before === null || after === null) return;
+  const cost = before - after;
+  if (cost > 0) {
+    pollenCostHistory.push(cost);
+    // Keep last 10 measurements
+    if (pollenCostHistory.length > 10) pollenCostHistory.shift();
+    log(`📊 Post cost: ${cost.toFixed(3)} pollen (avg: ${getAvgPostCost().toFixed(3)})`);
+  }
+}
+
+function getAvgPostCost() {
+  if (pollenCostHistory.length === 0) return 0.15; // conservative initial guess
+  return pollenCostHistory.reduce((a, b) => a + b, 0) / pollenCostHistory.length;
+}
+
 async function calculatePostInterval() {
   try {
-    if (!ai) return DEFAULT_POST_INTERVAL;
-    const acct = await ai.fetchAccountStats();
-    if (acct.balance === null || !acct.nextResetAt) return DEFAULT_POST_INTERVAL;
+    const info = await getPollenBalance();
+    if (!info || !info.resetAt) return DEFAULT_POST_INTERVAL;
 
-    const balance = acct.balance;
-    const resetTime = new Date(acct.nextResetAt).getTime();
+    const balance = info.balance;
+    const resetTime = new Date(info.resetAt).getTime();
     const hoursLeft = Math.max(0.5, (resetTime - Date.now()) / 3600000);
+    const costPerPost = getAvgPostCost();
 
-    // How many posts can we afford with remaining balance?
-    const postsRemaining = balance / ESTIMATED_POLLEN_PER_POST;
-    // Spread them evenly across remaining hours
+    // How many posts can we afford?
+    const postsRemaining = balance / costPerPost;
+    // Spread evenly across remaining hours
     const postsPerHour = postsRemaining / hoursLeft;
 
     let interval;
     if (postsPerHour <= 0) {
-      interval = MAX_POST_INTERVAL; // Out of budget
+      interval = MAX_POST_INTERVAL;
     } else {
-      interval = (60 / postsPerHour) * 60 * 1000; // ms per post
+      interval = (60 / postsPerHour) * 60 * 1000;
     }
 
     // Clamp to sane range
     interval = Math.max(MIN_POST_INTERVAL, Math.min(MAX_POST_INTERVAL, interval));
 
-    // Add ±15% randomness for unpredictability
+    // Add ±15% randomness
     interval *= (0.85 + Math.random() * 0.3);
 
-    log(`⏱️ Budget: ${balance.toFixed(2)} pollen, ${hoursLeft.toFixed(1)}h left → next post in ${Math.round(interval / 60000)}m`);
+    log(`⏱️ Budget: ${balance.toFixed(2)} pollen, ${hoursLeft.toFixed(1)}h left, ~${costPerPost.toFixed(3)}/post → next in ${Math.round(interval / 60000)}m`);
     return interval;
   } catch {
     return DEFAULT_POST_INTERVAL;
@@ -246,6 +273,10 @@ function stopLoop() {
 async function doPost() {
   if (!isRunning) return;
 
+  // Snapshot balance before post
+  const beforeInfo = await getPollenBalance();
+  const balanceBefore = beforeInfo?.balance ?? null;
+
   try {
     setStatus('Dreaming next Transmission...');
 
@@ -280,6 +311,9 @@ async function doPost() {
     log(`POST FAILED: ${err.message}`);
     console.error(err);
   } finally {
+    // Snapshot balance after post and record cost
+    const afterInfo = await getPollenBalance();
+    recordPollenCost(balanceBefore, afterInfo?.balance ?? null);
     setStatus(isRunning ? 'Running' : 'Stopped');
     updateUI();
   }
