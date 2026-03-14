@@ -260,17 +260,8 @@ export class LoveEngine {
   // ─── Aspect Ratio Rotation ─────────────────────────────────────
   // Forces different compositions by changing the canvas shape.
 
-  static ASPECT_RATIOS = [
-    { width: 1024, height: 1024 },  // 1:1 square
-    { width: 1024, height: 768 },   // 4:3 landscape
-    { width: 768, height: 1024 },   // 3:4 portrait
-    { width: 1024, height: 576 },   // 16:9 cinematic
-    { width: 576, height: 1024 },   // 9:16 vertical
-  ];
-
   _pickAspectRatio() {
-    const ratios = LoveEngine.ASPECT_RATIOS;
-    return ratios[this.transmissionNumber % ratios.length];
+    return { width: 1024, height: 1024 };
   }
 
   // ─── Recent Visual Object Tracking ────────────────────────────
