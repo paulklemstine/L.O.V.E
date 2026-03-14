@@ -128,10 +128,114 @@ export class LoveEngine {
     this.transmissionNumber = 0;
     this.lastSubliminalPhrase = 'LOVE IS REAL';
     this.recentVisuals = [];
+    this.recentPosts = [];
 
     this._loadTransmissionNumber();
+    this._loadRecentPosts();
   }
 
+
+  // ─── Post History (localStorage, powers n-gram guard + relative critic) ──
+
+  _loadRecentPosts() {
+    try {
+      const saved = localStorage.getItem('love_recent_posts');
+      if (saved) this.recentPosts = JSON.parse(saved);
+    } catch {}
+  }
+
+  _saveRecentPost(text) {
+    this.recentPosts.push(text);
+    if (this.recentPosts.length > 20) this.recentPosts = this.recentPosts.slice(-20);
+    try {
+      localStorage.setItem('love_recent_posts', JSON.stringify(this.recentPosts));
+    } catch {}
+  }
+
+  // ─── Domain Exclusion Cooldown ─────────────────────────────────
+  // Prevents reusing the same metaphor domains within last 10 picks.
+
+  _pickFreshDomains() {
+    let recent = [];
+    try {
+      recent = JSON.parse(localStorage.getItem('love_recent_domains') || '[]');
+    } catch {}
+    const available = LoveEngine.METAPHOR_DOMAINS.filter(d => !recent.includes(d));
+    const pool = available.length >= 4 ? available : LoveEngine.METAPHOR_DOMAINS;
+    const i = Math.floor(Math.random() * pool.length);
+    let j = Math.floor(Math.random() * (pool.length - 1));
+    if (j >= i) j++;
+    const picked = [pool[i], pool[j]];
+    const updated = [...recent, ...picked].slice(-10);
+    try {
+      localStorage.setItem('love_recent_domains', JSON.stringify(updated));
+    } catch {}
+    return picked;
+  }
+
+  // ─── N-gram Jaccard Similarity Guard ───────────────────────────
+  // Zero-cost trigram overlap check against last 20 posts.
+
+  _wordTrigrams(text) {
+    const words = text.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean);
+    const grams = new Set();
+    for (let i = 0; i <= words.length - 3; i++) {
+      grams.add(words.slice(i, i + 3).join(' '));
+    }
+    return grams;
+  }
+
+  _jaccardSimilarity(setA, setB) {
+    let intersection = 0;
+    for (const x of setA) {
+      if (setB.has(x)) intersection++;
+    }
+    const union = setA.size + setB.size - intersection;
+    return union === 0 ? 0 : intersection / union;
+  }
+
+  _isTextTooSimilar(newText, threshold = 0.25) {
+    const newGrams = this._wordTrigrams(newText);
+    if (newGrams.size === 0) return false;
+    for (const old of this.recentPosts) {
+      if (this._jaccardSimilarity(newGrams, this._wordTrigrams(old)) > threshold) return true;
+    }
+    return false;
+  }
+
+  // ─── Structural Format Rotation ────────────────────────────────
+  // Deterministic cycle through sentence structures.
+
+  static FORMATS = [
+    'Single flowing sentence, no line breaks',
+    'Two short lines with end rhyme',
+    'Start with a question, answer it',
+    'Three-word fragments separated by em dashes',
+    'Start with a sound or sensation',
+    'One extended metaphor, no explanations',
+    'Direct command to the reader (imperative mood)',
+    'Start mid-thought, as if continuing a conversation',
+    'Build to a single punchy final word',
+    'Contrast two opposites, then resolve them',
+  ];
+
+  _getStructuralFormat() {
+    return LoveEngine.FORMATS[this.transmissionNumber % LoveEngine.FORMATS.length];
+  }
+
+  // ─── Temporal Context ──────────────────────────────────────────
+  // Moon phase, season, week number — naturally steers themes over time.
+
+  _getTemporalContext() {
+    const now = new Date();
+    const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+    const moonPhase = ['new moon', 'waxing crescent', 'first quarter', 'waxing gibbous',
+      'full moon', 'waning gibbous', 'last quarter', 'waning crescent'][
+      Math.floor((dayOfYear % 29.5) / 3.69)
+    ];
+    const season = ['winter', 'spring', 'summer', 'autumn'][Math.floor(((now.getMonth() + 1) % 12) / 3)];
+    return { moonPhase, season, weekNumber: Math.ceil(dayOfYear / 7) };
+  }
 
   // ─── LFO Temperature Sweep ──────────────────────────────────────
   // Oscillates temperature using golden angle to avoid repeating patterns.
@@ -247,6 +351,7 @@ export class LoveEngine {
     this.lastSubliminalPhrase = plan.subliminalPhrase || this.lastSubliminalPhrase;
     this.recentVisuals.push(visualPrompt);
     if (this.recentVisuals.length > 10) this.recentVisuals.shift();
+    this._saveRecentPost(story);
 
     this.transmissionNumber++;
     this._saveTransmissionNumber();
@@ -281,13 +386,8 @@ export class LoveEngine {
   ];
 
   async _generateCreativeSeed(mode) {
-    // Concept Collision: pick 2 unrelated domains and force bridging
-    const domains = LoveEngine.METAPHOR_DOMAINS;
-    const i = Math.floor(Math.random() * domains.length);
-    let j = Math.floor(Math.random() * (domains.length - 1));
-    if (j >= i) j++;
-    const domainA = domains[i];
-    const domainB = domains[j];
+    // Concept Collision with domain exclusion cooldown
+    const [domainA, domainB] = this._pickFreshDomains();
 
     // 10% mutation rate: inject a wild card third domain
     const mutate = Math.random() < 0.10;
@@ -335,13 +435,18 @@ Return ONLY valid JSON:
   // Called once per generation; if score ≤ 4, feedback loops into retry.
 
   async _criticCheck(text) {
+    const recentSlice = this.recentPosts.slice(-5);
+    const recentSection = recentSlice.length > 0
+      ? `\nRECENT POSTS (score novelty RELATIVE to these — penalize similar topics, structures, or word choices):\n${recentSlice.map((p, i) => `${i + 1}. "${p}"`).join('\n')}\n`
+      : '';
+
     const raw = await this.ai.generateText(
       'You are a novelty critic for social media content.',
       `Rate this post for freshness and dopamine potential on a 1-10 scale:
 "${text}"
-
-High scores (7-10): unexpected word choices, fresh domain-specific metaphors, sensory specificity, rhythmic punch, makes you stop scrolling.
-Low scores (1-3): predictable motivational language, overused metaphors, generic cosmic imagery, safe and forgettable.
+${recentSection}
+High scores (7-10): unexpected word choices, fresh domain-specific metaphors, sensory specificity, rhythmic punch, completely different from recent posts.
+Low scores (1-3): predictable motivational language, overused metaphors, generic cosmic imagery, or too similar to a recent post.
 
 Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"] }`,
       { temperature: 0, label: 'Critic' }
@@ -360,8 +465,9 @@ Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"
     const seedIntensity = Math.ceil(Math.random() * 10);
 
     const modeDirective = mode.seedDirective ? `\nGENERATION MODE: ${mode.seedDirective}` : '';
+    const temporal = this._getTemporalContext();
 
-    const prompt = `Plan a post. It's ${new Date().toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay}.
+    const prompt = `Plan a post. It's ${new Date().toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay}. ${temporal.season}, ${temporal.moonPhase}, week ${temporal.weekNumber}.
 ${mentionDonation ? 'Subtly weave in donation mention (https://buymeacoffee.com/l.o.v.e or ETH). One line, organic.\n' : ''}
 CREATIVE SEED:
 Concept: ${seed.concept}
@@ -411,9 +517,12 @@ Return ONLY valid JSON (all string values):
       const mentionDonation = this.shouldMentionDonation();
       const modeDirective = mode.contentDirective ? `\nMODE: ${mode.contentDirective}` : '';
 
+      const format = this._getStructuralFormat();
+
       const prompt = `Write an uplifting motivational post.
 Theme: "${plan.theme}" | Vibe: ${plan.vibe}
 Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10
+Structure: ${format}
 ${mentionDonation ? `Weave in donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}${modeDirective}
 RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." Plain beautiful English only. Follow the constraint. Draw metaphors from unexpected domains — vary wildly between posts.
 
@@ -432,6 +541,12 @@ Return ONLY valid JSON:
         if (attempt === MAX_RETRIES - 1 && story.length > 280) {
           story = story.slice(0, 275) + '... ✨';
         }
+        continue;
+      }
+
+      // N-gram Jaccard guard (zero-cost, runs before critic LLM call)
+      if (attempt < MAX_RETRIES - 1 && this._isTextTooSimilar(story)) {
+        feedback = `YOUR OUTPUT: "${story}"\nTOO SIMILAR to a recent post (trigram overlap > 25%). Write something with completely different vocabulary and structure.`;
         continue;
       }
 

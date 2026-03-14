@@ -66,7 +66,8 @@ export class PollinationsClient {
    * Default model: openai (GPT-5 Mini) for planning, claude-fast (Claude Haiku 4.5) for content
    */
   async generateText(systemPrompt, userPrompt, options = {}) {
-    const { temperature = 0.85, model = 'openai', maxRetries = 2 } = options;
+    const { temperature = 0.85, model = 'openai', maxRetries = 2,
+      frequencyPenalty = 0.4, presencePenalty = 0.3 } = options;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -77,6 +78,8 @@ export class PollinationsClient {
             { role: 'user', content: userPrompt }
           ],
           temperature,
+          frequency_penalty: frequencyPenalty,
+          presence_penalty: presencePenalty,
           seed: Math.floor(Math.random() * 2147483647),
           stream: false,
         };
