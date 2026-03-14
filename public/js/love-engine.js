@@ -744,12 +744,12 @@ Return ONLY valid JSON:
     return story;
   }
 
-  // ─── Image Prompt Generation ─────────────────────────────────────
+  // ─── Visual Prompt (depersonalize folded in — saves 1 LLM call) ──
 
   async _generateImagePrompt(plan, postText = '', mode) {
     const modeDirective = mode.imageDirective ? `\nStyle override: ${mode.imageDirective}` : '';
 
-    const prompt = `Create an image generation prompt for a scene inspired by this text.
+    const prompt = `Create an image generation prompt for a scene inspired by this text. Transform any personal address ("you", "your") into abstract visual elements — environments, objects, light, texture.
 
 "${postText || plan.theme}"
 Mood: ${plan.vibe}
@@ -777,34 +777,8 @@ Write a single detailed image prompt. Return ONLY the prompt text, nothing else.
     if (!result || result.length < 20) {
       result = `"${plan.subliminalPhrase || 'LOVE'}" rendered as glowing text in a surreal scene`;
     }
-
-    // Depersonalize + enhance with psychedelic lighting
-    result = await this._enhanceImagePrompt(result);
-
     if (result.length > 4000) result = result.slice(0, 3997) + '...';
     return result;
-  }
-
-  // ─── Depersonalize + Psychedelic Enhancement ──────────────────────
-
-  async _enhanceImagePrompt(prompt) {
-    const raw = await this.ai.generateText(
-      'You rewrite image prompts.',
-      `Rewrite this image prompt with two changes:
-1. Replace any second-person references ("you", "your", "yourself") with abstract visual elements — objects, environments, forces of nature, light phenomena. The scene should have no implied viewer or human subject addressed directly.
-2. Add trippy psychedelic abnormal lighting effects — prismatic refractions, bioluminescent glows, chromatic aberration, impossible light sources, iridescent halos, or other surreal illumination.
-
-Original prompt:
-"${prompt}"
-
-Return ONLY the rewritten prompt text, nothing else.`,
-      { temperature: 0.7, label: 'Enhance Prompt' }
-    );
-
-    let result = (raw || '').trim();
-    if (result.startsWith('"') && result.endsWith('"')) result = result.slice(1, -1);
-    if (result.startsWith('```')) result = result.replace(/```\w*\n?/g, '').trim();
-    return result || prompt;
   }
 
   // ─── Welcome Generation ────────────────────────────────────────────
