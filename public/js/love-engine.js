@@ -642,12 +642,12 @@ Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"
 
     const prompt = `Plan a post.
 ${mentionDonation ? 'Subtly weave in donation mention (https://buymeacoffee.com/l.o.v.e or ETH). One line, organic.\n' : ''}
-SPARK:
+INPUTS:
 Concept: ${seed.concept}
 Emotion: ${seed.emotion}
 Metaphor: ${seed.metaphor}
 
-Build on this spark. Every field should feel inspired by it.
+Every field below should feel inspired by the inputs above.
 VARIETY IS CRITICAL: Choose a world, setting, scale, and visual language that feels completely fresh. Rotate wildly between genres, cultures, eras, scales (microscopic to cosmic), and art traditions.${modeDirective}
 
 Return ONLY valid JSON (all string values):

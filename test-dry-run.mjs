@@ -411,12 +411,12 @@ async function generatePlan(seed, mode) {
 
   const prompt = `Plan a post.
 
-SPARK:
+INPUTS:
 Concept: ${seed.concept}
 Emotion: ${seed.emotion}
 Metaphor: ${seed.metaphor}
 
-Build on this spark. Every field should feel inspired by it.
+Every field below should feel inspired by the inputs above.
 VARIETY IS CRITICAL: Choose a world, setting, scale, and visual language that feels completely fresh. Rotate wildly between genres, cultures, eras, scales (microscopic to cosmic), and art traditions.${modeDirective}
 
 Return ONLY valid JSON (all string values):
