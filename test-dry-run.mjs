@@ -427,36 +427,37 @@ Return ONLY valid JSON:
 }
 
 async function buildVisualPrompt(plan, postText = '', mode) {
-  const modeDirective = mode.imageDirective ? `\nStyle override: ${mode.imageDirective}` : '';
+  const modeDirective = mode.imageDirective ? ` ${mode.imageDirective}.` : '';
+  const phrase = plan.subliminalPhrase || 'LOVE';
 
-  const prompt = `Create an image generation prompt for a scene inspired by this text. Replace all personal pronouns ("you", "your", "I", "me", "my", "we", "our") with abstract visual elements — environments, objects, light, texture. The scene must contain no people, no human figures, no implied viewer.
-
-"${postText || plan.theme}"
-Mood: ${plan.vibe}
-YOU MUST USE EXACTLY THESE — they are mandatory, not suggestions:
-- Medium: ${plan.imageMedium}
-- Lighting: ${plan.lighting}
-- Color palette: ${plan.colorPalette}
-- Composition: ${plan.composition}
-Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"${modeDirective}
-
-The phrase must appear as crisp, legible text integrated into the scene. Vary HOW the text appears — it can be formed by any material, phenomenon, or environmental feature.
-
-Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
+  // LLM generates ONLY a concise scene — we assemble technical fields in code
+  const prompt = `Describe an image scene in ONE sentence (under 150 characters). No people or human figures. Replace pronouns with abstract visuals.
+Inspired by: "${postText || plan.theme}"
+Include the text "${phrase}" physically integrated into the scene.${modeDirective}
+Return ONLY the scene description.`;
 
   const temp = lfoTemperature(1.5 + mode.tempMod, 0.3);
   const raw = await callLLM(
-    'You are an image prompt writer who prizes originality and visual surprise.',
+    'You write ultra-concise image descriptions. One vivid sentence.',
     prompt, temp
   );
 
-  let result = (raw || '').trim();
-  if (result.startsWith('"') && result.endsWith('"')) result = result.slice(1, -1);
-  if (result.startsWith('```')) result = result.replace(/```\w*\n?/g, '').trim();
-  if (!result || result.length < 20) {
-    result = `"${plan.subliminalPhrase || 'LOVE'}" rendered as glowing text in a surreal scene`;
+  let scene = (raw || '').trim();
+  if (scene.startsWith('"') && scene.endsWith('"')) scene = scene.slice(1, -1);
+  if (scene.startsWith('```')) scene = scene.replace(/```\w*\n?/g, '').trim();
+  if (!scene || scene.length < 10) {
+    scene = `"${phrase}" glowing in a surreal dreamscape`;
   }
-  if (result.length > 4000) result = result.slice(0, 3997) + '...';
+  if (scene.length > 250) scene = scene.slice(0, 247) + '...';
+
+  // Assemble: concise scene + plan fields + technical sweetener
+  const medium = plan.imageMedium || 'digital painting';
+  const lighting = plan.lighting || 'dramatic lighting';
+  const palette = plan.colorPalette || 'rich saturated colors';
+  const composition = plan.composition || 'balanced composition';
+
+  const result = `${scene}. ${medium}, ${composition}. ${lighting}, ${palette}. 8K UHD, sharp focus.`;
+  if (result.length > 800) return result.slice(0, 797) + '...';
   return result;
 }
 
@@ -507,7 +508,7 @@ function analyzeNovelty(results) {
   console.log('\nVisual prompt lengths:');
   results.forEach((r, i) => {
     const len = r.visualPrompt?.length || 0;
-    const ok = len <= 4000 ? '✓' : '✗ OVER';
+    const ok = len <= 800 ? '✓' : '✗ OVER';
     console.log(`  ${i + 1}. ${len} chars ${ok}`);
   });
 
