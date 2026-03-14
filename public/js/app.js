@@ -72,10 +72,8 @@ function updateBudgetStats(currentBalance) {
   const lastEl = document.getElementById('stat-last-cost');
   if (lastEl && lastCost !== null) lastEl.textContent = lastCost.toFixed(3);
 
-  const remEl = document.getElementById('stat-posts-remaining');
-  if (remEl && currentBalance !== null && avg > 0) {
-    remEl.textContent = Math.floor(currentBalance / avg);
-  }
+  // Posts remaining is set by calculatePostInterval → updateBudgetDisplay
+  // which accounts for rate limits and anti-spam floor
 }
 
 function getAvgPostCost() {
