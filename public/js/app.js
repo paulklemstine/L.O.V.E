@@ -56,9 +56,25 @@ function recordPollenCost(before, after) {
   const cost = before - after;
   if (cost > 0) {
     pollenCostHistory.push(cost);
-    // Keep last 10 measurements
     if (pollenCostHistory.length > 10) pollenCostHistory.shift();
     log(`📊 Post cost: ${cost.toFixed(3)} pollen (avg: ${getAvgPostCost().toFixed(3)})`);
+    updateBudgetStats(after);
+  }
+}
+
+function updateBudgetStats(currentBalance) {
+  const avg = getAvgPostCost();
+  const lastCost = pollenCostHistory.length > 0 ? pollenCostHistory[pollenCostHistory.length - 1] : null;
+
+  const avgEl = document.getElementById('stat-post-cost');
+  if (avgEl) avgEl.textContent = avg.toFixed(3);
+
+  const lastEl = document.getElementById('stat-last-cost');
+  if (lastEl && lastCost !== null) lastEl.textContent = lastCost.toFixed(3);
+
+  const remEl = document.getElementById('stat-posts-remaining');
+  if (remEl && currentBalance !== null && avg > 0) {
+    remEl.textContent = Math.floor(currentBalance / avg);
   }
 }
 
@@ -829,6 +845,9 @@ async function refreshPollenStats() {
         resetEl.textContent = 'now';
       }
     }
+
+    // Keep posts-remaining current between posts
+    if (acct.balance !== null) updateBudgetStats(acct.balance);
   } catch {
     // Silently fail — stats are non-critical
   }
