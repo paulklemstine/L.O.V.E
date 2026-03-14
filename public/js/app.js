@@ -105,17 +105,17 @@ async function calculatePostInterval() {
       return 0;
     }
 
-    // Use ALL remaining pollen before reset, capped at 1 pollen/hr rate limit
+    // Budget-based interval: spend all remaining pollen before reset
+    // Rate limit: 1 pollen/hr max from API
     const rawPollenPerHour = balance / hoursLeft;
-    const pollenPerHour = Math.min(rawPollenPerHour, 1.0); // API rate limit: 1 pollen/hr max
-    const postsPerHour = pollenPerHour / costPerPost;
-    const postsRemaining = pollenPerHour * hoursLeft / costPerPost;
+    const pollenPerHour = Math.min(rawPollenPerHour, 1.0);
+    const budgetPostsPerHour = costPerPost > 0 ? pollenPerHour / costPerPost : 0;
 
     let interval;
-    if (postsPerHour <= 0) {
+    if (budgetPostsPerHour <= 0) {
       interval = MAX_POST_INTERVAL;
     } else {
-      interval = (60 / postsPerHour) * 60 * 1000;
+      interval = 3600000 / budgetPostsPerHour; // ms per post
     }
 
     // Clamp to sane range
@@ -124,10 +124,15 @@ async function calculatePostInterval() {
     // Add ±15% randomness
     interval *= (0.85 + Math.random() * 0.3);
 
+    // Posts remaining based on ACTUAL clamped interval, not theoretical budget
+    const actualPostsPerHour = 3600000 / interval;
+    const postsRemaining = Math.floor(actualPostsPerHour * hoursLeft);
+    const pollenUsed = postsRemaining * costPerPost;
+
     const hLeft = Math.floor(hoursLeft);
     const mLeft = Math.round((hoursLeft - hLeft) * 60);
 
-    log(`⏱️ ${balance.toFixed(2)} pollen left, resets in ${hLeft}h${mLeft}m → ${pollenPerHour.toFixed(2)}/hr budget, ~${Math.round(postsRemaining)} posts left, next in ${Math.round(interval / 60000)}m`);
+    log(`⏱️ ${balance.toFixed(2)} pollen left, resets in ${hLeft}h${mLeft}m → ~${postsRemaining} posts left (${pollenUsed.toFixed(2)} pollen), next in ${Math.round(interval / 60000)}m`);
 
     // Update dashboard budget stats
     updateBudgetDisplay(balance, hoursLeft, costPerPost, postsRemaining, pollenPerHour);
