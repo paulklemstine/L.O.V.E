@@ -2,10 +2,10 @@
  * pollinations.js - Pollinations API client for text and image generation
  *
  * Uses the new gen.pollinations.ai API (OpenAI-compatible chat completions).
- * Pollen budget: 10 pollen/day = 5/12 pollen/hour (~0.417/hr)
+ * Pollen budget: 10 pollen/day, 1 pollen/hr rate limit
  * Text planning: openai (GPT-5 Mini) - reliable structured JSON output
- * Text content: claude-fast (Claude Haiku 4.5) - superior creative writing
- * Image model: imagen-4 (Google Imagen 4) - high quality free model
+ * Text content: claude-airforce (Claude Sonnet 4.6) - top-tier creative writing
+ * Image model: dirtberry-pro - high realism, complex scenes
  */
 
 const BASE_URL = 'https://gen.pollinations.ai';
@@ -63,7 +63,7 @@ export class PollinationsClient {
   /**
    * Generate text using Pollinations OpenAI-compatible API.
    * POST /v1/chat/completions — returns OpenAI JSON format.
-   * Default model: openai (GPT-5 Mini) for planning, claude-fast (Claude Haiku 4.5) for content
+   * Default model: openai (GPT-5 Mini) for planning, claude-airforce (Claude Sonnet 4.6) for content
    */
   async generateText(systemPrompt, userPrompt, options = {}) {
     const { temperature = 0.85, model = 'openai', maxRetries = 2,
@@ -135,10 +135,10 @@ export class PollinationsClient {
   /**
    * Generate an image and return it as a Blob.
    * GET /image/{prompt} — returns binary image.
-   * Model: imagen-4 (Google Imagen 4) - high quality free model
+   * Model: dirtberry-pro - high realism, complex scenes
    */
   async generateImage(prompt, options = {}) {
-    const { width = 1024, height = 1024, subliminalText = null, model = 'imagen-4', negativePrompt = null } = options;
+    const { width = 1024, height = 1024, subliminalText = null, model = 'dirtberry-pro', negativePrompt = null } = options;
 
     let fullPrompt = prompt;
     if (subliminalText) {

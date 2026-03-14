@@ -32,7 +32,7 @@ let countdownTimer = null;
 // ── Pollen Budget-Aware Scheduling ──
 // 10 pollen/day = 5/12 pollen/hr ≈ 0.417/hr
 // Cost per post is measured dynamically via balance deltas.
-const MIN_POST_INTERVAL = 20 * 60 * 1000;   // 20 min floor (anti-spam)
+const MIN_POST_INTERVAL = 5 * 1000;          // 5s floor (generation pipeline ~60-90s is natural limiter)
 const MAX_POST_INTERVAL = 180 * 60 * 1000;  // 3 hour ceiling
 const DEFAULT_POST_INTERVAL = 72 * 60 * 1000; // ~72 min fallback
 const COMMENT_INTERVAL = 5 * 60 * 1000;     // 5 minutes

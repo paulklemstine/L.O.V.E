@@ -419,7 +419,7 @@ Return ONLY valid JSON:
 { "story": "your post text here" }`;
 
   const temp = lfoTemperature(0.85 + mode.tempMod, 0.2);
-  const raw = await callLLM(SYSTEM_PROMPT, prompt, temp, 'claude-fast');
+  const raw = await callLLM(SYSTEM_PROMPT, prompt, temp, 'claude-airforce');
   const data = extractJSON(raw);
   let story = (data?.story || '[FAILED TO GENERATE]');
   story = story.replace(/@\w+\b(?!\.\w)/g, '').replace(/\s{2,}/g, ' ').trim();
