@@ -79,7 +79,7 @@ function updateBudgetStats(currentBalance) {
 }
 
 function getAvgPostCost() {
-  if (pollenCostHistory.length === 0) return 0.15; // conservative initial guess
+  if (pollenCostHistory.length === 0) return 0; // no data yet — post immediately
   return pollenCostHistory.reduce((a, b) => a + b, 0) / pollenCostHistory.length;
 }
 
@@ -92,6 +92,12 @@ async function calculatePostInterval() {
     const resetTime = new Date(info.resetAt).getTime();
     const hoursLeft = Math.max(0.5, (resetTime - Date.now()) / 3600000);
     const costPerPost = getAvgPostCost();
+
+    // No cost data yet — post at minimum interval to gather measurements
+    if (costPerPost === 0) {
+      log(`⏱️ Budget: ${balance.toFixed(2)} pollen — no cost data yet, posting at minimum interval`);
+      return MIN_POST_INTERVAL;
+    }
 
     // How many posts can we afford?
     const postsRemaining = balance / costPerPost;
