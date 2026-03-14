@@ -93,10 +93,10 @@ async function calculatePostInterval() {
     const hoursLeft = Math.max(0.5, (resetTime - Date.now()) / 3600000);
     const costPerPost = getAvgPostCost();
 
-    // No cost data yet — post at minimum interval to gather measurements
+    // No cost data yet — post immediately to gather measurements
     if (costPerPost === 0) {
-      log(`⏱️ Budget: ${balance.toFixed(2)} pollen — no cost data yet, posting at minimum interval`);
-      return MIN_POST_INTERVAL;
+      log(`⏱️ Budget: ${balance.toFixed(2)} pollen — no cost data yet, posting immediately`);
+      return 0;
     }
 
     // How many posts can we afford?
