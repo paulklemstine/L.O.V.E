@@ -53,7 +53,7 @@ function setupEventListeners() {
   document.getElementById('btn-save').addEventListener('click', saveSettings);
   document.getElementById('btn-start').addEventListener('click', startLoop);
   document.getElementById('btn-stop').addEventListener('click', stopLoop);
-  document.getElementById('btn-test-post').addEventListener('click', testPost);
+  document.getElementById('btn-force-post').addEventListener('click', forcePost);
   document.getElementById('toggle-settings').addEventListener('click', toggleSettings);
 
 }
@@ -250,28 +250,43 @@ async function doPost() {
   }
 }
 
-async function testPost() {
+async function forcePost() {
   const pollinationsKey = document.getElementById('pollinations-key').value.trim();
   if (!pollinationsKey) {
-    log('ERROR: Pollinations API key required for test.');
+    log('ERROR: Pollinations API key required.');
+    return;
+  }
+
+  if (!bsky?.isLoggedIn) {
+    log('ERROR: Log in to Bluesky first (start the loop or save credentials).');
     return;
   }
 
   ai = ai || new PollinationsClient(pollinationsKey);
   love = love || new LoveEngine(ai);
 
-  log('Generating test post (dry run - will NOT post to Bluesky)...');
+  log('Force posting — generating and broadcasting...');
   try {
     const result = await love.generatePost((status) => {
-      log(`[TEST] ${status}`);
+      log(status);
     });
 
-    log(`[TEST] Text: ${result.text.slice(0, 80)}...`, formatCallLog(result.callLog) || result.text);
-    log(`[TEST] Subliminal: ${result.subliminal}`);
-    log(`[TEST] Vibe: ${result.vibe}`);
+    if (!result.text) {
+      log('ERROR: No text generated.');
+      return;
+    }
+
+    const txNum = result.transmissionNumber || '?';
+    log(`📡 Transmission #${txNum} (${result.text.length} chars): ${result.text.slice(0, 80)}...`, formatCallLog(result.callLog) || result.text);
+    log(`🔮 Signal: ${result.subliminal} | Vibe: ${result.vibe}`);
+
+    const postResult = await bsky.createPost(result.text, result.imageBlob, result.visualPrompt);
+    log(`✅ Transmission #${txNum} broadcast: ${postResult.uri}`);
+
+    stats.posts++;
     showLatestPost(result);
   } catch (err) {
-    log(`[TEST] FAILED: ${err.message}`);
+    log(`Force post FAILED: ${err.message}`);
     console.error(err);
   }
 }
