@@ -581,9 +581,9 @@ Collide two unrelated worlds: ${domainA} and ${domainB}. Your metaphor must brid
 
 Return ONLY valid JSON:
 {
-  "concept": "a message concept bridging ${domainA} and ${domainB}",
-  "emotion": "one human emotion this should evoke",
-  "metaphor": "a metaphor that fuses ${domainA} with ${domainB}"
+  "concept": "a vivid, specific message concept bridging ${domainA} and ${domainB}",
+  "emotion": "one precise human emotion this should evoke",
+  "metaphor": "a fresh metaphor that fuses ${domainA} with ${domainB}"
 }`;
 
     const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
@@ -652,7 +652,7 @@ Emotion: ${seed.emotion}
 Metaphor: ${seed.metaphor}
 
 Every field below should feel inspired by the inputs above.
-Every field should feel completely different from any previous post.${modeDirective}
+VARIETY IS CRITICAL: Choose a world, setting, scale, and visual language that feels completely fresh. Rotate wildly between genres, cultures, eras, scales (microscopic to cosmic), and art traditions.${modeDirective}
 
 Return ONLY valid JSON (all string values):
 {
@@ -661,10 +661,10 @@ Return ONLY valid JSON (all string values):
   "contentType": "a post format",
   "constraint": "a writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imageMedium": "a specific art medium or visual style",
-  "lighting": "a specific lighting setup",
-  "colorPalette": "3-4 specific color names",
-  "composition": "camera angle and framing",
+  "imageMedium": "a specific art medium or visual style — rotate between wildly different traditions",
+  "lighting": "a specific lighting setup — vary dramatically each time",
+  "colorPalette": "3-4 specific color names — draw from different cultural and natural palettes each time",
+  "composition": "camera/framing — vary between extreme close-up, aerial, panoramic, isometric, etc.",
   "subliminalPhrase": "a short ALL CAPS phrase related to the theme"
 }`;
 
@@ -701,7 +701,7 @@ Theme: "${plan.theme}" | Vibe: ${plan.vibe}
 Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10
 Structure: ${format}
 ${mentionDonation ? `Include donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}${modeDirective}
-RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." Plain beautiful English only. Follow the constraint. Be original.
+RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." Plain beautiful English only. Follow the constraint. Draw metaphors from unexpected domains — vary wildly between posts.
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
@@ -759,7 +759,7 @@ Color palette: ${plan.colorPalette || 'any'}
 Composition: ${plan.composition || 'any'}
 Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"${modeDirective}
 
-The phrase must appear as crisp, legible text integrated into the scene.
+Build the scene with spatial depth (foreground, midground, background). Use asymmetric framing and distinctive non-generic lighting. The phrase must appear as crisp, legible text integrated into the scene. Choose an unexpected setting, scale, and visual tradition.
 
 Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 
