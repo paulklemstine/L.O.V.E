@@ -4,7 +4,7 @@
  * Uses the new gen.pollinations.ai API (OpenAI-compatible chat completions).
  * Pollen budget: 10 pollen/day, 1 pollen/hr rate limit
  * Text planning: openai (GPT-5 Mini) - reliable structured JSON output
- * Text content: claude-airforce (Claude Sonnet 4.6) - top-tier creative writing
+ * Text content: claude-fast (Claude Haiku 4.5) - best working creative model
  * Image model: dirtberry-pro - high realism, complex scenes
  */
 
