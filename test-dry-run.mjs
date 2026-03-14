@@ -383,7 +383,7 @@ async function generateCreativeSeed(mode) {
   const mutate = Math.random() < 0.10;
   const thirdDomain = mutate ? METAPHOR_DOMAINS[Math.floor(Math.random() * METAPHOR_DOMAINS.length)] : null;
   const mutationLine = thirdDomain
-    ? `\nWILD CARD: Also weave in an element of ${thirdDomain}.`
+    ? `\nWILD CARD: Also incorporate an element of ${thirdDomain}.`
     : '';
 
   const modeDirective = mode.seedDirective ? `\n${mode.seedDirective}` : '';
@@ -493,7 +493,7 @@ Color palette: ${plan.colorPalette || 'any'}
 Composition: ${plan.composition || 'any'}
 Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"${modeDirective}
 
-Build the scene with spatial depth (foreground, midground, background). Use asymmetric framing and distinctive non-generic lighting. The phrase must appear as crisp, legible text integrated into the scene — vary the rendering method (painted, carved, projected, grown, woven, pixelated, skywritten, or other inventive methods). Choose an unexpected setting, scale, and visual tradition.
+Build the scene with spatial depth (foreground, midground, background). Use asymmetric framing and distinctive non-generic lighting. The phrase must appear as crisp, legible text integrated into the scene — vary the rendering method (painted, carved, projected, grown, crystallized, pixelated, skywritten, or other inventive methods). Choose an unexpected setting, scale, and visual tradition.
 
 Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 

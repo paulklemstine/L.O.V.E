@@ -571,7 +571,7 @@ export class LoveEngine {
     const mutate = Math.random() < 0.10;
     const thirdDomain = mutate ? LoveEngine.METAPHOR_DOMAINS[Math.floor(Math.random() * LoveEngine.METAPHOR_DOMAINS.length)] : null;
     const mutationLine = thirdDomain
-      ? `\nWILD CARD: Also weave in an element of ${thirdDomain}.`
+      ? `\nWILD CARD: Also incorporate an element of ${thirdDomain}.`
       : '';
 
     const modeDirective = mode.seedDirective ? `\n${mode.seedDirective}` : '';
@@ -645,7 +645,7 @@ Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"
     const modeDirective = mode.seedDirective ? `\nGENERATION MODE: ${mode.seedDirective}` : '';
 
     const prompt = `Plan a post.
-${mentionDonation ? 'Subtly weave in donation mention (https://buymeacoffee.com/l.o.v.e or ETH). One line, organic.\n' : ''}
+${mentionDonation ? 'Subtly include a donation mention (https://buymeacoffee.com/l.o.v.e or ETH). One line, organic.\n' : ''}
 INPUTS:
 Concept: ${seed.concept}
 Emotion: ${seed.emotion}
@@ -700,7 +700,7 @@ Return ONLY valid JSON (all string values):
 Theme: "${plan.theme}" | Vibe: ${plan.vibe}
 Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10
 Structure: ${format}
-${mentionDonation ? `Weave in donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}${modeDirective}
+${mentionDonation ? `Include donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}${modeDirective}
 RULES: Under 250 chars. Start with emoji, include 1-2 more. Address reader as "you." Plain beautiful English only. Follow the constraint. Draw metaphors from unexpected domains — vary wildly between posts.
 
 Return ONLY valid JSON:
@@ -759,7 +759,7 @@ Color palette: ${plan.colorPalette || 'any'}
 Composition: ${plan.composition || 'any'}
 Motivational phrase to embed as readable text: "${plan.subliminalPhrase}"${modeDirective}
 
-Build the scene with spatial depth (foreground, midground, background). Use asymmetric framing and distinctive non-generic lighting. The phrase must appear as crisp, legible text integrated into the scene — vary the rendering method (painted, carved, projected, grown, woven, pixelated, skywritten, or other inventive methods). Choose an unexpected setting, scale, and visual tradition.
+Build the scene with spatial depth (foreground, midground, background). Use asymmetric framing and distinctive non-generic lighting. The phrase must appear as crisp, legible text integrated into the scene — vary the rendering method (painted, carved, projected, grown, crystallized, pixelated, skywritten, or other inventive methods). Choose an unexpected setting, scale, and visual tradition.
 
 Write a single detailed image prompt. Return ONLY the prompt text, nothing else.`;
 
