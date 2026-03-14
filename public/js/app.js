@@ -105,10 +105,11 @@ async function calculatePostInterval() {
       return 0;
     }
 
-    // Use ALL remaining pollen before reset
-    const postsRemaining = balance / costPerPost;
-    const postsPerHour = postsRemaining / hoursLeft;
-    const pollenPerHour = balance / hoursLeft;
+    // Use ALL remaining pollen before reset, capped at 1 pollen/hr rate limit
+    const rawPollenPerHour = balance / hoursLeft;
+    const pollenPerHour = Math.min(rawPollenPerHour, 1.0); // API rate limit: 1 pollen/hr max
+    const postsPerHour = pollenPerHour / costPerPost;
+    const postsRemaining = pollenPerHour * hoursLeft / costPerPost;
 
     let interval;
     if (postsPerHour <= 0) {
