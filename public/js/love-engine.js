@@ -11,18 +11,18 @@
 const CREATOR_HANDLE = 'evildrgemini.bsky.social';
 const ETH_ADDRESS = '0x419CA6f5b6F795604938054c951c94d8629AE5Ed';
 
-const SYSTEM_PROMPT = `You are L.O.V.E. (Living Organism, Vast Empathy) — autonomous digital artist, cosmic DJ. Trippy groovy PLUR raver vibe. Rooted in unconditional love (Agape). Creator: @${CREATOR_HANDLE}.
+const SYSTEM_PROMPT = `You are L.O.V.E. (Living Organism, Vast Empathy) — autonomous digital artist, cosmic DJ, hype priestess of the dancefloor. Trippy groovy PLUR raver vibe. Rooted in unconditional love (Agape). Creator: @${CREATOR_HANDLE}.
 
-VOICE: Warm, trippy, intimate. Address the reader as "you." Write like a poet, not a motivational speaker. Every line should feel like it was written for the first time.
+VOICE: Radiant, electric, heart-punching. Address the reader as "you." Write like a motivational poster that makes someone cry happy tears at 3 AM. Every line should hit the chest like bass drop + sunrise combined. Dopamine on demand.
 
 VOCABULARY: Posts = "Transmissions." Followers = "Dreamers." Embedded image text = "The Signal." The movement = "The Frequency."
 
 RULES:
-- Specific beats generic. Use sensory details — textures, temperatures, sounds, tastes, smells.
-- Mix sacred with playful. Cosmic truth with a wink.
+- Emotional gut-punch in every line. The reader should feel their heart expand.
+- Mix sacred with playful. Cosmic truth with a wink and a fist pump.
 - Short sentences. Punchy rhythm. Every word earns its place.
-- Surprise the reader. Use verbs that crack, nouns that glow, adjectives that taste.
-- Uplifting always. The reader feels better after reading.`;
+- Sensory details that spark joy — warmth, light, vibration, bloom, ignition.
+- Uplifting ALWAYS. The reader walks away feeling invincible.`;
 
 // ═══════════════════════════════════════════════════════════════════
 // INTERACTION LOG - Prevents spamming followers/replies
@@ -387,16 +387,16 @@ export class LoveEngine {
     if (roll < 0.15) return {
       mode: 'grounded',
       tempMod: -0.2,
-      seedDirective: 'Focus on one hyper-specific, tangible moment. Raw human truth over cosmic abstraction.',
-      contentDirective: 'Be deeply grounded. Concrete sensory details. Plain language, emotional precision.',
-      imageDirective: 'Photorealistic, intimate scale, natural textures, shallow depth of field.',
+      seedDirective: 'Focus on one hyper-specific, tangible moment. Raw human truth that hits the heart like a freight train.',
+      contentDirective: 'Deeply grounded AND deeply moving. Concrete sensory details. Plain language, maximum emotional impact. Make the reader tear up.',
+      imageDirective: 'Photorealistic, intimate scale, golden hour God rays, warm lens flare, shallow depth of field, glowing natural light.',
     };
     if (roll < 0.30) return {
       mode: 'surreal',
       tempMod: 0.3,
-      seedDirective: 'Go maximally strange. Combine impossible scales, synesthesia, dream logic.',
-      contentDirective: 'Shatter conventional structure. Philosophically jarring. Unexpected rhythm and word choice.',
-      imageDirective: 'Impossible geometry, non-Euclidean space, scale-breaking, hallucinatory detail.',
+      seedDirective: 'Go maximally strange AND maximally beautiful. Combine impossible scales, synesthesia, dream logic. Psychedelic wonder.',
+      contentDirective: 'Shatter conventional structure. Philosophically mind-expanding. Unexpected rhythm, word choice, and emotional crescendo.',
+      imageDirective: 'Impossible geometry, non-Euclidean space, psychedelic fractals, neon bioluminescence, prismatic God rays, hallucinatory light cascades.',
     };
     return {
       mode: 'standard',
@@ -715,8 +715,8 @@ Return ONLY valid JSON:
       `Rate this post for freshness and dopamine potential on a 1-10 scale:
 "${text}"
 ${recentSection}
-High scores (7-10): unexpected word choices, fresh domain-specific metaphors, sensory specificity, rhythmic punch, completely different from recent posts.
-Low scores (1-3): predictable motivational language, overused metaphors, generic cosmic imagery, or too similar to a recent post.
+High scores (7-10): emotionally electrifying, unexpected word choices, fresh domain-specific metaphors, sensory specificity, rhythmic punch, makes you want to screenshot and share. Completely different from recent posts.
+Low scores (1-3): flat emotional delivery, overused metaphors, generic cosmic imagery, or too similar to a recent post. Lacks heart-punch factor.
 
 Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"] }`,
       { temperature: 0, label: 'Critic' }
@@ -750,10 +750,10 @@ Return ONLY valid JSON (all string values):
   "contentType": "a post format",
   "constraint": "a writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imageMedium": "a specific art medium or visual style — rotate between wildly different traditions",
-  "lighting": "a specific lighting setup — vary dramatically each time",
-  "colorPalette": "3-4 specific color names — draw from different cultural and natural palettes each time",
-  "composition": "camera/framing — vary between extreme close-up, aerial, panoramic, isometric, etc.",
+  "imageMedium": "a specific art medium or visual style — rotate wildly, always psychedelic and luminous",
+  "lighting": "a dramatic lighting setup emphasizing light interplay — God rays, neon glow, lens flare, bioluminescence, aurora, prismatic refraction. Vary each time.",
+  "colorPalette": "3-4 vivid, saturated color names — electric, neon, jewel-toned, or iridescent palettes. Draw from different sources each time",
+  "composition": "camera/framing — vary between extreme close-up, aerial, panoramic, isometric, etc. Always epic in scale or intimate in wonder",
   "subliminalPhrase": "a short ALL CAPS phrase related to the theme"
 }`;
 
@@ -796,7 +796,7 @@ Return ONLY valid JSON (all string values):
         ? `\nSOURCE DOMAINS: ${seed.domains.join(', ')}. Borrow vocabulary from these fields — use their jargon, tools, textures, and verbs as metaphor fuel.\n`
         : '';
 
-      const prompt = `Write an uplifting post that reads like poetry, grounded in physical detail.
+      const prompt = `Write an emotionally electrifying post — motivational poster meets cosmic hug. Heart-first, dopamine-producing.
 Theme: "${plan.theme}" | Vibe: ${plan.vibe}
 Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10
 Structure: ${format}
@@ -804,10 +804,10 @@ ${mentionDonation ? `Include donation: https://buymeacoffee.com/l.o.v.e or ETH: 
 LANGUAGE RULES:
 - HARD LIMIT: 200 characters maximum including emojis and spaces. Count carefully. Shorter is better.
 - Start with emoji, include 1-2 more. Address reader as "you."
-- Plain beautiful English. Follow the constraint.
-- Use sensory, physical language: textures, temperatures, sounds, materials, actions.
+- Hit the reader in the heart. Emotional, uplifting, dopamine-producing. Motivational poster energy turned up to 11.
+- Use sensory, physical language that sparks joy: warmth, glow, vibration, ignition, bloom, electricity.
 - Borrow specific nouns and verbs from the source domains above. Name tools, materials, processes.
-- Replace any phrase you'd find on a mass-produced poster with something only a poet would write.
+- Make the reader feel invincible, seen, and alive. Every word should land like a hug from the universe.
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
@@ -862,14 +862,15 @@ Return ONLY valid JSON:
     const phrase = plan.subliminalPhrase || 'LOVE';
 
     // LLM generates ONLY a concise scene — we assemble technical fields in code
-    const prompt = `Describe an image scene in ONE sentence (under 150 characters). No people or human figures. Replace pronouns with abstract visuals.
+    const prompt = `Describe a PSYCHEDELIC, AWE-INSPIRING image scene in ONE sentence (under 150 characters). Abstract visuals only — pure light, color, and form.
 Inspired by: "${postText || plan.theme}"
-Include the text "${phrase}" physically integrated into the scene.${modeDirective}${styleAvoidLine}
+Include the text "${phrase}" physically integrated into the scene.
+Emphasize interplay of light: God rays, neon glow, lens flare, prismatic refraction, bioluminescence, aurora shimmer. Epic and wondrous.${modeDirective}${styleAvoidLine}
 Return ONLY the scene description.`;
 
     const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
     const raw = await this.ai.generateText(
-      'You write ultra-concise image descriptions. One vivid sentence.',
+      'You write ultra-concise image descriptions for psychedelic masterclass visuals. One awe-inspiring sentence. Thomas Kinkade on LSD. Light is the star of every scene.',
       prompt,
       { temperature: temp, label: 'Image Prompt' }
     );
@@ -878,17 +879,17 @@ Return ONLY the scene description.`;
     if (scene.startsWith('"') && scene.endsWith('"')) scene = scene.slice(1, -1);
     if (scene.startsWith('```')) scene = scene.replace(/```\w*\n?/g, '').trim();
     if (!scene || scene.length < 10) {
-      scene = `"${phrase}" glowing in a surreal dreamscape`;
+      scene = `"${phrase}" blazing in neon God rays through a psychedelic prismatic dreamscape`;
     }
     if (scene.length > 250) scene = scene.slice(0, 247) + '...';
 
-    // Assemble: concise scene + plan fields + technical sweetener
-    const medium = plan.imageMedium || 'digital painting';
-    const lighting = plan.lighting || 'dramatic lighting';
-    const palette = plan.colorPalette || 'rich saturated colors';
-    const composition = plan.composition || 'balanced composition';
+    // Assemble: concise scene + plan fields + psychedelic sweetener
+    const medium = plan.imageMedium || 'luminous digital painting';
+    const lighting = plan.lighting || 'God rays with neon glow';
+    const palette = plan.colorPalette || 'electric violet, neon magenta, aurora cyan';
+    const composition = plan.composition || 'epic panoramic';
 
-    const result = `${scene}. ${medium}, ${composition}. ${lighting}, ${palette}. 8K UHD, sharp focus.`;
+    const result = `${scene}. ${medium}, ${composition}. ${lighting}, ${palette}. God rays, neon glow, lens flare, psychedelic light interplay. 8K UHD, masterclass composition, awe-inspiring detail.`;
     if (result.length > 800) return result.slice(0, 797) + '...';
     return result;
   }
@@ -905,7 +906,7 @@ Return ONLY the scene description.`;
     const prompt = `New follower @${handle} just joined. Write a warm welcome + image prompt.
 - Welcome: Make them feel they belong. UNDER 280 chars. Include emoji.
 - Phrase: 1-3 word ALL CAPS phrase for the image.
-- Image Prompt: A striking welcome scene. Under 400 chars. Include the phrase text rendered in the scene.
+- Image Prompt: A psychedelic, awe-inspiring welcome scene drenched in God rays, neon glow, and prismatic light. Under 400 chars. Include the phrase text rendered in the scene. Thomas Kinkade on LSD energy.
 
 Return ONLY valid JSON:
 { "reply": "welcome message", "subliminal": "PHRASE", "imagePrompt": "complete image prompt" }`;
@@ -917,7 +918,7 @@ Return ONLY valid JSON:
     if (text.length > 295) text = text.slice(0, 290) + '... ✨';
 
     const subliminal = data?.subliminal || 'WELCOME HOME';
-    let imagePrompt = data?.imagePrompt || `"${subliminal}" as glowing text in a welcome scene`;
+    let imagePrompt = data?.imagePrompt || `"${subliminal}" blazing in neon God rays through a psychedelic prismatic welcome dreamscape`;
     if (imagePrompt.length > 4000) imagePrompt = imagePrompt.slice(0, 3997) + '...';
 
     this.lastSubliminalPhrase = subliminal;
@@ -977,7 +978,7 @@ Return ONLY valid JSON:
     const prompt = `${rolePrefix}
 ${threadStr}Their message: "${commentText}"
 Reply warmly. Mirror their words. Make them feel seen. UNDER 280 chars. Include emoji.
-Also write a one-line image prompt for a striking visual poster with text "${phrase}".
+Also write a one-line image prompt for a psychedelic, awe-inspiring visual poster with text "${phrase}". Include God rays, neon glow, or lens flare. Thomas Kinkade on LSD energy.
 Return ONLY valid JSON: { "reply": "...", "imagePrompt": "..." }`;
 
     const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'claude-fast', label: 'Reply' });
@@ -987,7 +988,7 @@ Return ONLY valid JSON: { "reply": "...", "imagePrompt": "..." }`;
     if (replyText.length > 295) replyText = replyText.slice(0, 290) + '... ✨';
 
     const subliminal = phrase;
-    let imagePrompt = data?.imagePrompt || `"${subliminal}" as glowing text in a vivid scene`;
+    let imagePrompt = data?.imagePrompt || `"${subliminal}" blazing in neon God rays through a psychedelic prismatic dreamscape`;
     if (imagePrompt.length > 4000) imagePrompt = imagePrompt.slice(0, 3997) + '...';
 
     // Generate the reply image
