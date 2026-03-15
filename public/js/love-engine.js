@@ -610,6 +610,22 @@ export class LoveEngine {
     'RTX direct illumination', 'neural radiance field',
   ];
 
+  static CAMERA_BODIES = [
+    'Sony α7R IV', 'Canon EOS R5', 'Hasselblad X2D 100C', 'Leica M11',
+    'Nikon Z9', 'Fujifilm GFX 100S', 'Phase One IQ4 150MP', 'Pentax 645Z',
+    'Sony α1', 'Canon EOS R3', 'Leica Q3', 'Hasselblad H6D-100c',
+    'Nikon Z8', 'Fujifilm X-T5', 'Panasonic Lumix S1R', 'Sony α7C II',
+    'Mamiya RZ67', 'Contax 645', 'Rolleiflex 2.8F', 'Linhof Technika',
+  ];
+
+  static ANALOG_TEXTURES = [
+    'subtle film grain', 'matte finish', 'halation glow on highlights',
+    'light chemical bloom', 'slight vignette falloff', 'soft lens flare artifacts',
+    'fine grain silver gelatin texture', 'gentle chromatic fringing at edges',
+    'natural skin texture preserved', 'organic shadow noise',
+    'wet print darkroom finish', 'faded edge tonal rolloff',
+  ];
+
   static LOVE_INTERACTIONS = [
     'gazes into', 'touches', 'dances through', 'radiates across', 'floats above',
     'leans into', 'whispers to', 'summons', 'dissolves into', 'emerges from',
@@ -764,6 +780,16 @@ export class LoveEngine {
   ];
 
 
+  _dofFromLens(lensSpec) {
+    const match = lensSpec.match(/f\/([\d.]+)/);
+    if (!match) return '';
+    const fStop = parseFloat(match[1]);
+    if (fStop <= 1.4) return 'ultra-shallow depth of field with creamy bokeh';
+    if (fStop <= 2.0) return 'shallow depth of field with soft bokeh';
+    if (fStop <= 2.8) return 'moderate depth of field';
+    return '';
+  }
+
   _pickRandom(arr, n = 1) {
     const shuffled = [...arr].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, Math.min(n, arr.length));
@@ -814,6 +840,8 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       ['FILM_STOCKS', LoveEngine.FILM_STOCKS, 'analog film stock names for color grading emulation — full brand and model like Kodak Portra 400'],
       ['LENS_SPECS', LoveEngine.LENS_SPECS, 'camera lens specs with focal length and aperture — e.g. 85mm f/1.4, tilt-shift 45mm'],
       ['TECHNICAL_SWEETENERS', LoveEngine.TECHNICAL_SWEETENERS, 'render engine and 3D technology terms that boost photorealism — e.g. Octane Render, ray tracing'],
+      ['CAMERA_BODIES', LoveEngine.CAMERA_BODIES, 'specific professional camera body models with brand and model — e.g. Sony α7R IV, Hasselblad X2D'],
+      ['ANALOG_TEXTURES', LoveEngine.ANALOG_TEXTURES, 'subtle analog film imperfections that prevent digital plastic look — e.g. subtle film grain, halation, matte finish'],
       ['TRIPPY_EFFECTS', LoveEngine.TRIPPY_EFFECTS, 'psychedelic visual effects inspired by DMT, LSD, mescaline, psilocybin experiences — specific visual distortions, overlays, and reality-warping phenomena'],
       ['IMAGE_STYLES', LoveEngine.IMAGE_STYLES, 'distinct visual art styles and rendering approaches — specific named styles like anime, oil painting, cyberpunk, etc'],
 
@@ -836,7 +864,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     const lists = [
       'PHOTOGRAPHY_STYLES', 'LIGHTING_STYLES', 'SUGGESTED_COLORS',
       'COMPOSITION_TYPES', 'STRUGGLE_TYPES', 'METAPHOR_EXAMPLES', 'PHRASE_STRUCTURES',
-      'LOVE_OUTFITS', 'FILM_STOCKS', 'LENS_SPECS', 'TECHNICAL_SWEETENERS', 'TRIPPY_EFFECTS', 'IMAGE_STYLES',
+      'LOVE_OUTFITS', 'FILM_STOCKS', 'LENS_SPECS', 'TECHNICAL_SWEETENERS', 'CAMERA_BODIES', 'ANALOG_TEXTURES', 'TRIPPY_EFFECTS', 'IMAGE_STYLES',
       'LOVE_INTERACTIONS', 'ARCHETYPE_ADJECTIVES', 'ARCHETYPE_NOUNS', 'AESTHETIC_VIBES', 'SENSORY_DETAILS', 'VOICE_VIBES',
     ];
     for (const name of lists) {
@@ -964,7 +992,13 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       imageBlob = await this.ai.generateImage(visualPrompt, {
         width: aspect.width,
         height: aspect.height,
-        negativePrompt: ['blurry, deformed, watermark, signature, jpeg artifacts, low quality, oversaturated, cropped, out of frame, bad anatomy, extra limbs, poorly drawn, text errors, misspelled', recentObjects].filter(Boolean).join(', '),
+        negativePrompt: [
+          'blurry, jpeg artifacts, low quality, noise, pixelated, overexposed, underexposed',
+          'bad anatomy, extra limbs, fused fingers, deformed face, asymmetric eyes',
+          'oversaturated, plastic skin, airbrushed, uncanny valley, stock photo, clipart',
+          'watermark, signature, text errors, misspelled, cropped, out of frame, logo',
+          recentObjects,
+        ].filter(Boolean).join(', '),
       });
     }
 
@@ -1417,29 +1451,32 @@ Return ONLY valid JSON: { "foreground": "close detail", "midground": "main subje
     }
     if (scene.length > 300) scene = scene.slice(0, 297) + '...';
 
-    // Assemble: Subject → Style → Lighting+Lens → Color+Film → Composition → Trippy → Text → Sweetener
+    // Assemble: Subject → Lighting → Style → Color → Composition → Effects → Text → Technical
     const medium = plan.imageMedium || this._pickRandom(LoveEngine.PHOTOGRAPHY_STYLES, 1)[0];
     const lighting = plan.lighting || this._pickRandom(LoveEngine.LIGHTING_STYLES, 1)[0];
-    const palette = plan.colorPalette || this._pickRandom(LoveEngine.SUGGESTED_COLORS, 3).join(', ');
+    const palette = plan.colorPalette || this._pickRandom(LoveEngine.SUGGESTED_COLORS, 2).join(' and ');
     const composition = this._pickRandom(LoveEngine.COMPOSITION_TYPES, 1)[0];
     const trippyEffect = this._pickRandom(LoveEngine.TRIPPY_EFFECTS, 1)[0];
     const imageStyle = this._pickRandom(LoveEngine.IMAGE_STYLES, 1)[0];
     const filmStock = this._pickRandom(LoveEngine.FILM_STOCKS, 1)[0];
     const lensSpec = this._pickRandom(LoveEngine.LENS_SPECS, 1)[0];
+    const cameraBody = this._pickRandom(LoveEngine.CAMERA_BODIES, 1)[0];
+    const analogTexture = this._pickRandom(LoveEngine.ANALOG_TEXTURES, 1)[0];
+    const dof = this._dofFromLens(lensSpec);
 
-    this._lastImageSelections = { trippyEffect, imageStyle, medium, lighting, palette, composition, filmStock, lensSpec, aestheticVibe, featureLove, outfit: outfit || null, loveInteraction: loveInteraction || null, loveArchetype: loveArchetype || null };
+    this._lastImageSelections = { trippyEffect, imageStyle, medium, lighting, palette, composition, filmStock, lensSpec, cameraBody, analogTexture, aestheticVibe, featureLove, outfit: outfit || null, loveInteraction: loveInteraction || null, loveArchetype: loveArchetype || null };
 
     const result = [
-      scene,
-      `${imageStyle}, ${medium}`,
-      `${lighting}, ${lensSpec}`,
-      `${palette}, ${filmStock} color grading`,
-      composition,
-      trippyEffect,
-      `"${phrase}" as legible text integrated into the scene`,
-      'sharp focus',
+      scene,                                                                    // 1. Subject (front-loaded)
+      lighting,                                                                 // 2. Lighting (most impactful)
+      `${imageStyle}, ${medium}`,                                               // 3. Style + medium
+      `${palette}, ${filmStock}`,                                               // 4. Color + film stock
+      composition,                                                              // 5. Composition
+      trippyEffect,                                                             // 6. Psychedelic effect
+      `"${phrase}" as legible text in the scene`,                               // 7. Text
+      `shot on ${cameraBody}, ${lensSpec}${dof ? ', ' + dof : ''}, ${analogTexture}`, // 8. Technical
     ].join('. ') + '.';
-    if (result.length > 1200) return result.slice(0, 1197) + '...';
+    if (result.length > 500) return result.slice(0, 497) + '...';
     return result;
   }
 

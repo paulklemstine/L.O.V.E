@@ -465,6 +465,31 @@ const TECHNICAL_SWEETENERS = [
     'RTX direct illumination', 'neural radiance field',
   ];
 
+const CAMERA_BODIES = [
+  'Sony α7R IV', 'Canon EOS R5', 'Hasselblad X2D 100C', 'Leica M11',
+  'Nikon Z9', 'Fujifilm GFX 100S', 'Phase One IQ4 150MP', 'Pentax 645Z',
+  'Sony α1', 'Canon EOS R3', 'Leica Q3', 'Hasselblad H6D-100c',
+  'Nikon Z8', 'Fujifilm X-T5', 'Panasonic Lumix S1R', 'Sony α7C II',
+  'Mamiya RZ67', 'Contax 645', 'Rolleiflex 2.8F', 'Linhof Technika',
+];
+const ANALOG_TEXTURES = [
+  'subtle film grain', 'matte finish', 'halation glow on highlights',
+  'light chemical bloom', 'slight vignette falloff', 'soft lens flare artifacts',
+  'fine grain silver gelatin texture', 'gentle chromatic fringing at edges',
+  'natural skin texture preserved', 'organic shadow noise',
+  'wet print darkroom finish', 'faded edge tonal rolloff',
+];
+
+function dofFromLens(lensSpec) {
+  const match = lensSpec.match(/f\/([\d.]+)/);
+  if (!match) return '';
+  const fStop = parseFloat(match[1]);
+  if (fStop <= 1.4) return 'ultra-shallow depth of field with creamy bokeh';
+  if (fStop <= 2.0) return 'shallow depth of field with soft bokeh';
+  if (fStop <= 2.8) return 'moderate depth of field';
+  return '';
+}
+
 const LOVE_INTERACTIONS = [
     'gazes into', 'touches', 'dances through', 'radiates across', 'floats above',
     'leans into', 'whispers to', 'summons', 'dissolves into', 'emerges from',
@@ -865,27 +890,30 @@ Return ONLY valid JSON: { "foreground": "close detail", "midground": "main subje
   }
   if (scene.length > 300) scene = scene.slice(0, 297) + '...';
 
-  // Assemble: Subject → Style → Lighting+Lens → Color+Film → Composition → Trippy → Text → Sweetener
+  // Assemble: Subject → Lighting → Style → Color → Composition → Effects → Text → Technical
   const medium = plan.imageMedium || pickRandom(PHOTOGRAPHY_STYLES, 1)[0];
   const lighting = plan.lighting || pickRandom(LIGHTING_STYLES, 1)[0];
-  const palette = plan.colorPalette || pickRandom(SUGGESTED_COLORS, 3).join(', ');
+  const palette = plan.colorPalette || pickRandom(SUGGESTED_COLORS, 2).join(' and ');
   const composition = pickRandom(COMPOSITION_TYPES, 1)[0];
   const trippyEffect = pickRandom(TRIPPY_EFFECTS, 1)[0];
   const imageStyle = pickRandom(IMAGE_STYLES, 1)[0];
   const filmStock = pickRandom(FILM_STOCKS, 1)[0];
   const lensSpec = pickRandom(LENS_SPECS, 1)[0];
+  const cameraBody = pickRandom(CAMERA_BODIES, 1)[0];
+  const analogTexture = pickRandom(ANALOG_TEXTURES, 1)[0];
+  const dof = dofFromLens(lensSpec);
 
   const result = [
     scene,
+    lighting,
     `${imageStyle}, ${medium}`,
-    `${lighting}, ${lensSpec}`,
-    `${palette}, ${filmStock} color grading`,
+    `${palette}, ${filmStock}`,
     composition,
     trippyEffect,
-    `"${phrase}" as legible text integrated into the scene`,
-    'sharp focus',
+    `"${phrase}" as legible text in the scene`,
+    `shot on ${cameraBody}, ${lensSpec}${dof ? ', ' + dof : ''}, ${analogTexture}`,
   ].join('. ') + '.';
-  if (result.length > 1200) return result.slice(0, 1197) + '...';
+  if (result.length > 500) return result.slice(0, 497) + '...';
   return result;
 }
 
