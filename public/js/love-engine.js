@@ -1116,7 +1116,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     // Step B: Generate 6-second background music to match video length
     const musicGenre = this._pickRandom(LoveEngine.MUSIC_GENRES, 1)[0];
     const musicMood = this._pickRandom(LoveEngine.MUSIC_MOODS, 1)[0];
-    const musicPrompt = `${musicGenre}, ${musicMood}, 6 seconds, instrumental, energetic`;
+    const musicPrompt = `${musicGenre}, ${musicMood}, 10 seconds, instrumental, energetic, loud`;
     onStatus(`🎵 Generating ${musicGenre} music...`);
     let musicBlob = null;
     try {
@@ -1163,7 +1163,7 @@ Return ONLY the spoken line, nothing else.`,
     if (musicBlob && voiceBlob) {
       onStatus('🎛️ Mixing voice over music...');
       try {
-        combinedAudio = await this._layerAudio(musicBlob, voiceBlob, 0.4, 1.0, 6.0);
+        combinedAudio = await this._layerAudio(musicBlob, voiceBlob, 0.7, 1.0, 10.0);
         onStatus(`🎛️ Audio mixed (${(combinedAudio.size / 1024).toFixed(0)}KB)`);
       } catch (err) {
         onStatus(`🎛️ Audio layer FAILED: ${err.message}`);
@@ -1267,7 +1267,7 @@ Return ONLY the scene description.`;
 
   // ─── Audio Layering (voice over music with volume control) ────────
 
-  async _layerAudio(musicBlob, voiceBlob, musicVolume = 0.4, voiceVolume = 1.0, maxDuration = 6.0) {
+  async _layerAudio(musicBlob, voiceBlob, musicVolume = 0.7, voiceVolume = 1.0, maxDuration = 10.0) {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
     // Decode both audio blobs
@@ -1276,8 +1276,8 @@ Return ONLY the scene description.`;
       voiceBlob.arrayBuffer().then(buf => audioCtx.decodeAudioData(buf)),
     ]);
 
-    // Trim to maxDuration (match video length)
-    const duration = Math.min(maxDuration, Math.max(musicBuf.duration, voiceBuf.duration + 1));
+    // Use full maxDuration — music loops to fill, voice plays in the middle
+    const duration = maxDuration;
     const sampleRate = audioCtx.sampleRate;
     const length = Math.ceil(duration * sampleRate);
 
@@ -1293,7 +1293,7 @@ Return ONLY the scene description.`;
     musicSource.connect(musicGain);
     musicGain.connect(offlineCtx.destination);
 
-    // Voice track (full volume, starts at 0.5s for a music intro)
+    // Voice track (full volume, centered in the duration with music intro/outro)
     const voiceSource = offlineCtx.createBufferSource();
     voiceSource.buffer = voiceBuf;
     const voiceGain = offlineCtx.createGain();
@@ -1301,9 +1301,12 @@ Return ONLY the scene description.`;
     voiceSource.connect(voiceGain);
     voiceGain.connect(offlineCtx.destination);
 
-    // Start both
+    // Music plays from 0 for the full duration (loops to fill)
+    // Voice starts at 1.5s — gives a solid music intro before narration
     musicSource.start(0);
-    voiceSource.start(0.5); // slight delay for music intro
+    const voiceStart = Math.min(1.5, duration * 0.2);
+    voiceSource.start(voiceStart);
+    console.log(`[Layer] Music: 0-${duration.toFixed(1)}s (vol ${musicVolume}), Voice: ${voiceStart.toFixed(1)}s (vol ${voiceVolume})`);
 
     // Render to buffer
     const renderedBuffer = await offlineCtx.startRendering();
