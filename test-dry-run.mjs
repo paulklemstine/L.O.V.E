@@ -279,6 +279,20 @@ const METAPHOR_EXAMPLES = [
   'bridges', 'keys', 'roots', 'stones', 'rivers', 'mirrors', 'maps',
   'candles', 'nests', 'storms', 'clay', 'embers', 'hinges',
 ];
+const PHRASE_STRUCTURES = [
+  { type: 'declaration', example: 'YOU WERE ALWAYS ENOUGH' },
+  { type: 'impossible command', example: 'OUTRUN YOUR SHADOW' },
+  { type: 'paradox', example: 'SOFT MAKES STRONG' },
+  { type: 'question', example: 'WHO HOLDS THE KEY' },
+  { type: 'fragment', example: 'ALMOST THERE NOW' },
+  { type: 'wisdom drop', example: 'RUST TEACHES PATIENCE' },
+  { type: 'confession', example: 'I CHOSE THE FIRE' },
+  { type: 'dare', example: 'TRY TENDERNESS' },
+  { type: 'promise', example: 'THE DAWN REMEMBERS YOU' },
+  { type: 'warning', example: 'CAREFUL WITH THAT SPARK' },
+  { type: 'prayer', example: 'LET ME BE BRAVE' },
+  { type: 'riddle', example: 'WHAT BENDS STAYS WHOLE' },
+];
 
 function pickRandom(arr, n = 1) {
   const shuffled = [...arr].sort(() => Math.random() - 0.5);
@@ -404,6 +418,7 @@ async function generatePlan(seed, mode) {
   const colorOpts = pickRandom(SUGGESTED_COLORS, 8).join(', ');
   const compOpts = pickRandom(COMPOSITION_TYPES, 5).join(', ');
   const typeOpts = pickRandom(CONTENT_TYPES, 5).join(', ');
+  const phraseStructure = pickRandom(PHRASE_STRUCTURES, 1)[0];
 
   const prompt = `Plan a post.
 
@@ -426,7 +441,7 @@ Return ONLY valid JSON (all string values):
   "lighting": "a BRIGHT lighting setup, e.g.: ${lightOpts}. The scene must be FULLY LIT. Pick ONE.",
   "colorPalette": "3-4 vivid color names from pigments or materials, e.g.: ${colorOpts}. Vary temperature — warm, cool, or contrasting.",
   "composition": "camera/framing, e.g.: ${compOpts}. Choose a fresh perspective.",
-  "subliminalPhrase": "2-5 word ALL CAPS phrase that echoes the theme. This is a subliminal signal — it should bypass the rational mind and hit the nervous system. Think tattoo-worthy, protest-sign-ready, whispered-at-3AM energy. Rotate wildly between structures: declarations (YOU WERE ALWAYS ENOUGH), impossible commands (OUTRUN YOUR SHADOW), paradoxes (SOFT MAKES STRONG), questions (WHO HOLDS THE KEY), fragments (ALMOST THERE NOW), wisdom drops (RUST TEACHES PATIENCE), confessions (I CHOSE THE FIRE), dares (TRY TENDERNESS). The phrase should make a stranger stop, feel something, and screenshot it."
+  "subliminalPhrase": "2-5 word ALL CAPS ${phraseStructure.type} that echoes the theme, e.g. '${phraseStructure.example}'. This is a subliminal signal — bypass the rational mind, hit the nervous system. Tattoo-worthy, whispered-at-3AM energy. A stranger should stop, feel something, and screenshot it."
 }`;
 
   const temp = lfoTemperature(1.2 + mode.tempMod, 0.3);

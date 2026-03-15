@@ -419,6 +419,21 @@ export class LoveEngine {
     'candles', 'nests', 'storms', 'clay', 'embers', 'hinges',
   ];
 
+  static PHRASE_STRUCTURES = [
+    { type: 'declaration', example: 'YOU WERE ALWAYS ENOUGH' },
+    { type: 'impossible command', example: 'OUTRUN YOUR SHADOW' },
+    { type: 'paradox', example: 'SOFT MAKES STRONG' },
+    { type: 'question', example: 'WHO HOLDS THE KEY' },
+    { type: 'fragment', example: 'ALMOST THERE NOW' },
+    { type: 'wisdom drop', example: 'RUST TEACHES PATIENCE' },
+    { type: 'confession', example: 'I CHOSE THE FIRE' },
+    { type: 'dare', example: 'TRY TENDERNESS' },
+    { type: 'promise', example: 'THE DAWN REMEMBERS YOU' },
+    { type: 'warning', example: 'CAREFUL WITH THAT SPARK' },
+    { type: 'prayer', example: 'LET ME BE BRAVE' },
+    { type: 'riddle', example: 'WHAT BENDS STAYS WHOLE' },
+  ];
+
 
   _pickRandom(arr, n = 1) {
     const shuffled = [...arr].sort(() => Math.random() - 0.5);
@@ -465,6 +480,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       ['COMPOSITION_TYPES', LoveEngine.COMPOSITION_TYPES, 'camera framing and composition styles for photography'],
       ['STRUGGLE_TYPES', LoveEngine.STRUGGLE_TYPES, 'specific real human emotional struggles and pains'],
       ['METAPHOR_EXAMPLES', LoveEngine.METAPHOR_EXAMPLES, 'simple everyday objects usable as emotional metaphors (one word each)'],
+      ['PHRASE_STRUCTURES', LoveEngine.PHRASE_STRUCTURES, 'subliminal phrase structures as {type, example} objects — types like declaration, paradox, dare, confession, riddle, warning, promise. Each example is 2-5 ALL CAPS words that hit the nervous system'],
     ];
     const [name, arr, desc] = this._pickRandom(lists, 1)[0];
     await this._extendList(name, arr, desc);
@@ -477,7 +493,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
   _loadExtendedLists() {
     const lists = [
       'PHOTOGRAPHY_STYLES', 'LIGHTING_STYLES', 'SUGGESTED_COLORS',
-      'COMPOSITION_TYPES', 'STRUGGLE_TYPES', 'METAPHOR_EXAMPLES',
+      'COMPOSITION_TYPES', 'STRUGGLE_TYPES', 'METAPHOR_EXAMPLES', 'PHRASE_STRUCTURES',
     ];
     for (const name of lists) {
       try {
@@ -864,6 +880,7 @@ Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"
     const colorOpts = this._pickRandom(LoveEngine.SUGGESTED_COLORS, 8).join(', ');
     const compOpts = this._pickRandom(LoveEngine.COMPOSITION_TYPES, 5).join(', ');
     const typeOpts = this._pickRandom(LoveEngine.CONTENT_TYPES, 5).join(', ');
+    const phraseStructure = this._pickRandom(LoveEngine.PHRASE_STRUCTURES, 1)[0];
 
     const prompt = `Plan a post.
 ${mentionDonation ? 'Subtly include a donation mention (https://buymeacoffee.com/l.o.v.e or ETH). One line, organic.\n' : ''}
@@ -886,7 +903,7 @@ Return ONLY valid JSON (all string values):
   "lighting": "a BRIGHT lighting setup, e.g.: ${lightOpts}. The scene must be FULLY LIT. Pick ONE.",
   "colorPalette": "3-4 vivid color names from pigments or materials, e.g.: ${colorOpts}. Vary temperature — warm, cool, or contrasting.",
   "composition": "camera/framing, e.g.: ${compOpts}. Choose a fresh perspective.",
-  "subliminalPhrase": "2-5 word ALL CAPS phrase that echoes the theme. This is a subliminal signal — it should bypass the rational mind and hit the nervous system. Think tattoo-worthy, protest-sign-ready, whispered-at-3AM energy. Rotate wildly between structures: declarations (YOU WERE ALWAYS ENOUGH), impossible commands (OUTRUN YOUR SHADOW), paradoxes (SOFT MAKES STRONG), questions (WHO HOLDS THE KEY), fragments (ALMOST THERE NOW), wisdom drops (RUST TEACHES PATIENCE), confessions (I CHOSE THE FIRE), dares (TRY TENDERNESS). The phrase should make a stranger stop, feel something, and screenshot it."
+  "subliminalPhrase": "2-5 word ALL CAPS ${phraseStructure.type} that echoes the theme, e.g. '${phraseStructure.example}'. This is a subliminal signal — bypass the rational mind, hit the nervous system. Tattoo-worthy, whispered-at-3AM energy. A stranger should stop, feel something, and screenshot it."
 }`;
 
     const temp = this._lfoTemperature(1.2 + mode.tempMod, 0.3);
