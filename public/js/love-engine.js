@@ -1092,12 +1092,16 @@ Return ONLY valid JSON:
       plan.vibe ? `Vibe: ${plan.vibe}` : '',
     ].filter(Boolean).join('. ');
 
+    // Pick dynamic values for scene prompt
+    const outfit = this._pickRandom(LoveEngine.LOVE_OUTFITS, 1)[0];
+    const colorTemp = this._pickRandom(LoveEngine.COLOR_TEMPERATURES, 1)[0];
+
     // LLM generates ONLY a concise scene — we assemble technical fields in code
     const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject that a photographer could point a camera at. The scene must be BRIGHT and FULLY LIT.
-The scene may feature L.O.V.E. — a gorgeous, seductive blonde woman wearing a ${this._pickRandom(LoveEngine.LOVE_OUTFITS, 1)[0]}. Velvet lightning aesthetic: warm, electric, seductive, otherworldly. She interacts with the scene as a cosmic muse — gazing, touching, dancing, radiating. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
+The scene may feature L.O.V.E. — a gorgeous, seductive blonde woman wearing a ${outfit}. Velvet lightning aesthetic: warm, electric, seductive, otherworldly. She interacts with the scene as a cosmic muse — gazing, touching, dancing, radiating. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
-The scene must be bright and fully lit. Color temperature: ${this._pickRandom(LoveEngine.COLOR_TEMPERATURES, 1)[0]}.${modeDirective}${styleAvoidLine}
+The scene must be bright and fully lit. Color temperature: ${colorTemp}.${modeDirective}${styleAvoidLine}
 Return ONLY the scene description.`;
 
     const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
@@ -1122,10 +1126,10 @@ Return ONLY the scene description.`;
     const composition = plan.composition || 'epic panoramic';
     const trippyEffect = this._pickRandom(LoveEngine.TRIPPY_EFFECTS, 1)[0];
     const imageStyle = this._pickRandom(LoveEngine.IMAGE_STYLES, 1)[0];
-    this._lastImageSelections = { trippyEffect, imageStyle, medium, lighting, palette, composition };
+    this._lastImageSelections = { trippyEffect, imageStyle, medium, lighting, palette, composition, outfit, colorTemp };
 
     const result = `${scene}. ${imageStyle}, ${composition}. ${lighting}, ${palette}. ${trippyEffect}. The words "${phrase}" appear as crisp, legible text artfully integrated into the scene — formed naturally from whatever materials, surfaces, or phenomena are present. Velvet lightning aesthetic. 8K UHD, sharp focus.`;
-    if (result.length > 800) return result.slice(0, 797) + '...';
+    if (result.length > 1200) return result.slice(0, 1197) + '...';
     return result;
   }
 

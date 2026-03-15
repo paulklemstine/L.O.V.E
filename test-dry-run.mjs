@@ -603,7 +603,7 @@ Return ONLY the scene description.`;
   const imageStyle = pickRandom(IMAGE_STYLES, 1)[0];
 
   const result = `${scene}. ${imageStyle}, ${composition}. ${lighting}, ${palette}. ${trippyEffect}. The words "${phrase}" appear as crisp, legible text artfully integrated into the scene — formed naturally from whatever materials, surfaces, or phenomena are present. Velvet lightning aesthetic. 8K UHD, sharp focus.`;
-  if (result.length > 800) return result.slice(0, 797) + '...';
+  if (result.length > 1200) return result.slice(0, 1197) + '...';
   return result;
 }
 

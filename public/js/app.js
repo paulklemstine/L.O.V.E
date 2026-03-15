@@ -1031,7 +1031,9 @@ function displayPost(index) {
         <div class="detail-label">Style</div>
         <div class="detail-tags">
           ${tag('Art Style', sel.imageStyle, 'tag-style')}
-          ${tag('Trippy', sel.trippyEffect, 'tag-style')}
+          ${tag('Trippy Effect', sel.trippyEffect, 'tag-style')}
+          ${tag('Color Temp', sel.colorTemp, 'tag-style')}
+          ${tag('Outfit', sel.outfit, 'tag-style')}
         </div>
       </div>
     </div>
