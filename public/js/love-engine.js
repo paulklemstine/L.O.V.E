@@ -886,7 +886,7 @@ Return ONLY valid JSON (all string values):
   "lighting": "a BRIGHT lighting setup, e.g.: ${lightOpts}. The scene must be FULLY LIT. Pick ONE.",
   "colorPalette": "3-4 vivid color names from pigments or materials, e.g.: ${colorOpts}. Vary temperature — warm, cool, or contrasting.",
   "composition": "camera/framing, e.g.: ${compOpts}. Choose a fresh perspective.",
-  "subliminalPhrase": "2-4 word ALL CAPS phrase extracted from the theme's core verb+noun. The phrase MUST echo the theme — a distillation, not a new idea. Vary grammar: VERB NOUN, NOUN VERBS NOUN, or VERB THE NOUN. Must pass the stranger test: meaningful on a sticker with zero context."
+  "subliminalPhrase": "2-5 word ALL CAPS phrase that echoes the theme. This is a subliminal signal — it should bypass the rational mind and hit the nervous system. Think tattoo-worthy, protest-sign-ready, whispered-at-3AM energy. Rotate wildly between structures: declarations (YOU WERE ALWAYS ENOUGH), impossible commands (OUTRUN YOUR SHADOW), paradoxes (SOFT MAKES STRONG), questions (WHO HOLDS THE KEY), fragments (ALMOST THERE NOW), wisdom drops (RUST TEACHES PATIENCE), confessions (I CHOSE THE FIRE), dares (TRY TENDERNESS). The phrase should make a stranger stop, feel something, and screenshot it."
 }`;
 
     const temp = this._lfoTemperature(1.2 + mode.tempMod, 0.3);
