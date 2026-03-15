@@ -753,9 +753,9 @@ Return ONLY valid JSON (all string values):
   "intensity": "${seedIntensity}",
   "imageMedium": "pick ONE masterclass photography style from this list: macro photography, aerial drone photography, long-exposure light painting, golden-hour landscape, underwater photography, astrophotography, infrared photography, tilt-shift miniature, double-exposure composite, crystal ball refraction, prism photography, high-speed splash, bokeh portrait, HDR panorama, light-trail photography, smoke art photography, frost macro, oil-and-water macro, fiber optic light art, aurora photography. Return ONLY the style name, nothing else.",
   "lighting": "a BRIGHT lighting setup. Pick ONE specific style: golden-hour backlight, overexposed high-key, warm window light, bright overcast, studio softbox, rim-lit against bright sky, sun flare, or candlelit warm. The scene must be FULLY LIT. Use only ONE light-quality adjective.",
-  "colorPalette": "3-4 specific, vivid color names using real pigment or material names (e.g. vermillion, cobalt, saffron, copper, seafoam, blush, charcoal, rust). Vary the temperature — sometimes warm, sometimes cool, sometimes contrasting.",
+  "colorPalette": "3-4 specific, vivid color names using real pigment or material names. BANNED: saffron, cobalt, copper, amber (overused). Try: vermillion, cerulean, moss, slate, coral, indigo, cream, rust, teal, mauve, ochre, ivory, plum, pewter. Vary temperature — sometimes warm, sometimes cool, sometimes contrasting.",
   "composition": "camera/framing — MUST vary: rotate between sweeping landscape, intimate portrait-scale, bird's-eye aerial, street-level environmental, architectural interior, extreme close-up, split-frame, silhouette against bright sky. Recent was macro — choose a DIFFERENT scale.",
-  "subliminalPhrase": "2-4 word ALL CAPS phrase. MUST contain a strong verb + concrete noun (e.g. STITCH THE SKY, SHIFT YOUR ORBIT). Must pass the stranger test: meaningful on a sticker with zero context. Reject generic wellness phrases (SEASONED STRENGTH, INNER LIGHT)."
+  "subliminalPhrase": "2-4 word ALL CAPS phrase extracted from the theme's core verb+noun. The phrase MUST use words that appear in or directly echo the theme — it is a distillation, not a new idea. Vary the grammar: sometimes VERB NOUN (ETCH WIND), sometimes NOUN VERBS NOUN (RUST HOLDS WEIGHT), sometimes VERB THE NOUN (FOLD THE STORM). Must pass the stranger test: meaningful on a sticker with zero context."
 }`;
 
     const temp = this._lfoTemperature(1.2 + mode.tempMod, 0.3);
@@ -806,7 +806,7 @@ LANGUAGE RULES:
 - HARD LIMIT: 200 characters maximum including emojis and spaces. Count carefully. Shorter is better.
 - Start with emoji, include 1-2 more. Address reader as "you."
 - ONE METAPHOR ONLY. Use something a 14-year-old would understand without Googling. Think: rain, doors, fire, hands, thread, anchor, compass, tide — the metaphor serves the FEELING, not the vocabulary.
-- Name a real struggle FIRST (doubt, exhaustion, fear, feeling broken, loneliness, being unseen) THEN uplift. The reader must feel RECOGNIZED before they feel inspired.
+- Name a SPECIFIC real struggle FIRST — rotate between: exhaustion, loneliness, shame, grief, rejection, feeling invisible, burnout, heartbreak, self-doubt, feeling stuck, anxiety, imposter syndrome. Use a DIFFERENT pain each time. Then uplift. The reader must feel RECOGNIZED before they feel inspired.
 - End inside the metaphor. Trust the reader. The last line should NOT explain what the metaphor meant.
 - Use warm, physical, plain language. Sensory details everyone can feel: warmth, cold, weight, softness, pulling, holding, breaking, mending.
 - The source domains inspire the metaphor's flavor, but use everyday words for the domain's concepts. Say "the kiln" not "the refractory lining." Say "the needle" not "the sheave."
@@ -882,7 +882,7 @@ NO PEOPLE, NO HANDS, NO HUMAN FIGURES, NO BODY PARTS. Replace any human referenc
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
 The scene must be bright: sunlit, high-key, overexposed highlights, warm daylight, or brilliant backlit. Vary the color temperature — sometimes warm amber, sometimes cool cyan, sometimes hot magenta.${modeDirective}${styleAvoidLine}
-BANNED TERMS in scene: gouache, vellum, collage, ink, enamel, rice paper, miniature, brushwork, painting, hand, hands, finger, fingers, thumb, palm, grip, person, figure, body. This is photography of objects, landscapes, and phenomena — never people.
+BANNED TERMS in scene: gouache, vellum, collage, ink, enamel, rice paper, miniature, brushwork, painting, hand, hands, finger, fingers, thumb, palm, grip, person, figure, body, sunlit, golden, prismatic, iridescent, luminous, saffron. This is photography of objects, landscapes, and phenomena — never people.
 Return ONLY the scene description.`;
 
     const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
