@@ -389,14 +389,14 @@ export class LoveEngine {
       tempMod: -0.2,
       seedDirective: 'Focus on one hyper-specific, tangible moment. Raw human truth that hits the heart like a freight train.',
       contentDirective: 'Deeply grounded AND deeply moving. Concrete sensory details. Plain language, maximum emotional impact. Make the reader tear up.',
-      imageDirective: 'Photorealistic, intimate scale, golden hour God rays, warm lens flare, shallow depth of field, glowing natural light.',
+      imageDirective: 'Photorealistic, intimate scale, radiant golden-hour sunlight, warm luminous glow, shallow depth of field, bright overexposed highlights.',
     };
     if (roll < 0.30) return {
       mode: 'surreal',
       tempMod: 0.3,
       seedDirective: 'Go maximally strange AND maximally beautiful. Combine impossible scales, synesthesia, dream logic. Psychedelic wonder.',
       contentDirective: 'Shatter conventional structure. Philosophically mind-expanding. Unexpected rhythm, word choice, and emotional crescendo.',
-      imageDirective: 'Impossible geometry, non-Euclidean space, psychedelic fractals, neon bioluminescence, prismatic God rays, hallucinatory light cascades.',
+      imageDirective: 'Impossible geometry, non-Euclidean space, luminous psychedelic fractals, brilliant iridescent light, radiant prismatic cascades, high-key bright atmosphere.',
     };
     return {
       mode: 'standard',
@@ -750,9 +750,9 @@ Return ONLY valid JSON (all string values):
   "contentType": "a post format",
   "constraint": "a writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imageMedium": "a specific art medium or visual style — rotate wildly, always psychedelic and luminous",
-  "lighting": "a dramatic lighting setup emphasizing light interplay — God rays, neon glow, lens flare, bioluminescence, aurora, prismatic refraction. Vary each time.",
-  "colorPalette": "3-4 vivid, saturated color names — electric, neon, jewel-toned, or iridescent palettes. Draw from different sources each time",
+  "imageMedium": "a specific art medium or visual style — rotate wildly, always luminous and radiant",
+  "lighting": "a BRIGHT, HIGH-KEY lighting setup — radiant golden-hour glow, brilliant volumetric light, luminous rim highlights, ethereal overexposed bloom, iridescent prismatic refraction. The scene must be FULLY LIT and BRIGHT. Vary each time.",
+  "colorPalette": "3-4 BRILLIANT, SATURATED color names — hyperchromatic, jewel-toned, iridescent, fluorescent. Prefix each with a brightness word (brilliant, radiant, luminous, neon-bright). Draw from different sources each time",
   "composition": "camera/framing — vary between extreme close-up, aerial, panoramic, isometric, etc. Always epic in scale or intimate in wonder",
   "subliminalPhrase": "a short ALL CAPS phrase related to the theme"
 }`;
@@ -873,15 +873,15 @@ Return ONLY valid JSON:
     ].filter(Boolean).join('. ');
 
     // LLM generates ONLY a concise scene — we assemble technical fields in code
-    const prompt = `Describe a PSYCHEDELIC, AWE-INSPIRING image scene in ONE sentence (under 150 characters). Abstract visuals only — pure light, color, and form.
+    const prompt = `Describe a BRIGHT, RADIANT, AWE-INSPIRING image scene in ONE sentence (under 150 characters). Abstract visuals only — pure luminous light, brilliant color, and form. The scene must be BRIGHT and FULLY LIT, overflowing with color.
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
-Emphasize interplay of light: God rays, neon glow, lens flare, prismatic refraction, bioluminescence, aurora shimmer. Epic and wondrous.${modeDirective}${styleAvoidLine}
+Emphasize BRIGHT luminous light: radiant golden-hour glow, brilliant volumetric light, iridescent prismatic refraction, ethereal luminescence. High-key lighting, minimal shadows. Epic, wondrous, hypnotic.${modeDirective}${styleAvoidLine}
 Return ONLY the scene description.`;
 
     const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
     const raw = await this.ai.generateText(
-      'You write ultra-concise image descriptions for psychedelic masterclass visuals. One awe-inspiring sentence. Thomas Kinkade on LSD. Light is the star of every scene.',
+      'You write ultra-concise image descriptions for BRIGHT, luminous, radiant masterclass visuals. One awe-inspiring sentence. Every scene is flooded with brilliant light and saturated color. High-key, overexposed, ethereal.',
       prompt,
       { temperature: temp, label: 'Image Prompt' }
     );
@@ -890,17 +890,17 @@ Return ONLY the scene description.`;
     if (scene.startsWith('"') && scene.endsWith('"')) scene = scene.slice(1, -1);
     if (scene.startsWith('```')) scene = scene.replace(/```\w*\n?/g, '').trim();
     if (!scene || scene.length < 10) {
-      scene = `"${phrase}" blazing in neon God rays through a psychedelic prismatic dreamscape`;
+      scene = `"${phrase}" radiating in brilliant prismatic light through a luminous hyperchromatic dreamscape`;
     }
     if (scene.length > 250) scene = scene.slice(0, 247) + '...';
 
-    // Assemble: creative context + scene + plan fields + psychedelic sweetener
+    // Assemble: scene + plan fields + brightness-first sweetener
     const medium = plan.imageMedium || 'luminous digital painting';
-    const lighting = plan.lighting || 'God rays with neon glow';
-    const palette = plan.colorPalette || 'electric violet, neon magenta, aurora cyan';
+    const lighting = plan.lighting || 'radiant high-key golden-hour light';
+    const palette = plan.colorPalette || 'brilliant magenta, radiant cyan, luminous gold';
     const composition = plan.composition || 'epic panoramic';
 
-    const result = `${scene}. ${medium}, ${composition}. ${lighting}, ${palette}. The words "${phrase}" appear as crisp, legible text woven into the scene — formed by light, energy, or material. God rays, neon glow, lens flare, psychedelic light interplay. 8K UHD, masterclass composition, awe-inspiring detail.`;
+    const result = `${scene}. ${medium}, ${composition}. ${lighting}, ${palette}. The words "${phrase}" appear as crisp, legible text woven into the scene — formed by light, energy, or material. High-key bright lighting, luminous volumetric glow, iridescent prismatic refraction, radiant ethereal atmosphere, minimal shadows. 8K UHD, masterclass composition, hyperchromatic saturated color.`;
     if (result.length > 800) return result.slice(0, 797) + '...';
     return result;
   }
@@ -917,7 +917,7 @@ Return ONLY the scene description.`;
     const prompt = `New follower @${handle} just joined. Write a warm welcome + image prompt.
 - Welcome: Make them feel they belong. UNDER 280 chars. Include emoji.
 - Phrase: 1-3 word ALL CAPS phrase for the image.
-- Image Prompt: A psychedelic, awe-inspiring welcome scene drenched in God rays, neon glow, and prismatic light. Under 400 chars. Include the phrase text rendered in the scene. Thomas Kinkade on LSD energy.
+- Image Prompt: A BRIGHT, radiant, awe-inspiring welcome scene flooded with luminous golden light, iridescent prismatic refraction, and brilliant saturated color. High-key, no shadows. Under 400 chars. Include the phrase text rendered in the scene.
 
 Return ONLY valid JSON:
 { "reply": "welcome message", "subliminal": "PHRASE", "imagePrompt": "complete image prompt" }`;
@@ -929,7 +929,7 @@ Return ONLY valid JSON:
     if (text.length > 295) text = text.slice(0, 290) + '... ✨';
 
     const subliminal = data?.subliminal || 'WELCOME HOME';
-    let imagePrompt = data?.imagePrompt || `"${subliminal}" blazing in neon God rays through a psychedelic prismatic welcome dreamscape`;
+    let imagePrompt = data?.imagePrompt || `"${subliminal}" radiating in brilliant prismatic light through a luminous hyperchromatic welcome dreamscape, high-key bright`;
     if (imagePrompt.length > 4000) imagePrompt = imagePrompt.slice(0, 3997) + '...';
 
     this.lastSubliminalPhrase = subliminal;
@@ -989,7 +989,7 @@ Return ONLY valid JSON:
     const prompt = `${rolePrefix}
 ${threadStr}Their message: "${commentText}"
 Reply warmly. Mirror their words. Make them feel seen. UNDER 280 chars. Include emoji.
-Also write a one-line image prompt for a psychedelic, awe-inspiring visual poster with text "${phrase}". Include God rays, neon glow, or lens flare. Thomas Kinkade on LSD energy.
+Also write a one-line image prompt for a BRIGHT, radiant, awe-inspiring visual poster with text "${phrase}". Luminous high-key lighting, brilliant saturated colors, iridescent prismatic light. Fully lit, no dark areas.
 Return ONLY valid JSON: { "reply": "...", "imagePrompt": "..." }`;
 
     const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'claude-fast', label: 'Reply' });
@@ -999,7 +999,7 @@ Return ONLY valid JSON: { "reply": "...", "imagePrompt": "..." }`;
     if (replyText.length > 295) replyText = replyText.slice(0, 290) + '... ✨';
 
     const subliminal = phrase;
-    let imagePrompt = data?.imagePrompt || `"${subliminal}" blazing in neon God rays through a psychedelic prismatic dreamscape`;
+    let imagePrompt = data?.imagePrompt || `"${subliminal}" radiating in brilliant prismatic light through a luminous hyperchromatic dreamscape, high-key bright`;
     if (imagePrompt.length > 4000) imagePrompt = imagePrompt.slice(0, 3997) + '...';
 
     // Generate the reply image
