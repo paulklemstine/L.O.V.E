@@ -448,10 +448,11 @@ async function buildVisualPrompt(plan, postText = '', mode, seed = {}) {
 
   // LLM generates ONLY a concise scene — we assemble technical fields in code
   const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject that a photographer could point a camera at. The scene must be BRIGHT and FULLY LIT.
+NO PEOPLE, NO HANDS, NO HUMAN FIGURES, NO BODY PARTS. Replace any human references with objects, landscapes, or natural phenomena. The scene is abstract and depersonalized.
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
 The scene must be bright: sunlit, high-key, overexposed highlights, warm daylight, or brilliant backlit. Vary the color temperature — sometimes warm amber, sometimes cool cyan, sometimes hot magenta.${modeDirective}
-BANNED TERMS in scene: gouache, vellum, collage, ink, enamel, rice paper, miniature, brushwork, painting. This is photography.
+BANNED TERMS in scene: gouache, vellum, collage, ink, enamel, rice paper, miniature, brushwork, painting, hand, hands, finger, fingers, thumb, palm, grip, person, figure, body. This is photography of objects, landscapes, and phenomena — never people.
 Return ONLY the scene description.`;
 
   const temp = lfoTemperature(1.5 + mode.tempMod, 0.3);
