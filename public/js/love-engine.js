@@ -1229,6 +1229,18 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       }
     }
 
+    // ── STEP H: Compress if over Bluesky's 50MB limit ──
+    if (videoBlob.size > LoveEngine.MAX_VIDEO_SIZE) {
+      onStatus(`⚠️ Video ${(videoBlob.size / 1024 / 1024).toFixed(1)}MB exceeds 50MB, compressing...`);
+      try {
+        videoBlob = await this._compressVideo(videoBlob, LoveEngine.MAX_VIDEO_SIZE);
+        onStatus(`✅ Compressed to ${(videoBlob.size / 1024 / 1024).toFixed(1)}MB`);
+      } catch (err) {
+        onStatus(`❌ Compression failed: ${err.message}`);
+      }
+    }
+    onStatus(`📦 Final video: ${(videoBlob.size / 1024 / 1024).toFixed(1)}MB`);
+
     this.transmissionNumber++;
     this._saveTransmissionNumber();
     this._saveRecentPost(story);
@@ -1406,13 +1418,60 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
 
   // ─── Video Splicing (concatenate multiple video blobs) ────────────
 
+  static MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB Bluesky limit
+
+  // Re-encode video at lower quality if it exceeds max size
+  async _compressVideo(videoBlob, maxSize) {
+    if (videoBlob.size <= maxSize) return videoBlob;
+    console.log(`[Compress] Video ${(videoBlob.size / 1024 / 1024).toFixed(1)}MB exceeds ${(maxSize / 1024 / 1024).toFixed(0)}MB, re-encoding...`);
+
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      video.muted = true; video.playsInline = true;
+      video.src = URL.createObjectURL(videoBlob);
+
+      video.onloadedmetadata = () => {
+        // Scale down resolution to reduce size
+        const scale = Math.min(1, Math.sqrt(maxSize / videoBlob.size));
+        canvas.width = Math.round((video.videoWidth || 512) * scale);
+        canvas.height = Math.round((video.videoHeight || 512) * scale);
+        const targetBitrate = Math.floor((maxSize * 8) / (video.duration || 30)); // bits per second
+
+        const mime = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a.40.2')
+          ? 'video/mp4;codecs=avc1,mp4a.40.2' : 'video/webm;codecs=vp9';
+        const stream = canvas.captureStream(24);
+        const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: targetBitrate });
+        const chunks = [];
+        recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+        recorder.onstop = () => {
+          const blob = new Blob(chunks, { type: 'video/mp4' });
+          URL.revokeObjectURL(video.src);
+          console.log(`[Compress] ${(videoBlob.size/1024/1024).toFixed(1)}MB → ${(blob.size/1024/1024).toFixed(1)}MB (${canvas.width}x${canvas.height})`);
+          resolve(blob);
+        };
+        recorder.onerror = e => reject(e);
+
+        const draw = () => {
+          if (!video.paused && !video.ended) { ctx.drawImage(video, 0, 0, canvas.width, canvas.height); requestAnimationFrame(draw); }
+        };
+        recorder.start(100);
+        video.play().then(draw).catch(reject);
+        video.onended = () => { if (recorder.state === 'recording') recorder.stop(); };
+        setTimeout(() => { if (recorder.state === 'recording') { video.pause(); recorder.stop(); } }, 60000);
+      };
+      video.onerror = () => reject(new Error('Compress: video load failed'));
+    });
+  }
+
   async _spliceVideos(blobs) {
     // Use MediaRecorder to play each video sequentially on canvas and record
     return new Promise((resolve, reject) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      canvas.width = 1024;
-      canvas.height = 1024;
+      canvas.width = 512;  // Lower res for smaller file size
+      canvas.height = 512;
 
       const mimeType = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a.40.2')
         ? 'video/mp4;codecs=avc1,mp4a.40.2'
@@ -1421,7 +1480,7 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
         : 'video/webm';
 
       const stream = canvas.captureStream(30);
-      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8000000 });
+      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4000000 });
       const chunks = [];
       recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
       recorder.onstop = () => {
@@ -1674,7 +1733,7 @@ Return ONLY the scene description.`;
 
         const recorder = new MediaRecorder(combined, {
           mimeType: mime,
-          videoBitsPerSecond: 8000000,
+          videoBitsPerSecond: 4000000,
           audioBitsPerSecond: 192000,
         });
 
