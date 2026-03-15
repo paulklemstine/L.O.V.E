@@ -135,34 +135,44 @@ export class PollinationsClient {
   /**
    * Generate an image and return it as a Blob.
    * GET /image/{prompt} — returns binary image.
-   * Model: flux (FLUX Schnell) - best text rendering via T5 encoder, cheapest at 0.001/img
+   * Model: flux-2-dev (FLUX.2 Dev) with fallback to flux (FLUX Schnell)
    */
   async generateImage(prompt, options = {}) {
-    const { width = 1024, height = 1024, subliminalText = null, model = 'flux', negativePrompt = null } = options;
+    const { width = 1024, height = 1024, subliminalText = null, model = 'flux-2-dev', negativePrompt = null } = options;
 
     let fullPrompt = prompt;
     if (subliminalText) {
-      // Minimal fallback — callers should include subliminal rendering in the prompt itself
       fullPrompt += ` Seamlessly integrate the text "${subliminalText}" into the scene, `
         + `matching the art style naturally. Visible but not overpowering.`;
     }
 
     const seed = Math.floor(Math.random() * 2147483647);
     const encoded = encodeURIComponent(fullPrompt);
-    let url = `${IMAGE_URL}/${encoded}?model=${model}&width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=false`;
-    if (negativePrompt) {
-      url += `&negative=${encodeURIComponent(negativePrompt)}`;
+
+    const buildUrl = (m) => {
+      let url = `${IMAGE_URL}/${encoded}?model=${m}&width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=false`;
+      if (negativePrompt) url += `&negative=${encodeURIComponent(negativePrompt)}`;
+      return url;
+    };
+
+    // Try FLUX.2 Dev first, fall back to FLUX Schnell
+    const models = [model, 'flux'];
+    for (const m of models) {
+      const response = await fetch(buildUrl(m), {
+        headers: { 'Authorization': `Bearer ${this.apiKey}` }
+      });
+
+      if (response.ok) {
+        return await response.blob();
+      }
+
+      // If last model, throw
+      if (m === models[models.length - 1]) {
+        throw new Error(`Pollinations image ${response.status}`);
+      }
+      // Otherwise fall back silently
+      console.log(`[Pollinations] ${m} returned ${response.status}, falling back to next model`);
     }
-
-    const response = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${this.apiKey}` }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Pollinations image ${response.status}`);
-    }
-
-    return await response.blob();
   }
 
   /**
