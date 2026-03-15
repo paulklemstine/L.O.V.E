@@ -1336,17 +1336,35 @@ Return ONLY the scene description.`;
   // Input: original MP4 video + WAV audio → Output: MP4 with new audio.
 
   async _ffmpegMux(videoBlob, audioBlob) {
-    // Dynamically import ffmpeg.wasm from CDN (cached after first load)
+    // Load ffmpeg.wasm (all files fetched as blob URLs to avoid CORS)
     if (!this._ffmpeg) {
-      const mod = await import('https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js');
-      const { toBlobURL } = await import('https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js');
+      const toBlobURL = async (url, type) => {
+        const resp = await fetch(url);
+        const blob = new Blob([await resp.arrayBuffer()], { type });
+        return URL.createObjectURL(blob);
+      };
 
-      this._ffmpeg = new mod.FFmpeg();
+      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+      const ffmpegURL = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js';
 
-      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+      // Load the UMD ffmpeg script
+      if (!window.FFmpegWASM) {
+        const script = document.createElement('script');
+        script.src = await toBlobURL(ffmpegURL, 'text/javascript');
+        await new Promise((resolve, reject) => {
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+        window.FFmpegWASM = window.FFmpegWASM || FFmpeg;
+      }
+
+      this._ffmpeg = new window.FFmpegWASM.FFmpeg();
+
       await this._ffmpeg.load({
         coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
         wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        workerURL: await toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, 'text/javascript'),
       });
     }
 
