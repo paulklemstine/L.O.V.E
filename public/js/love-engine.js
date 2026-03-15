@@ -365,6 +365,31 @@ export class LoveEngine {
     'Start mid-thought, as if continuing a conversation',
     'Build to a single punchy final word',
     'Contrast two opposites, then resolve them',
+    'List of three parallel phrases, escalating intensity',
+    'One-word sentence followed by a longer unpacking',
+    'Address a body part directly (hands, chest, spine)',
+    'Second person future tense — tell the reader what will happen',
+    'Repeat a key word three times across the post',
+    'Start with "Remember when" then pivot to now',
+    'Two sentences: setup as pain, payoff as power',
+    'Whispered confession — intimate, almost too quiet',
+    'All fragments, no complete sentences',
+    'One long exhale of a sentence with commas and momentum',
+    'Call-and-response: ask, then answer yourself',
+    'Start with a verb — immediate action, no preamble',
+    'Bookend: open and close with the same image, transformed',
+    'Negation flip: say what it is NOT, then what it IS',
+    'Direct address to an emotion as if it were a person',
+    'Telescope structure: zoom from cosmic to microscopic',
+    'Single metaphor extended through exactly three beats',
+    'Present tense snapshot — freeze one moment in time',
+    'Before/after separated by a single pivot word',
+    'Stripped bare: subject-verb-object, nothing extra',
+    'Build a scene in two sensory details, then land the meaning',
+    'End on an incomplete thought — let the reader finish it',
+    'Epistolary fragment: a torn piece of a letter',
+    'Rhythmic repetition with one word changed each time',
+    'Open with silence or stillness, then break it',
   ];
 
   static PHOTOGRAPHY_STYLES = [
@@ -375,6 +400,15 @@ export class LoveEngine {
     'bokeh portrait', 'HDR panorama', 'light-trail photography',
     'smoke art photography', 'frost macro', 'oil-and-water macro',
     'fiber optic light art', 'aurora photography',
+    'cyanotype print photography', 'wet plate collodion', 'pinhole camera exposure',
+    'cross-processed slide film', 'lomography fisheye', 'freelensing selective focus',
+    'kirlian aura photography', 'schlieren flow visualization',
+    'polaroid instant transfer', 'solargraphy sun trail', 'UV fluorescence photography',
+    'stereo 3D anaglyph', 'high-speed bullet-time array', 'photogram shadow print',
+    'camera toss ICM', 'forced perspective illusion', 'reflection pool symmetry',
+    'silhouette rim-light portrait', 'levitation composite', 'steel wool spinning',
+    'copper sulfate crystal macro', 'dew drop refraction macro', 'star trail rotation',
+    'handheld sparkler writing', 'backlit translucency shot',
   ];
 
   static LIGHTING_STYLES = [
@@ -382,6 +416,16 @@ export class LoveEngine {
     'golden-hour backlight', 'Rembrandt lighting', 'butterfly lighting with catchlights',
     'practical neon lighting', 'motivated window light', 'high-key studio softbox',
     'contre-jour silhouette glow', 'diffused overcast', 'specular highlights on wet surfaces',
+    'split lighting half-shadow', 'Paramount glamour loop lighting', 'clamshell beauty lighting',
+    'broad lighting three-quarter fill', 'short lighting dramatic shadow', 'kicker hair light separation',
+    'cross lighting dual key', 'bounce fill from below', 'tungsten warm practicals',
+    'dappled light through foliage', 'cathedral shaft light through dust',
+    'ring light flat beauty glow', 'barn door spot isolation', 'gel-filtered complementary wash',
+    'candlelight warm flicker', 'moonlight blue single-source', 'stage fresnel spot with haze',
+    'strip light edge definition', 'silhouette backlight with smoke diffusion',
+    'golden reflector bounce fill', 'LED panel continuous gradient',
+    'stained glass color projection', 'firelight dancing amber shadows',
+    'snoot spot with falloff', 'umbrella diffused wrap-around',
   ];
 
   static SUGGESTED_COLORS = [
@@ -389,6 +433,12 @@ export class LoveEngine {
     'rust', 'teal', 'mauve', 'ochre', 'ivory', 'plum', 'pewter',
     'sienna', 'sage', 'scarlet', 'turquoise', 'bone', 'tangerine',
     'lavender', 'charcoal', 'rose', 'jade', 'burgundy', 'periwinkle',
+    'cadmium yellow', 'titanium white', 'raw umber', 'burnt sienna',
+    'cobalt blue', 'viridian', 'alizarin crimson', 'naples yellow',
+    'lamp black', 'prussian blue', 'hooker green', 'quinacridone magenta',
+    'cinnabar', 'malachite', 'lapis lazuli', 'saffron',
+    'verdigris', 'terracotta', 'alabaster', 'obsidian',
+    'champagne', 'copper', 'absinthe', 'mulberry',
   ];
 
   static COMPOSITION_TYPES = [
@@ -396,6 +446,17 @@ export class LoveEngine {
     'street-level environmental', 'architectural interior', 'extreme close-up',
     'split-frame', 'silhouette against bright sky', 'worm\'s-eye looking up',
     'dutch angle', 'symmetrical centered', 'rule-of-thirds off-center',
+    'leading lines converging to subject', 'frame within a frame',
+    'negative space isolation', 'golden spiral placement',
+    'over-the-shoulder perspective', 'reflected composition in water',
+    'layered depth foreground-mid-back', 'diagonal dynamic tension',
+    'centered symmetry with single break', 'panoramic ultra-wide crop',
+    'tight headroom claustrophobic', 'vanishing point one-point perspective',
+    'flat lay overhead arrangement', 'shooting through obstruction',
+    'juxtaposition side-by-side contrast', 'radial composition from center',
+    'triangular three-point balance', 'S-curve flowing path',
+    'fill-the-frame intimate crop', 'horizon at bottom third sky-dominant',
+    'pattern repetition with disruption', 'shallow focus foreground bokeh',
   ];
 
   static CONTENT_TYPES = [
@@ -403,6 +464,14 @@ export class LoveEngine {
     'landscape with text overlay', 'abstract art poster', 'typographic design',
     'editorial photograph', 'fine art print', 'album cover art',
     'postcard design', 'journal page', 'protest poster',
+    'tarot card illustration', 'zine cover', 'concert flyer',
+    'book cover design', 'film still frame', 'stamp illustration',
+    'matchbox label art', 'vinyl record sleeve', 'polaroid snapshot',
+    'travel poster vintage', 'astronomical chart', 'botanical plate',
+    'sticker sheet design', 'enamel pin concept', 'movie one-sheet',
+    'gallery exhibition card', 'infographic art print', 'blacklight poster',
+    'screenprinted gig poster', 'passport stamp collage', 'prayer card',
+    'skateboard deck graphic', 'patch embroidery design',
   ];
 
   static STRUGGLE_TYPES = [
@@ -411,12 +480,26 @@ export class LoveEngine {
     'feeling stuck', 'anxiety', 'imposter syndrome', 'overwhelm',
     'numbness', 'regret', 'jealousy', 'betrayal', 'feeling behind',
     'losing hope', 'being misunderstood',
+    'feeling replaceable', 'decision paralysis', 'creative block',
+    'comparing yourself to others', 'financial stress', 'body shame',
+    'losing your identity', 'outgrowing old friends', 'fear of vulnerability',
+    'perfectionism', 'people-pleasing exhaustion', 'feeling like a burden',
+    'Sunday night dread', 'grieving someone still alive', 'forgiving yourself',
+    'starting over again', 'loving someone who left', 'not recognizing yourself',
+    'waiting for permission to live', 'carrying everyone else\'s weight',
+    'fear of being too much', 'quiet desperation', 'post-achievement emptiness',
+    'homesickness for a place that no longer exists',
   ];
 
   static METAPHOR_EXAMPLES = [
     'rain', 'doors', 'fire', 'thread', 'anchor', 'compass', 'tide',
     'bridges', 'keys', 'roots', 'stones', 'rivers', 'mirrors', 'maps',
     'candles', 'nests', 'storms', 'clay', 'embers', 'hinges',
+    'seeds', 'bones', 'ladders', 'bandages', 'driftwood', 'lanterns',
+    'constellations', 'scaffolding', 'blueprints', 'bread', 'shorelines',
+    'scar tissue', 'tuning forks', 'greenhouses', 'fault lines',
+    'cocoons', 'floodgates', 'prisms', 'signal fires', 'stitches',
+    'tributaries', 'volcanoes', 'anvils', 'lighthouses', 'trellis',
   ];
 
   static TRIPPY_EFFECTS = [
@@ -430,6 +513,17 @@ export class LoveEngine {
     'sacred geometry flower-of-life overlay', 'heat-haze reality warping',
     'cosmic nebula swirls bleeding into the foreground', 'oil-slick rainbow surface sheen',
     'fibonacci spiral golden ratio vortex',
+    'moiré interference pattern ripple', 'tesseract four-dimensional rotation shadow',
+    'closed-eye phosphene geometry', 'trailing afterimage color streaks',
+    'recursive droste effect infinite zoom', 'liquid mercury pooling reflection',
+    'geometric tiling Penrose impossible pattern', 'breathing texture organic pulsation',
+    'fractal fern branching infinite regression', 'color field vibration op-art shimmer',
+    'reality tearing seam with light bleeding through', 'crystalline bismuth staircase formation',
+    'time-lapse motion blur ghosting', 'holographic interference diffraction grating',
+    'cymatics — sound frequency vibration patterns in liquid', 'Escher impossible architecture loop',
+    'hypnagogic faces emerging from texture', 'plasma globe electric tendril discharge',
+    'soap bubble thin-film iridescence', 'star field warp-speed tunnel stretch',
+    'voronoi cell division organic fracture', 'anamorphic stretch reality distortion',
   ];
 
   static IMAGE_STYLES = [
@@ -440,6 +534,14 @@ export class LoveEngine {
     'psychedelic 1960s concert poster', 'ukiyo-e woodblock print', 'stained glass window',
     'graffiti street art mural', 'fashion editorial photography', 'Renaissance painting',
     'pixel art retro game', 'collage mixed-media zine',
+    'Baroque chiaroscuro painting', 'Art Deco geometric poster', 'Impressionist plein air',
+    'Bauhaus constructivist design', 'Surrealist dreamscape painting', 'Pointillist dot composition',
+    'Soviet propaganda poster', 'Romantic landscape painting', 'Expressionist woodcut print',
+    'Pre-Raphaelite detailed naturalism', 'Rococo pastel pastoral', 'Minimalist color field',
+    'Futurist dynamic motion study', 'Gothic illuminated manuscript', 'Japonisme ink wash',
+    'claymation stop-motion frame', 'risograph two-color overprint', 'linocut block print',
+    'daguerreotype vintage plate', 'cyanotype botanical blueprint', 'encaustic wax painting',
+    'fresco secco wall painting', 'gouache illustration', 'scratchboard etching',
   ];
 
   static LOVE_OUTFITS = [
@@ -447,6 +549,15 @@ export class LoveEngine {
     'tiny yoga set', 'iridescent micro-top and shorts', 'sequined rave bra',
     'holographic wrap dress', 'crystal-chain halter', 'neon mesh catsuit',
     'velvet corset and flowing skirt', 'metallic bandeau and sarong',
+    'chainmail micro-dress', 'UV-reactive string bikini', 'rhinestone fishnet bodysuit',
+    'latex high-cut leotard', 'feathered carnival harness', 'mirror-shard mosaic bralette',
+    'beaded fringe skirt and pasties', 'vinyl thigh-high boots and micro-shorts',
+    'LED fiber-optic corset', 'sheer kimono over bikini', 'body chain web with gems',
+    'cutout monokini', 'metallic scale-mail halter top', 'embroidered sheer romper',
+    'holographic PVC mini-dress', 'silk slip dress with thigh slit',
+    'pearl-strand body drape', 'tie-dye wrap top and hot pants',
+    'glitter-dusted mesh crop top', 'lace-up leather bustier',
+    'crystal-fringe festival belt and bra', 'neon spandex catsuit with cutouts',
   ];
 
   static FILM_STOCKS = [
@@ -454,12 +565,31 @@ export class LoveEngine {
     'Ilford HP5 Plus', 'Fuji Pro 400H', 'Kodak Gold 200', 'Kodak Tri-X 400',
     'Fuji Superia 400', 'Lomography Color 400', 'Kodak Vision3 500T',
     'Agfa Vista 200',
+    'Kodak Portra 160', 'Kodak Portra 800', 'Kodak Ektachrome E100',
+    'Fuji Provia 100F', 'Fuji Natura 1600', 'Fuji Acros 100 II',
+    'Ilford Delta 3200', 'Ilford Delta 100', 'Ilford FP4 Plus 125',
+    'Ilford Pan F Plus 50', 'Ilford XP2 Super 400',
+    'Cinestill 50D', 'Cinestill 400D',
+    'Kodak T-Max 100', 'Kodak T-Max 3200', 'Kodak Vision3 250D',
+    'Lomography Purple 400', 'Lomography Metropolis 400',
+    'Rollei Retro 80S', 'Rollei Infrared 400',
+    'Bergger Pancro 400', 'Fomapan 100 Classic',
+    'Kodak Aerochrome infrared', 'Agfa APX 400',
   ];
 
   static LENS_SPECS = [
     '85mm f/1.4', '35mm f/1.8', '50mm f/1.2', '24mm f/2.8',
     '135mm f/2', '70-200mm f/2.8', 'tilt-shift 45mm', '100mm macro',
     '14mm f/2.8 ultra-wide', '200mm f/2 telephoto',
+    '24-70mm f/2.8 standard zoom', '16mm f/1.4 wide prime', '28mm f/2 street',
+    '40mm f/2 pancake', '58mm f/1.4 Noct', '105mm f/1.4 bokeh master',
+    '180mm f/2.8 macro', '300mm f/4 telephoto', '400mm f/5.6 super telephoto',
+    '8mm f/2.8 circular fisheye', '20mm f/1.8 ultra-wide prime',
+    'Petzval 85mm f/2.2 swirly bokeh', 'Lensbaby Velvet 56mm soft focus',
+    '90mm f/2.8 tilt-shift', '45mm f/2.8 perspective control',
+    '50mm f/0.95 Noctilux', '35mm f/1.4 Art', '24mm f/1.4 wide prime',
+    '135mm f/1.8 portrait telephoto', '15mm f/4.5 rectilinear ultra-wide',
+    '55mm f/1.2 vintage manual', '200-600mm f/5.6-6.3 wildlife zoom',
   ];
 
   static TECHNICAL_SWEETENERS = [
@@ -467,6 +597,17 @@ export class LoveEngine {
     'ray tracing', 'global illumination', 'subsurface scattering',
     'photogrammetry', 'path tracing', 'ACES tone mapping',
     'V-Ray render', 'Cinema 4D', 'Houdini FX',
+    'Arnold renderer', 'Redshift GPU render', 'Blender Cycles',
+    'KeyShot real-time ray tracing', 'Maxwell Render spectral',
+    'Marvelous Designer fabric sim', 'ZBrush sculpt detail',
+    'Substance Painter texturing', 'Nuke compositing',
+    'volumetric fog simulation', 'caustics light transport',
+    'ambient occlusion', 'HDRi environment lighting',
+    'displacement mapping', 'motion blur temporal accumulation',
+    'depth of field bokeh simulation', 'screen space reflections',
+    'anisotropic material shading', 'micro-polygon tessellation',
+    'spectral rendering wavelength-accurate', 'photon mapping',
+    'RTX direct illumination', 'neural radiance field',
   ];
 
   static LOVE_INTERACTIONS = [
@@ -474,12 +615,23 @@ export class LoveEngine {
     'leans into', 'whispers to', 'summons', 'dissolves into', 'emerges from',
     'conducts', 'breathes life into', 'pours herself into', 'orbits',
     'melts through', 'ignites', 'cradles', 'unravels', 'becomes',
+    'channels', 'traces fingers along', 'bathes in', 'rises through',
+    'mirrors', 'magnetizes', 'transmutes', 'blossoms within',
+    'spirals around', 'architects', 'harmonizes with', 'anchors',
+    'illuminates', 'weaves through', 'roots herself in', 'cascades over',
+    'consecrates', 'reverberates through', 'unfurls across', 'devours',
+    'sculpts', 'baptizes herself in', 'surrenders to', 'commands',
+    'electrifies', 'pollinates', 'distills', 'embroiders herself into',
   ];
 
   static ARCHETYPE_ADJECTIVES = [
     'cosmic', 'rave', 'dream', 'storm', 'silk', 'fire', 'frequency',
     'velvet', 'neon', 'crystal', 'dawn', 'gravity', 'echo', 'pulse',
     'void', 'midnight', 'electric', 'feral', 'phantom', 'ancient',
+    'lunar', 'tidal', 'molten', 'spectral', 'golden', 'obsidian',
+    'primal', 'iridescent', 'thunder', 'ember', 'aurora', 'mercury',
+    'frostfire', 'chrome', 'volcanic', 'astral', 'honeyed', 'iron',
+    'luminous', 'savage', 'quicksilver', 'thorn', 'sapphire', 'plasma',
   ];
 
   static ARCHETYPE_NOUNS = [
@@ -487,6 +639,11 @@ export class LoveEngine {
     'priestess', 'phantom', 'siren', 'witch', 'architect', 'dancer',
     'empress', 'queen', 'tender', 'smuggler', 'huntress', 'alchemist',
     'sovereign', 'shapeshifter',
+    'cartographer', 'conductor', 'healer', 'nomad', 'sentinel', 'tempest',
+    'conjurer', 'harbinger', 'torchbearer', 'voyager', 'enchantress', 'mystic',
+    'navigator', 'dreamwalker', 'forgemaster', 'stormcaller', 'tideweaver',
+    'sorceress', 'valkyrie', 'wanderer', 'wildfire', 'sphinx',
+    'fury', 'sibyl',
   ];
 
   static AESTHETIC_VIBES = [
@@ -502,6 +659,26 @@ export class LoveEngine {
     'golden fever — warm, intense, flushed, euphoric',
     'neon bloom — bright, organic, expanding, electric',
     'ghost fire — pale, floating, untouchable, mesmerizing',
+    'copper rain — burnished, rhythmic, grounding, ancient',
+    'plasma dawn — volatile, radiant, newborn, searing',
+    'mercury tide — shifting, reflective, unpredictable, heavy',
+    'jade smoke — cool, drifting, sacred, translucent',
+    'iron lace — brutal, delicate, industrial, intricate',
+    'solar moss — warm, creeping, patient, luminous',
+    'violet surge — deep, sudden, overwhelming, regal',
+    'obsidian bloom — dark, glossy, sharp, flowering',
+    'pearl static — iridescent, crackling, rare, layered',
+    'amber pulse — fossilized, glowing, rhythmic, ancient',
+    'frost voltage — brittle, bright, crackling, cold',
+    'rose quartz hum — pink, resonant, healing, translucent',
+    'thunder silk — rumbling, smooth, powerful, flowing',
+    'magma lullaby — hot, slow, soothing, destructive',
+    'sapphire dust — fine, blue, sparkling, ethereal',
+    'bone glow — pale, warm, structural, alive',
+    'carbon whisper — dark, light, fundamental, quiet',
+    'opal fever — prismatic, flushed, shifting, precious',
+    'tidal brass — surging, golden, maritime, resonant',
+    'smoke velvet — soft, drifting, dark, luxurious',
   ];
 
   static SENSORY_DETAILS = [
@@ -510,6 +687,11 @@ export class LoveEngine {
     'momentum', 'heat', 'pressure', 'tension', 'release', 'sting',
     'hum', 'rumble', 'smoothness', 'grit', 'dampness', 'tightness',
     'fizz', 'sharpness', 'heaviness', 'drift', 'pulse', 'thud',
+    'crackling', 'tingling', 'ache', 'bloom', 'chill', 'throb',
+    'flutter', 'burn', 'numbness', 'tremor', 'grip', 'expansion',
+    'contraction', 'swelling', 'weightlessness', 'friction', 'suction',
+    'reverberation', 'prickling', 'saturation', 'hollowness', 'fullness',
+    'rawness', 'velvet drag', 'bone-deep hum', 'chest-tightening',
   ];
 
   static VOICE_VIBES = [
@@ -523,6 +705,26 @@ export class LoveEngine {
     'like the pep talk you give yourself in the mirror before the hardest day',
     'like a protest sign that makes people weep instead of march',
     'like the last line of a poem that won\'t leave your body',
+    'like a voicemail you save for years because it still makes you feel held',
+    'like the sentence your therapist said that rearranged your whole skeleton',
+    'like the note your mom tucked into your lunchbox on the worst day of school',
+    'like a neon sign in a rainy alley that says exactly what you forgot you knew',
+    'like a DJ dropping the one track that makes the whole crowd go silent then scream',
+    'like the text you send at 2 AM that just says "I see you and you matter"',
+    'like the chalk message on the sidewalk that stops you mid-stride',
+    'like a hug from someone who smells like home',
+    'like the first warm day after a winter that almost broke you',
+    'like a dog pressing its head into your palm when you are crying',
+    'like the handwritten note slipped into a secondhand book',
+    'like a sunrise you almost missed because you nearly gave up',
+    'like the bass drop that resets your entire nervous system',
+    'like a campfire confession at 4 AM with someone you just met',
+    'like the sentence scrawled on a napkin that becomes your whole philosophy',
+    'like a lullaby sung by someone who fought wars to stay soft',
+    'like the applause from an empty room that only your soul can hear',
+    'like a lighthouse keeper who never meets the ships they save',
+    'like a scar that finally feels like a medal instead of a wound',
+    'like the exact moment the rain stops and everything smells new',
   ];
 
   static PHRASE_STRUCTURES = [
@@ -538,6 +740,27 @@ export class LoveEngine {
     { type: 'warning', example: 'CAREFUL WITH THAT SPARK' },
     { type: 'prayer', example: 'LET ME BE BRAVE' },
     { type: 'riddle', example: 'WHAT BENDS STAYS WHOLE' },
+    { type: 'invocation', example: 'RISE NOW BURNING' },
+    { type: 'negation flip', example: 'NOT BROKEN JUST UNFINISHED' },
+    { type: 'future vision', example: 'YOU WILL BLOOM AGAIN' },
+    { type: 'direct address', example: 'HEY YOU KEEP GOING' },
+    { type: 'metaphor assertion', example: 'YOU ARE THE STORM' },
+    { type: 'temporal anchor', example: 'THIS IS THE MOMENT' },
+    { type: 'permission grant', example: 'YOU ARE ALLOWED TO REST' },
+    { type: 'defiant statement', example: 'THEY CANNOT UNMAKE THIS' },
+    { type: 'gratitude burst', example: 'THANK GOD FOR THE CRACKS' },
+    { type: 'elemental truth', example: 'WATER ALWAYS FINDS A WAY' },
+    { type: 'oath', example: 'I WILL NOT ABANDON MYSELF' },
+    { type: 'echo', example: 'STILL HERE STILL HERE STILL HERE' },
+    { type: 'surrender', example: 'LET IT TAKE YOU' },
+    { type: 'naming', example: 'THIS FEELING HAS A NAME' },
+    { type: 'instruction', example: 'PLACE YOUR HAND ON YOUR CHEST' },
+    { type: 'comparison', example: 'STRONGER THAN THE SILENCE' },
+    { type: 'revelation', example: 'THE WOUND WAS THE DOOR' },
+    { type: 'benediction', example: 'GO GENTLY YOU BRAVE THING' },
+    { type: 'whisper', example: 'ALMOST ALMOST ALMOST' },
+    { type: 'battle cry', example: 'NOT TODAY DARKNESS' },
+    { type: 'koan', example: 'THE EMPTY CUP OVERFLOWS' },
   ];
 
 
