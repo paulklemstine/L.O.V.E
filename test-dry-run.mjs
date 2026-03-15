@@ -457,7 +457,7 @@ Return ONLY the scene description.`;
   const palette = plan.colorPalette || 'electric violet, neon magenta, aurora cyan';
   const composition = plan.composition || 'epic panoramic';
 
-  const result = `${scene}. ${medium}, ${composition}. ${lighting}, ${palette}. God rays, neon glow, lens flare, psychedelic light interplay. 8K UHD, masterclass composition, awe-inspiring detail.`;
+  const result = `${scene}. ${medium}, ${composition}. ${lighting}, ${palette}. The words "${phrase}" appear as crisp, legible text woven into the scene — formed by light, energy, or material. God rays, neon glow, lens flare, psychedelic light interplay. 8K UHD, masterclass composition, awe-inspiring detail.`;
   if (result.length > 800) return result.slice(0, 797) + '...';
   return result;
 }
