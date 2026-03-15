@@ -459,14 +459,14 @@ export class LoveEngine {
 
     // ── Step 4: Image Prompt (1 LLM — depersonalize folded in) ──
     onStatus('Designing visual...');
-    let visualPrompt = await this._generateImagePrompt(plan, story, mode);
+    let visualPrompt = await this._generateImagePrompt(plan, story, mode, seed);
 
     // Check visual novelty via LLM
     for (let v = 0; v < 2 && this.recentVisuals.length > 0; v++) {
       const tooSimilar = await this._isVisualTooSimilar(visualPrompt);
       if (!tooSimilar) break;
       onStatus('Visual too similar, regenerating...');
-      visualPrompt = await this._generateImagePrompt(plan, story, mode);
+      visualPrompt = await this._generateImagePrompt(plan, story, mode, seed);
     }
 
     // ── Step 5: Image Generation (aspect ratio rotation + negativePrompt) ──
@@ -852,7 +852,7 @@ Return ONLY valid JSON:
 
   // ─── Visual Prompt (depersonalize folded in — saves 1 LLM call) ──
 
-  async _generateImagePrompt(plan, postText = '', mode) {
+  async _generateImagePrompt(plan, postText = '', mode, seed = {}) {
     const modeDirective = mode.imageDirective ? ` ${mode.imageDirective}.` : '';
     const recentStyles = this._getRecentImageStyleString();
     const styleAvoidLine = recentStyles
@@ -861,9 +861,20 @@ Return ONLY valid JSON:
 
     const phrase = plan.subliminalPhrase || 'LOVE';
 
+    // Build creative directives from seed + plan (same inputs that guided the text LLM)
+    const domains = seed.domains?.length ? seed.domains.join(' × ') : '';
+    const seedContext = [
+      domains ? `Domains: ${domains}` : '',
+      seed.concept ? `Concept: ${seed.concept.slice(0, 100)}` : '',
+      seed.emotion ? `Emotion: ${seed.emotion}` : '',
+      seed.metaphor ? `Metaphor: ${seed.metaphor.slice(0, 100)}` : '',
+      plan.theme ? `Theme: ${plan.theme.slice(0, 80)}` : '',
+      plan.vibe ? `Vibe: ${plan.vibe}` : '',
+    ].filter(Boolean).join('. ');
+
     // LLM generates ONLY a concise scene — we assemble technical fields in code
     const prompt = `Describe a PSYCHEDELIC, AWE-INSPIRING image scene in ONE sentence (under 150 characters). Abstract visuals only — pure light, color, and form.
-Inspired by: "${postText || plan.theme}"
+Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
 Emphasize interplay of light: God rays, neon glow, lens flare, prismatic refraction, bioluminescence, aurora shimmer. Epic and wondrous.${modeDirective}${styleAvoidLine}
 Return ONLY the scene description.`;
@@ -883,14 +894,13 @@ Return ONLY the scene description.`;
     }
     if (scene.length > 250) scene = scene.slice(0, 247) + '...';
 
-    // Assemble: concise scene + plan fields + psychedelic sweetener
+    // Assemble: creative context + scene + plan fields + psychedelic sweetener
     const medium = plan.imageMedium || 'luminous digital painting';
     const lighting = plan.lighting || 'God rays with neon glow';
     const palette = plan.colorPalette || 'electric violet, neon magenta, aurora cyan';
     const composition = plan.composition || 'epic panoramic';
 
-    const themeContext = postText ? `Evoking: "${postText.slice(0, 120)}". ` : '';
-    const result = `${themeContext}${scene}. ${medium}, ${composition}. ${lighting}, ${palette}. The words "${phrase}" appear as crisp, legible text woven into the scene — formed by light, energy, or material. God rays, neon glow, lens flare, psychedelic light interplay. 8K UHD, masterclass composition, awe-inspiring detail.`;
+    const result = `${scene}. ${medium}, ${composition}. ${lighting}, ${palette}. The words "${phrase}" appear as crisp, legible text woven into the scene — formed by light, energy, or material. God rays, neon glow, lens flare, psychedelic light interplay. 8K UHD, masterclass composition, awe-inspiring detail.`;
     if (result.length > 800) return result.slice(0, 797) + '...';
     return result;
   }
