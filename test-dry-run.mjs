@@ -312,6 +312,18 @@ const COLOR_TEMPERATURES = [
   'deep teal', 'molten copper', 'pale gold', 'arctic white',
 ];
 
+const LOVE_INTERACTIONS = [
+  'gazing', 'touching', 'dancing', 'radiating', 'floating',
+  'leaning', 'whispering', 'summoning', 'dissolving into', 'emerging from',
+  'conducting', 'breathing life into', 'pouring herself into', 'orbiting',
+  'melting through', 'igniting', 'cradling', 'unraveling', 'becoming',
+];
+const LOVE_ARCHETYPES = [
+  'cosmic muse', 'rave goddess', 'dream weaver', 'storm caller',
+  'silk oracle', 'fire keeper', 'frequency priestess', 'velvet phantom',
+  'neon siren', 'crystal witch', 'dawn architect', 'gravity dancer',
+  'echo empress', 'pulse queen', 'void tender', 'light smuggler',
+];
 const AESTHETIC_VIBES = [
   'velvet lightning — warm, electric, seductive, otherworldly',
   'liquid neon — glowing, fluid, hypnotic, pulsing',
@@ -588,7 +600,7 @@ async function buildVisualPrompt(plan, postText = '', mode, seed = {}) {
 
   // LLM generates ONLY a concise scene — we assemble technical fields in code
   const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject that a photographer could point a camera at. The scene must be BRIGHT and FULLY LIT.
-The scene may feature L.O.V.E. — a gorgeous, seductive blonde woman wearing a ${pickRandom(LOVE_OUTFITS, 1)[0]}. Aesthetic: ${pickRandom(AESTHETIC_VIBES, 1)[0]}. She interacts with the scene as a cosmic muse — gazing, touching, dancing, radiating. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
+The scene may feature L.O.V.E. — a gorgeous, seductive blonde woman wearing a ${pickRandom(LOVE_OUTFITS, 1)[0]}. Aesthetic: ${pickRandom(AESTHETIC_VIBES, 1)[0]}. She ${pickRandom(LOVE_INTERACTIONS, 1)[0]} the scene as a ${pickRandom(LOVE_ARCHETYPES, 1)[0]}. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
 The scene must be bright and fully lit. Color temperature: ${pickRandom(COLOR_TEMPERATURES, 1)[0]}.${modeDirective}

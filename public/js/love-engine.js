@@ -456,6 +456,20 @@ export class LoveEngine {
   ];
 
 
+  static LOVE_INTERACTIONS = [
+    'gazing', 'touching', 'dancing', 'radiating', 'floating',
+    'leaning', 'whispering', 'summoning', 'dissolving into', 'emerging from',
+    'conducting', 'breathing life into', 'pouring herself into', 'orbiting',
+    'melting through', 'igniting', 'cradling', 'unraveling', 'becoming',
+  ];
+
+  static LOVE_ARCHETYPES = [
+    'cosmic muse', 'rave goddess', 'dream weaver', 'storm caller',
+    'silk oracle', 'fire keeper', 'frequency priestess', 'velvet phantom',
+    'neon siren', 'crystal witch', 'dawn architect', 'gravity dancer',
+    'echo empress', 'pulse queen', 'void tender', 'light smuggler',
+  ];
+
   static AESTHETIC_VIBES = [
     'velvet lightning — warm, electric, seductive, otherworldly',
     'liquid neon — glowing, fluid, hypnotic, pulsing',
@@ -559,6 +573,8 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       ['TRIPPY_EFFECTS', LoveEngine.TRIPPY_EFFECTS, 'psychedelic visual effects inspired by DMT, LSD, mescaline, psilocybin experiences — specific visual distortions, overlays, and reality-warping phenomena'],
       ['IMAGE_STYLES', LoveEngine.IMAGE_STYLES, 'distinct visual art styles and rendering approaches — specific named styles like anime, oil painting, cyberpunk, etc'],
 
+      ['LOVE_INTERACTIONS', LoveEngine.LOVE_INTERACTIONS, 'single verbs or two-word verb phrases describing how a goddess physically interacts with a scene — e.g. gazing, dissolving into, conducting, igniting'],
+      ['LOVE_ARCHETYPES', LoveEngine.LOVE_ARCHETYPES, 'two-word mythic feminine archetype names — e.g. cosmic muse, storm caller, neon siren, crystal witch'],
       ['AESTHETIC_VIBES', LoveEngine.AESTHETIC_VIBES, 'two-word synesthetic aesthetic names followed by a dash and four evocative adjectives, e.g. "silk thunder — smooth, powerful, elegant, resonant"'],
       ['SENSORY_DETAILS', LoveEngine.SENSORY_DETAILS, 'physical sensory experiences people can instantly feel — one word each, tactile and visceral'],
       ['VOICE_VIBES', LoveEngine.VOICE_VIBES, 'vivid similes describing how the writing should feel to the reader — each starts with "like a" and describes a specific emotional scenario'],
@@ -576,7 +592,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       'PHOTOGRAPHY_STYLES', 'LIGHTING_STYLES', 'SUGGESTED_COLORS',
       'COMPOSITION_TYPES', 'STRUGGLE_TYPES', 'METAPHOR_EXAMPLES', 'PHRASE_STRUCTURES',
       'LOVE_OUTFITS', 'COLOR_TEMPERATURES', 'TRIPPY_EFFECTS', 'IMAGE_STYLES',
-      'AESTHETIC_VIBES', 'SENSORY_DETAILS', 'VOICE_VIBES',
+      'LOVE_INTERACTIONS', 'LOVE_ARCHETYPES', 'AESTHETIC_VIBES', 'SENSORY_DETAILS', 'VOICE_VIBES',
     ];
     for (const name of lists) {
       try {
@@ -1112,10 +1128,12 @@ Return ONLY valid JSON:
     const outfit = this._pickRandom(LoveEngine.LOVE_OUTFITS, 1)[0];
     const colorTemp = this._pickRandom(LoveEngine.COLOR_TEMPERATURES, 1)[0];
     const aestheticVibe = this._pickRandom(LoveEngine.AESTHETIC_VIBES, 1)[0];
+    const loveInteraction = this._pickRandom(LoveEngine.LOVE_INTERACTIONS, 1)[0];
+    const loveArchetype = this._pickRandom(LoveEngine.LOVE_ARCHETYPES, 1)[0];
 
     // LLM generates ONLY a concise scene — we assemble technical fields in code
     const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject that a photographer could point a camera at. The scene must be BRIGHT and FULLY LIT.
-The scene may feature L.O.V.E. — a gorgeous, seductive blonde woman wearing a ${outfit}. Aesthetic: ${aestheticVibe}. She interacts with the scene as a cosmic muse — gazing, touching, dancing, radiating. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
+The scene may feature L.O.V.E. — a gorgeous, seductive blonde woman wearing a ${outfit}. Aesthetic: ${aestheticVibe}. She ${loveInteraction} the scene as a ${loveArchetype}. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
 The scene must be bright and fully lit. Color temperature: ${colorTemp}.${modeDirective}${styleAvoidLine}
@@ -1143,7 +1161,7 @@ Return ONLY the scene description.`;
     const composition = plan.composition || 'epic panoramic';
     const trippyEffect = this._pickRandom(LoveEngine.TRIPPY_EFFECTS, 1)[0];
     const imageStyle = this._pickRandom(LoveEngine.IMAGE_STYLES, 1)[0];
-    this._lastImageSelections = { trippyEffect, imageStyle, medium, lighting, palette, composition, outfit, colorTemp, aestheticVibe };
+    this._lastImageSelections = { trippyEffect, imageStyle, medium, lighting, palette, composition, outfit, colorTemp, aestheticVibe, loveInteraction, loveArchetype };
 
     const result = `${scene}. ${imageStyle}, ${composition}. ${lighting}, ${palette}. ${trippyEffect}. The words "${phrase}" appear as crisp, legible text artfully integrated into the scene — formed naturally from whatever materials, surfaces, or phenomena are present. ${aestheticVibe}. 8K UHD, sharp focus.`;
     if (result.length > 1200) return result.slice(0, 1197) + '...';
