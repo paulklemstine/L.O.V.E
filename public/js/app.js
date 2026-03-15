@@ -33,6 +33,10 @@ let countdownTimer = null;
 const postHistory = [];
 let postHistoryIndex = -1; // -1 means no posts yet
 
+// ── Retry Queue (failed posts waiting to be re-posted) ──
+const retryQueue = [];
+const MAX_RETRIES = 3;
+
 // ── Pollen Budget-Aware Scheduling ──
 // 10 pollen/day = 5/12 pollen/hr ≈ 0.417/hr
 // Cost per post is measured dynamically via balance deltas.
@@ -319,8 +323,45 @@ function stopLoop() {
 }
 
 // ─── Post Generation ────────────────────────────────────────────────
+
+async function tryPostToBluesky(result) {
+  const txNum = result.transmissionNumber || '?';
+  setStatus('Broadcasting Transmission...');
+  const postResult = await bsky.createPost(result.text, result.imageBlob, result.visualPrompt);
+  stats.posts++;
+  log(`✅ Transmission #${txNum} broadcast: ${postResult.uri}`);
+  showLatestPost(result);
+  return true;
+}
+
+async function drainRetryQueue() {
+  while (retryQueue.length > 0) {
+    const queued = retryQueue[0];
+    log(`🔄 Retrying queued Transmission #${queued.result.transmissionNumber || '?'} (attempt ${queued.attempts + 1}/${MAX_RETRIES})...`);
+    try {
+      await tryPostToBluesky(queued.result);
+      retryQueue.shift(); // success — remove from queue
+      log(`✅ Queued post sent successfully! (${retryQueue.length} remaining in queue)`);
+    } catch (err) {
+      queued.attempts++;
+      if (queued.attempts >= MAX_RETRIES) {
+        retryQueue.shift();
+        log(`❌ Queued post abandoned after ${MAX_RETRIES} attempts: ${err.message}`);
+      } else {
+        log(`⏳ Retry failed (${err.message}), will try again next cycle. ${retryQueue.length} in queue.`);
+        break; // stop draining — server may still be down
+      }
+    }
+  }
+}
+
 async function doPost() {
   if (!isRunning) return;
+
+  // Try to send any queued failed posts first
+  if (retryQueue.length > 0) {
+    await drainRetryQueue();
+  }
 
   // Snapshot balance before post
   const beforeInfo = await getPollenBalance();
@@ -340,20 +381,18 @@ async function doPost() {
       return;
     }
 
-    // Post to Bluesky
-    setStatus('Broadcasting Transmission...');
     const txNum = result.transmissionNumber || '?';
     log(`📡 Transmission #${txNum} (${result.text.length} chars): ${result.text.slice(0, 80)}...`, formatCallLog(result.callLog) || result.text);
     log(`🔮 Signal: ${result.subliminal} | Vibe: ${result.vibe}`);
 
-    const postResult = await bsky.createPost(result.text, result.imageBlob, result.visualPrompt);
-    const postUri = postResult.uri;
-
-    stats.posts++;
-    log(`✅ Transmission #${txNum} broadcast: ${postUri}`);
-
-    // Update latest post display
-    showLatestPost(result);
+    try {
+      await tryPostToBluesky(result);
+    } catch (err) {
+      // Post failed (502, network error, etc.) — queue for retry
+      retryQueue.push({ result, attempts: 1 });
+      log(`⏳ POST FAILED (${err.message}) — queued for retry. ${retryQueue.length} in queue.`);
+      showLatestPost(result); // still show it in the UI
+    }
 
   } catch (err) {
     stats.errors++;
@@ -398,11 +437,13 @@ async function forcePost() {
     log(`📡 Transmission #${txNum} (${result.text.length} chars): ${result.text.slice(0, 80)}...`, formatCallLog(result.callLog) || result.text);
     log(`🔮 Signal: ${result.subliminal} | Vibe: ${result.vibe}`);
 
-    const postResult = await bsky.createPost(result.text, result.imageBlob, result.visualPrompt);
-    log(`✅ Transmission #${txNum} broadcast: ${postResult.uri}`);
-
-    stats.posts++;
-    showLatestPost(result);
+    try {
+      await tryPostToBluesky(result);
+    } catch (err) {
+      retryQueue.push({ result, attempts: 1 });
+      log(`⏳ Force post FAILED (${err.message}) — queued for retry. ${retryQueue.length} in queue.`);
+      showLatestPost(result);
+    }
   } catch (err) {
     log(`Force post FAILED: ${err.message}`);
     console.error(err);
