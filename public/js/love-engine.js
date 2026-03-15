@@ -639,6 +639,48 @@ export class LoveEngine {
     'playful and bouncy', 'cinematic and epic', 'underground and minimal',
   ];
 
+  static CAMERA_MOVEMENTS = [
+    'slow push-in', 'dramatic dolly back', 'sweeping orbit', 'crane rising',
+    'handheld drift', 'steady tracking left', 'tilt up reveal', 'pull-back to wide',
+    'spiral zoom out', 'parallax slide', 'whip pan', 'floating glide forward',
+    'descending crane shot', 'dutch angle rotation', 'macro rack focus',
+    'infinite zoom', 'vertigo dolly zoom', 'smooth steadicam circle',
+    'POV forward motion', 'time-lapse sweep',
+  ];
+
+  static AD_BEATS = [
+    'hook — pattern interrupt, arresting, unexpected scale',
+    'empathy beat — visualize the struggle, the viewer feels the weight',
+    'transformation — the metaphor in action, things morphing and becoming',
+    'wide reveal — the result of change, beauty flooding the frame',
+    'emotional crescendo — everything clicks, triumphant, the viewer feels changed',
+    'mystery open — something half-hidden draws the eye deeper',
+    'tension build — pressure mounting, visual compression',
+    'release — sudden expansion, breath, space opening up',
+    'intimacy — extreme close detail, texture you want to touch',
+    'scale shift — micro becomes macro, small becomes vast',
+    'before/after — split or transition showing contrast',
+    'rhythm break — the visual tempo suddenly changes',
+    'callback — an echo of the first image, now transformed',
+    'whisper — barely visible movement, stillness with one detail alive',
+    'eruption — sudden burst of color, motion, energy from stillness',
+  ];
+
+  static DIRECTORS = [
+    'Hitchcock tension — familiar at unfamiliar scale',
+    'Spielberg face-then-reveal — tight on texture, dolly back to context',
+    'Kubrick one-point symmetry — centered, deliberate, hypnotic',
+    'Malick golden-hour poetry — sweeping natural light, transcendent',
+    'Nolan crescendo — everything building to one moment of clarity',
+    'Wes Anderson symmetry — flat, centered, pastel, meticulous',
+    'Terrence Malick whisper — handheld intimacy with nature',
+    'David Fincher precision — controlled, dark-to-light, obsessive detail',
+    'Ridley Scott epic scale — vast landscapes dwarfing the subject',
+    'Denis Villeneuve arrival — slow geometric reveal, alien wonder',
+    'Wong Kar-wai blur — smeared motion, neon, melancholic beauty',
+    'Tarkovsky long gaze — patient, meditative, time suspended',
+  ];
+
   static TEXT_SUBSTRATES = [
     'neon sign glowing on a brick wall', 'carved into a wooden signpost',
     'chiseled into stone monument', 'spray-painted graffiti on concrete',
@@ -886,6 +928,9 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       ['ANALOG_TEXTURES', LoveEngine.ANALOG_TEXTURES, 'subtle analog film imperfections that prevent digital plastic look — e.g. subtle film grain, halation, matte finish'],
       ['MUSIC_GENRES', LoveEngine.MUSIC_GENRES, 'electronic dance music subgenres and styles — e.g. epic rave anthem, deep dubstep, psytrance, drum and bass'],
       ['MUSIC_MOODS', LoveEngine.MUSIC_MOODS, 'emotional descriptors for music mood — two to three word mood phrases like euphoric and uplifting, dark and driving'],
+      ['CAMERA_MOVEMENTS', LoveEngine.CAMERA_MOVEMENTS, 'cinematic camera movements for video — e.g. slow push-in, crane rising, dolly back, whip pan'],
+      ['AD_BEATS', LoveEngine.AD_BEATS, 'advertising and filmmaking scene beats — e.g. hook pattern interrupt, empathy beat, transformation, wide reveal, crescendo'],
+      ['DIRECTORS', LoveEngine.DIRECTORS, 'director style references with technique description — e.g. Kubrick one-point symmetry, Malick golden-hour poetry'],
       ['TEXT_SUBSTRATES', LoveEngine.TEXT_SUBSTRATES, 'simple real-world ways text physically appears on objects — e.g. neon sign on brick wall, carved into wooden signpost, spray-painted graffiti on concrete'],
       ['TRIPPY_EFFECTS', LoveEngine.TRIPPY_EFFECTS, 'psychedelic visual effects inspired by DMT, LSD, mescaline, psilocybin experiences — specific visual distortions, overlays, and reality-warping phenomena'],
       ['IMAGE_STYLES', LoveEngine.IMAGE_STYLES, 'distinct visual art styles and rendering approaches — specific named styles like anime, oil painting, cyberpunk, etc'],
@@ -909,7 +954,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     const lists = [
       'PHOTOGRAPHY_STYLES', 'LIGHTING_STYLES', 'SUGGESTED_COLORS',
       'COMPOSITION_TYPES', 'STRUGGLE_TYPES', 'METAPHOR_EXAMPLES', 'PHRASE_STRUCTURES',
-      'LOVE_OUTFITS', 'FILM_STOCKS', 'LENS_SPECS', 'TECHNICAL_SWEETENERS', 'CAMERA_BODIES', 'ANALOG_TEXTURES', 'TEXT_SUBSTRATES', 'MUSIC_GENRES', 'MUSIC_MOODS', 'TRIPPY_EFFECTS', 'IMAGE_STYLES',
+      'LOVE_OUTFITS', 'FILM_STOCKS', 'LENS_SPECS', 'TECHNICAL_SWEETENERS', 'CAMERA_BODIES', 'ANALOG_TEXTURES', 'TEXT_SUBSTRATES', 'MUSIC_GENRES', 'MUSIC_MOODS', 'CAMERA_MOVEMENTS', 'AD_BEATS', 'DIRECTORS', 'TRIPPY_EFFECTS', 'IMAGE_STYLES',
       'LOVE_INTERACTIONS', 'ARCHETYPE_ADJECTIVES', 'ARCHETYPE_NOUNS', 'AESTHETIC_VIBES', 'SENSORY_DETAILS', 'VOICE_VIBES',
     ];
     for (const name of lists) {
@@ -1243,10 +1288,19 @@ Return ONLY the spoken words, nothing else.`,
 
   async _generateAdScenes(plan, story, mode, seed) {
     const phrase = plan.subliminalPhrase || 'LOVE';
-    const aestheticVibe = this._pickRandom(LoveEngine.AESTHETIC_VIBES, 1)[0];
-    const trippyEffect = this._pickRandom(LoveEngine.TRIPPY_EFFECTS, 1)[0];
-    const imageStyle = this._pickRandom(LoveEngine.IMAGE_STYLES, 1)[0];
-    const lighting = plan.lighting || this._pickRandom(LoveEngine.LIGHTING_STYLES, 1)[0];
+    const numScenes = 5;
+
+    // Sample UNIQUE values per scene from all dynamic arrays
+    const beats = this._pickRandom(LoveEngine.AD_BEATS, numScenes);
+    const directors = this._pickRandom(LoveEngine.DIRECTORS, numScenes);
+    const cameras = this._pickRandom(LoveEngine.CAMERA_MOVEMENTS, numScenes);
+    const styles = this._pickRandom(LoveEngine.IMAGE_STYLES, numScenes);
+    const lightings = this._pickRandom(LoveEngine.LIGHTING_STYLES, numScenes);
+    const trippyEffects = this._pickRandom(LoveEngine.TRIPPY_EFFECTS, numScenes);
+    const compositions = this._pickRandom(LoveEngine.COMPOSITION_TYPES, numScenes);
+    const filmStocks = this._pickRandom(LoveEngine.FILM_STOCKS, numScenes);
+    const aesthetics = this._pickRandom(LoveEngine.AESTHETIC_VIBES, numScenes);
+    const substrates = this._pickRandom(LoveEngine.TEXT_SUBSTRATES, numScenes);
 
     const seedContext = [
       seed.concept ? `Concept: ${seed.concept.slice(0, 60)}` : '',
@@ -1255,40 +1309,42 @@ Return ONLY the spoken words, nothing else.`,
       plan.vibe ? `Vibe: ${plan.vibe}` : '',
     ].filter(Boolean).join('. ');
 
+    // Build per-scene instructions with unique sampled values
+    const sceneInstructions = [];
+    for (let i = 0; i < numScenes; i++) {
+      const phraseNote = i === 3 ? ` The phrase "${phrase}" appears naturally — ${substrates[i]}.` : '';
+      sceneInstructions.push(
+        `Scene ${i + 1}: Beat: ${beats[i]}. Director style: ${directors[i]}. Camera: ${cameras[i]}. Composition: ${compositions[i]}.${phraseNote}`
+      );
+    }
+
     const raw = await this.ai.generateText(
-      'You design 30-second motivational video ads using advertising psychology. Each scene is a 6-second video clip.',
-      `Design a 5-scene, 30-second motivational video ad. Each scene is ~6 seconds.
+      'You design 30-second motivational video ads. Each scene is a 6-second clip with unique visual identity.',
+      `Design a 5-scene, 30-second video ad. Each scene ~6 seconds.
 Creative direction: ${seedContext}
 Subliminal phrase: "${phrase}"
 Post text: "${story.slice(0, 120)}"
-Style: ${imageStyle}. Lighting: ${lighting}. Effect: ${trippyEffect}. Aesthetic: ${aestheticVibe}.
 
-Use advertising psychology + Hollywood filmmaking science:
-Scene 1 (HOOK — pattern interrupt): Arresting extreme close-up that breaks expectations. Hitchcock tension: show something familiar at an unfamiliar scale. Camera pushing in fast. High contrast. Dopamine trigger.
-Scene 2 (PROBLEM — empathy beat): Visualize the pain/struggle using Spielberg's "face then reveal" technique. Start tight on texture, dolly back to reveal context. The viewer feels the weight. Dark-to-light transition begins.
-Scene 3 (TRANSFORMATION — Kubrick one-point): The metaphor in action. Symmetrical centered composition. Things morphing, shifting, becoming. Slow deliberate orbit. The visual rhythm changes — faster cuts in the mind, slower camera.
-Scene 4 (PROOF — wide Malick reveal): Beautiful sweeping wide shot. The result of transformation. Golden-hour light flooding the frame. The phrase "${phrase}" appears naturally carved/etched/formed in the environment. Awe and wonder.
-Scene 5 (CTA — Nolan crescendo): Emotional peak. Crane rising or infinite zoom out. Everything clicks into place. The full picture revealed. Triumphant. The viewer feels changed.
+${sceneInstructions.join('\n')}
 
-Each scene: ONE sentence, under 200 chars, vivid camera movement, bright, no people/hands.
-Return ONLY valid JSON: { "scenes": ["scene 1 description", "scene 2", "scene 3", "scene 4", "scene 5"] }`,
+Each scene: ONE sentence, under 200 chars, vivid, bright, no people/hands. Describe what the CAMERA SEES.
+Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4", "scene 5"] }`,
       { temperature: 1.0, label: 'Ad Scenes' }
     );
 
     const data = this.ai.extractJSON(raw);
     if (data?.scenes?.length >= 3) {
-      return data.scenes.map(s => `${s}. ${imageStyle}. ${lighting}. ${trippyEffect}.`);
+      // Append unique technical specs per scene
+      return data.scenes.map((s, i) => {
+        const idx = Math.min(i, numScenes - 1);
+        return `${s}. ${styles[idx]}. ${lightings[idx]}. ${filmStocks[idx]}. ${trippyEffects[idx]}. ${cameras[idx]}.`;
+      });
     }
 
-    // Fallback: generate 5 variations of a single prompt
-    const basePrompt = await this._generateVideoPrompt(plan, story, mode, seed);
-    return [
-      basePrompt,
-      basePrompt.replace('slow zoom', 'dramatic push-in'),
-      basePrompt.replace('slow zoom', 'sweeping orbit'),
-      basePrompt.replace('slow zoom', 'crane rising'),
-      basePrompt.replace('slow zoom', 'dolly pull-back reveal'),
-    ];
+    // Fallback: generate single prompt per scene with unique params
+    return Array.from({ length: numScenes }, (_, i) => {
+      return `${seedContext}. "${phrase}". ${styles[i]}. ${lightings[i]}. ${cameras[i]}. ${compositions[i]}. ${trippyEffects[i]}. ${filmStocks[i]}.`;
+    });
   }
 
   // ─── Video Splicing (concatenate multiple video blobs) ────────────
