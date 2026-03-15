@@ -455,6 +455,28 @@ export class LoveEngine {
     'deep teal', 'molten copper', 'pale gold', 'arctic white',
   ];
 
+
+  static SENSORY_DETAILS = [
+    'warmth', 'cold', 'weight', 'softness', 'pulling', 'holding',
+    'breaking', 'mending', 'vibration', 'texture', 'electricity',
+    'momentum', 'heat', 'pressure', 'tension', 'release', 'sting',
+    'hum', 'rumble', 'smoothness', 'grit', 'dampness', 'tightness',
+    'fizz', 'sharpness', 'heaviness', 'drift', 'pulse', 'thud',
+  ];
+
+  static VOICE_VIBES = [
+    'like a motivational poster that makes someone cry happy tears at 3 AM',
+    'like a best friend texting you exactly what you needed to hear',
+    'like a fortune cookie written by someone who actually knows you',
+    'like graffiti on a bathroom wall that saves someone\'s life',
+    'like a song lyric you tattoo on your wrist',
+    'like a stranger on the train who says the one thing that changes everything',
+    'like a love letter from the universe slipped under your door',
+    'like the pep talk you give yourself in the mirror before the hardest day',
+    'like a protest sign that makes people weep instead of march',
+    'like the last line of a poem that won\'t leave your body',
+  ];
+
   static PHRASE_STRUCTURES = [
     { type: 'declaration', example: 'YOU WERE ALWAYS ENOUGH' },
     { type: 'impossible command', example: 'OUTRUN YOUR SHADOW' },
@@ -521,6 +543,9 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       ['COLOR_TEMPERATURES', LoveEngine.COLOR_TEMPERATURES, 'specific color temperature moods for photography lighting — two words each like warm amber or icy blue'],
       ['TRIPPY_EFFECTS', LoveEngine.TRIPPY_EFFECTS, 'psychedelic visual effects inspired by DMT, LSD, mescaline, psilocybin experiences — specific visual distortions, overlays, and reality-warping phenomena'],
       ['IMAGE_STYLES', LoveEngine.IMAGE_STYLES, 'distinct visual art styles and rendering approaches — specific named styles like anime, oil painting, cyberpunk, etc'],
+
+      ['SENSORY_DETAILS', LoveEngine.SENSORY_DETAILS, 'physical sensory experiences people can instantly feel — one word each, tactile and visceral'],
+      ['VOICE_VIBES', LoveEngine.VOICE_VIBES, 'vivid similes describing how the writing should feel to the reader — each starts with "like a" and describes a specific emotional scenario'],
     ];
     const [name, arr, desc] = this._pickRandom(lists, 1)[0];
     await this._extendList(name, arr, desc);
@@ -535,6 +560,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       'PHOTOGRAPHY_STYLES', 'LIGHTING_STYLES', 'SUGGESTED_COLORS',
       'COMPOSITION_TYPES', 'STRUGGLE_TYPES', 'METAPHOR_EXAMPLES', 'PHRASE_STRUCTURES',
       'LOVE_OUTFITS', 'COLOR_TEMPERATURES', 'TRIPPY_EFFECTS', 'IMAGE_STYLES',
+      'SENSORY_DETAILS', 'VOICE_VIBES',
     ];
     for (const name of lists) {
       try {
@@ -688,6 +714,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       plan,
       seed,
       mode: mode.mode,
+      imageSelections: this._lastImageSelections || {},
       callLog: this.ai.getCallLog(),
     };
   }
@@ -997,10 +1024,10 @@ LANGUAGE RULES:
 - ONE METAPHOR ONLY. Use something a 14-year-old would understand without Googling. Think: ${this._pickRandom(LoveEngine.METAPHOR_EXAMPLES, 6).join(', ')} — the metaphor serves the FEELING, not the vocabulary.
 - Name THIS specific struggle first: "${this._pickRandom(LoveEngine.STRUGGLE_TYPES, 1)[0]}". The reader must feel RECOGNIZED before they feel inspired. Then uplift.
 - End inside the metaphor. Let the last line BE the image, felt rather than explained.
-- Use warm, physical, plain language. Sensory details everyone can feel: warmth, cold, weight, softness, pulling, holding, breaking, mending.
-- The source domains inspire the metaphor's flavor, but use everyday words for the domain's concepts. Say "the kiln" not "the refractory lining." Say "the needle" not "the sheave."
-- Use fresh, surprising vocabulary drawn from the source domain's specific tools, textures, and processes. Every word should feel chosen for the first time.
-- End inside the metaphor. Trust the reader to feel the meaning without explanation.
+- Use warm, physical, plain language. Lean into these sensory details: ${this._pickRandom(LoveEngine.SENSORY_DETAILS, 6).join(', ')}.
+- Write ${this._pickRandom(LoveEngine.VOICE_VIBES, 1)[0]}.
+- The source domains inspire the metaphor's flavor, but use everyday words for the domain's concepts.
+- Use fresh, surprising vocabulary drawn from the source domain's specific tools, textures, and processes.
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
@@ -1095,8 +1122,9 @@ Return ONLY the scene description.`;
     const composition = plan.composition || 'epic panoramic';
     const trippyEffect = this._pickRandom(LoveEngine.TRIPPY_EFFECTS, 1)[0];
     const imageStyle = this._pickRandom(LoveEngine.IMAGE_STYLES, 1)[0];
+    this._lastImageSelections = { trippyEffect, imageStyle, medium, lighting, palette, composition };
 
-    const result = `${scene}. ${imageStyle}, ${composition}. ${lighting}, ${palette}. ${trippyEffect}. The words "${phrase}" appear as crisp, legible text woven into the scene. Velvet lightning aesthetic. 8K UHD, sharp focus.`;
+    const result = `${scene}. ${imageStyle}, ${composition}. ${lighting}, ${palette}. ${trippyEffect}. The words "${phrase}" appear as crisp, legible text artfully integrated into the scene — formed naturally from whatever materials, surfaces, or phenomena are present. Velvet lightning aesthetic. 8K UHD, sharp focus.`;
     if (result.length > 800) return result.slice(0, 797) + '...';
     return result;
   }

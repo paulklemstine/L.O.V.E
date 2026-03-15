@@ -988,6 +988,7 @@ function displayPost(index) {
   const plan = result.plan || {};
   const seed = result.seed || {};
   const domains = seed.domains || [];
+  const sel = result.imageSelections || {};
 
   const tag = (label, value, cls) =>
     value ? `<span class="meta-tag ${cls}"><b>${escapeHtml(label)}</b> ${escapeHtml(String(value))}</span>` : '';
@@ -1024,6 +1025,13 @@ function displayPost(index) {
           ${tag('Lighting', plan.lighting, 'tag-visual')}
           ${tag('Colors', plan.colorPalette, 'tag-visual')}
           ${tag('Composition', plan.composition, 'tag-visual')}
+        </div>
+      </div>
+      <div class="detail-group">
+        <div class="detail-label">Style</div>
+        <div class="detail-tags">
+          ${tag('Art Style', sel.imageStyle, 'tag-style')}
+          ${tag('Trippy', sel.trippyEffect, 'tag-style')}
         </div>
       </div>
     </div>

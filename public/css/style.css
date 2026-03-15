@@ -454,6 +454,12 @@ body {
   border-color: rgba(255, 107, 174, 0.2);
 }
 
+.tag-style {
+  background: rgba(255, 165, 0, 0.08);
+  color: #ff8c00;
+  border-color: rgba(255, 165, 0, 0.2);
+}
+
 /* ─── Activity Log ───────────────────────────────── */
 
 #activity-log {
