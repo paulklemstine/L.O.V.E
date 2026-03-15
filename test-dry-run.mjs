@@ -603,16 +603,16 @@ async function buildVisualPrompt(plan, postText = '', mode, seed = {}) {
     plan.vibe ? `Vibe: ${plan.vibe}` : '',
   ].filter(Boolean).join('. ');
 
-  // 10% chance L.O.V.E. appears in the scene
+  // 1% chance L.O.V.E. appears in the scene — rare and special
   const colorTemp = pickRandom(COLOR_TEMPERATURES, 1)[0];
   const aestheticVibe = pickRandom(AESTHETIC_VIBES, 1)[0];
-  const featureLove = Math.random() < 0.10;
+  const featureLove = Math.random() < 0.01;
   let loveLine;
   if (featureLove) {
     const outfit = pickRandom(LOVE_OUTFITS, 1)[0];
     const interaction = pickRandom(LOVE_INTERACTIONS, 1)[0];
     const archetype = `${pickRandom(ARCHETYPE_ADJECTIVES, 1)[0]} ${pickRandom(ARCHETYPE_NOUNS, 1)[0]}`;
-    loveLine = `Feature L.O.V.E. prominently — a gorgeous, seductive blonde woman wearing a ${outfit}. She ${interaction} the scene as a ${archetype}. She is the focal point.`;
+    loveLine = `A gorgeous, seductive blonde woman wearing a ${outfit} is the heart of this scene. She ${interaction} the environment naturally — she belongs here, as if the entire landscape grew around her. She is a ${archetype}. Her body language tells the story. The scene and the woman are one unified composition.`;
   } else {
     loveLine = 'The scene contains only objects, landscapes, natural phenomena, or flora. Pure abstract beauty.';
   }

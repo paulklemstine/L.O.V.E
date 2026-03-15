@@ -1135,14 +1135,14 @@ Return ONLY valid JSON:
     const colorTemp = this._pickRandom(LoveEngine.COLOR_TEMPERATURES, 1)[0];
     const aestheticVibe = this._pickRandom(LoveEngine.AESTHETIC_VIBES, 1)[0];
 
-    // 10% chance L.O.V.E. appears in the scene
-    const featureLove = Math.random() < 0.10;
+    // 1% chance L.O.V.E. appears in the scene — rare and special
+    const featureLove = Math.random() < 0.01;
     let outfit = '', loveInteraction = '', loveArchetype = '', loveLine = '';
     if (featureLove) {
       outfit = this._pickRandom(LoveEngine.LOVE_OUTFITS, 1)[0];
       loveInteraction = this._pickRandom(LoveEngine.LOVE_INTERACTIONS, 1)[0];
       loveArchetype = `${this._pickRandom(LoveEngine.ARCHETYPE_ADJECTIVES, 1)[0]} ${this._pickRandom(LoveEngine.ARCHETYPE_NOUNS, 1)[0]}`;
-      loveLine = `Feature L.O.V.E. prominently — a gorgeous, seductive blonde woman wearing a ${outfit}. She ${loveInteraction} the scene as a ${loveArchetype}. She is the focal point.`;
+      loveLine = `A gorgeous, seductive blonde woman wearing a ${outfit} is the heart of this scene. She ${loveInteraction} the environment naturally — she belongs here, as if the entire landscape grew around her. She is a ${loveArchetype}. Her body language tells the story. The scene and the woman are one unified composition.`;
     } else {
       loveLine = 'The scene contains only objects, landscapes, natural phenomena, or flora. Pure abstract beauty.';
     }
