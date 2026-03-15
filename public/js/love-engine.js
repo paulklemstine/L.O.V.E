@@ -752,9 +752,9 @@ Return ONLY valid JSON (all string values):
   "constraint": "a writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
   "imageMedium": "pick ONE masterclass photography style from this list: macro photography, aerial drone photography, long-exposure light painting, golden-hour landscape, underwater photography, astrophotography, infrared photography, tilt-shift miniature, double-exposure composite, crystal ball refraction, prism photography, high-speed splash, bokeh portrait, HDR panorama, light-trail photography, smoke art photography, frost macro, oil-and-water macro, fiber optic light art, aurora photography. Return ONLY the style name, nothing else.",
-  "lighting": "a BRIGHT, HIGH-KEY lighting setup — radiant golden-hour glow, brilliant volumetric light, luminous rim highlights, ethereal overexposed bloom, iridescent prismatic refraction. The scene must be FULLY LIT and BRIGHT. Vary each time.",
-  "colorPalette": "3-4 BRILLIANT, SATURATED color names — hyperchromatic, jewel-toned, iridescent, fluorescent. Prefix each with a brightness word (brilliant, radiant, luminous, neon-bright). Draw from different sources each time",
-  "composition": "camera/framing — vary between extreme close-up, aerial, panoramic, isometric, etc. Always epic in scale or intimate in wonder",
+  "lighting": "a BRIGHT lighting setup. Pick ONE specific style: golden-hour backlight, overexposed high-key, warm window light, bright overcast, studio softbox, rim-lit against bright sky, sun flare, or candlelit warm. The scene must be FULLY LIT. Use only ONE light-quality adjective.",
+  "colorPalette": "3-4 specific, vivid color names using real pigment or material names (e.g. vermillion, cobalt, saffron, copper, seafoam, blush, charcoal, rust). Vary the temperature — sometimes warm, sometimes cool, sometimes contrasting.",
+  "composition": "camera/framing — MUST vary: rotate between sweeping landscape, intimate portrait-scale, bird's-eye aerial, street-level environmental, architectural interior, extreme close-up, split-frame, silhouette against bright sky. Recent was macro — choose a DIFFERENT scale.",
   "subliminalPhrase": "2-4 word ALL CAPS phrase. MUST contain a strong verb + concrete noun (e.g. STITCH THE SKY, SHIFT YOUR ORBIT). Must pass the stranger test: meaningful on a sticker with zero context. Reject generic wellness phrases (SEASONED STRENGTH, INNER LIGHT)."
 }`;
 
@@ -805,12 +805,12 @@ ${mentionDonation ? `Include donation: https://buymeacoffee.com/l.o.v.e or ETH: 
 LANGUAGE RULES:
 - HARD LIMIT: 200 characters maximum including emojis and spaces. Count carefully. Shorter is better.
 - Start with emoji, include 1-2 more. Address reader as "you."
-- ONE METAPHOR ONLY. Pick one image and commit. A tired person at 11pm must instantly get it.
-- Name a real struggle (doubt, exhaustion, fear, feeling broken) THEN uplift. Meet pain before offering hope.
+- ONE METAPHOR ONLY. Use something a 14-year-old would understand without Googling. Think: rain, doors, fire, hands, thread, anchor, compass, tide — the metaphor serves the FEELING, not the vocabulary.
+- Name a real struggle FIRST (doubt, exhaustion, fear, feeling broken, loneliness, being unseen) THEN uplift. The reader must feel RECOGNIZED before they feel inspired.
 - End inside the metaphor. Trust the reader. The last line should NOT explain what the metaphor meant.
-- Use sensory, physical language: warmth, vibration, texture, weight, pressure, heat, momentum.
-- Borrow specific nouns and verbs from the source domains above. Name tools, materials, processes.
-- BANNED WORDS (overused): bloom, harvest, gold/golden, seeds, stardust, infinite, sacred, glow/glowing, unstoppable, light, luminous, radiant, ascending. Use domain-specific vocabulary instead.
+- Use warm, physical, plain language. Sensory details everyone can feel: warmth, cold, weight, softness, pulling, holding, breaking, mending.
+- The source domains inspire the metaphor's flavor, but use everyday words for the domain's concepts. Say "the kiln" not "the refractory lining." Say "the needle" not "the sheave."
+- BANNED WORDS: bloom, harvest, gold/golden, seeds, stardust, infinite, sacred, glow/glowing, unstoppable, light, luminous, radiant, ascending, breath/breathe, each, crack/cracks.
 - BANNED PATTERNS: "You're not X, you're Y" reframes. "You're already [adjective]." endings. Explaining what the metaphor means after showing it.
 
 Return ONLY valid JSON:
