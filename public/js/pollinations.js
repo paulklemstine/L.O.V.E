@@ -197,9 +197,9 @@ export class PollinationsClient {
    * Model: grok-video (only free-tier option, 65 videos/pollen)
    */
   async generateVideo(prompt, options = {}) {
-    const { model = 'grok-video', seed = Math.floor(Math.random() * 2147483647) } = options;
+    const { model = 'grok-video', width = 1024, height = 1024, seed = Math.floor(Math.random() * 2147483647) } = options;
     const encoded = encodeURIComponent(prompt);
-    const url = `${BASE_URL}/video/${encoded}?model=${model}&seed=${seed}&nologo=true`;
+    const url = `${BASE_URL}/video/${encoded}?model=${model}&width=${width}&height=${height}&seed=${seed}&nologo=true`;
 
     const response = await fetch(url, {
       headers: { 'Authorization': `Bearer ${this.apiKey}` }
