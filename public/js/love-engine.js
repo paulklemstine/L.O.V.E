@@ -1325,42 +1325,50 @@ Return ONLY the scene description.`;
       const video = document.createElement('video');
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
+      // CRITICAL: mute the video element so its original audio is silenced
       video.muted = true;
       video.playsInline = true;
+      video.volume = 0;
       video.src = URL.createObjectURL(videoBlob);
 
       video.onloadedmetadata = async () => {
         canvas.width = video.videoWidth || 512;
         canvas.height = video.videoHeight || 512;
+        const videoDuration = video.duration || 10;
 
-        // Decode audio
+        // Create audio context for our replacement audio
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Decode our replacement audio (music+voice mix or voice-only)
         let audioBuffer;
         try {
           const arrayBuf = await audioBlob.arrayBuffer();
           audioBuffer = await audioCtx.decodeAudioData(arrayBuf);
+          console.log(`[Mux] Audio decoded: ${audioBuffer.duration.toFixed(1)}s, video: ${videoDuration.toFixed(1)}s`);
         } catch (e) {
+          audioCtx.close();
           reject(new Error(`Audio decode failed: ${e.message}`));
           return;
         }
 
-        // Create audio source connected to a destination for capture
+        // Create audio source → MediaStream destination (for capture)
         const dest = audioCtx.createMediaStreamDestination();
         const audioSource = audioCtx.createBufferSource();
         audioSource.buffer = audioBuffer;
         audioSource.connect(dest);
 
-        // Capture canvas as video stream
+        // Capture canvas as video-only stream (NO audio from original video)
         const canvasStream = canvas.captureStream(30);
+        const videoTracks = canvasStream.getVideoTracks();
+        const audioTracks = dest.stream.getAudioTracks();
 
-        // Combine video track (canvas) + audio track (Web Audio)
-        const combinedStream = new MediaStream([
-          ...canvasStream.getVideoTracks(),
-          ...dest.stream.getAudioTracks(),
-        ]);
+        console.log(`[Mux] Video tracks: ${videoTracks.length}, Audio tracks: ${audioTracks.length}`);
 
-        // Set up MediaRecorder
+        // Build combined stream: canvas video + our audio ONLY
+        const combinedStream = new MediaStream([...videoTracks, ...audioTracks]);
+
+        // Pick best supported codec
         const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
           ? 'video/webm;codecs=vp9,opus'
           : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
@@ -1370,46 +1378,61 @@ Return ONLY the scene description.`;
         const recorder = new MediaRecorder(combinedStream, {
           mimeType,
           videoBitsPerSecond: 2500000,
+          audioBitsPerSecond: 128000,
         });
 
         const chunks = [];
         recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
         recorder.onstop = () => {
           const muxedBlob = new Blob(chunks, { type: mimeType });
+          console.log(`[Mux] Complete: ${(muxedBlob.size / 1024).toFixed(0)}KB`);
           URL.revokeObjectURL(video.src);
           audioCtx.close();
           resolve(muxedBlob);
         };
-        recorder.onerror = (e) => reject(new Error(`MediaRecorder error: ${e.error}`));
 
-        // Draw video frames to canvas
+        recorder.onerror = (e) => {
+          audioCtx.close();
+          reject(new Error(`MediaRecorder error: ${e.error}`));
+        };
+
+        // Draw video frames to canvas at 30fps
         const drawFrame = () => {
           if (video.paused || video.ended) return;
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           requestAnimationFrame(drawFrame);
         };
 
-        // Start everything simultaneously
-        recorder.start();
+        // Start recording, audio, and video playback
+        recorder.start(100); // collect data every 100ms
         audioSource.start(0);
-        video.play().then(() => {
-          drawFrame();
+        video.play().then(drawFrame).catch(e => {
+          console.error('[Mux] Video play failed:', e);
+          reject(e);
         });
 
-        // Stop when video ends (or audio, whichever is shorter)
+        // Stop when video ends
         video.onended = () => {
-          audioSource.stop();
-          recorder.stop();
+          try { audioSource.stop(); } catch {}
+          if (recorder.state === 'recording') recorder.stop();
         };
 
-        // Safety timeout — stop after 60 seconds max
+        // Also stop if audio ends before video
+        audioSource.onended = () => {
+          if (!video.ended && recorder.state === 'recording') {
+            // Let video finish naturally
+          }
+        };
+
+        // Safety timeout
         setTimeout(() => {
           if (recorder.state === 'recording') {
             video.pause();
-            audioSource.stop();
+            try { audioSource.stop(); } catch {}
             recorder.stop();
           }
-        }, 60000);
+        }, Math.min(videoDuration * 1000 + 5000, 60000));
       };
 
       video.onerror = () => reject(new Error('Video element failed to load'));
