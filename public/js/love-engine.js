@@ -1113,10 +1113,10 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       throw err;
     }
 
-    // Step B: Generate background music
+    // Step B: Generate 6-second background music to match video length
     const musicGenre = this._pickRandom(LoveEngine.MUSIC_GENRES, 1)[0];
     const musicMood = this._pickRandom(LoveEngine.MUSIC_MOODS, 1)[0];
-    const musicPrompt = `${musicGenre}, ${musicMood}, 15 seconds, instrumental`;
+    const musicPrompt = `${musicGenre}, ${musicMood}, 6 seconds, instrumental, energetic`;
     onStatus(`🎵 Generating ${musicGenre} music...`);
     let musicBlob = null;
     try {
@@ -1127,49 +1127,50 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       console.error('[Music]', err);
     }
 
-    // Step C: Generate TTS voice narration
-    onStatus('🎙️ Generating voice narration...');
+    // Step C: Generate SHORT TTS — just the subliminal phrase (fits 6-second video)
+    const voiceText = plan.subliminalPhrase || 'LOVE';
+    onStatus(`🎙️ Generating voice: "${voiceText}"...`);
     let voiceBlob = null;
     try {
-      voiceBlob = await this.ai.generateAudio(story);
+      voiceBlob = await this.ai.generateAudio(voiceText);
       onStatus(`🎙️ Voice generated (${(voiceBlob.size / 1024).toFixed(0)}KB)`);
     } catch (err) {
       onStatus(`🎙️ TTS FAILED: ${err.message}`);
       console.error('[TTS]', err);
     }
 
-    // Step D: Layer voice over music
+    // Step D: Layer voice over music (trimmed to 6 seconds)
     let combinedAudio = null;
     if (musicBlob && voiceBlob) {
       onStatus('🎛️ Mixing voice over music...');
       try {
-        combinedAudio = await this._layerAudio(musicBlob, voiceBlob, 0.3, 1.0);
+        combinedAudio = await this._layerAudio(musicBlob, voiceBlob, 0.4, 1.0, 6.0);
         onStatus(`🎛️ Audio mixed (${(combinedAudio.size / 1024).toFixed(0)}KB)`);
       } catch (err) {
         onStatus(`🎛️ Audio layer FAILED: ${err.message}`);
         console.error('[Layer]', err);
-        combinedAudio = voiceBlob;
+        combinedAudio = musicBlob;
       }
-    } else if (voiceBlob) {
-      combinedAudio = voiceBlob;
-      onStatus('🎛️ Using voice only (no music)');
     } else if (musicBlob) {
       combinedAudio = musicBlob;
-      onStatus('🎛️ Using music only (no voice)');
+      onStatus('🎛️ Using music only');
+    } else if (voiceBlob) {
+      combinedAudio = voiceBlob;
+      onStatus('🎛️ Using voice only');
     } else {
-      onStatus('🎛️ No audio generated — posting silent video');
+      onStatus('🎛️ No audio generated');
     }
 
-    // Step E: Replace video audio with music+voice using ffmpeg.wasm → MP4 output
+    // Step E: Replace video audio completely with our music+voice
     if (combinedAudio && videoBlob) {
-      onStatus('🎬 Replacing video audio (ffmpeg)...');
+      onStatus('🎬 Replacing video audio...');
       try {
         const originalSize = videoBlob.size;
         videoBlob = await this._ffmpegMux(videoBlob, combinedAudio);
-        onStatus(`✅ Audio replaced! ${(originalSize / 1024).toFixed(0)}KB → ${(videoBlob.size / 1024).toFixed(0)}KB (MP4)`);
+        onStatus(`✅ Audio replaced! ${(originalSize / 1024).toFixed(0)}KB → ${(videoBlob.size / 1024).toFixed(0)}KB`);
       } catch (err) {
-        onStatus(`❌ ffmpeg mux failed: ${err.message} — posting with original audio`);
-        console.error('[ffmpeg]', err);
+        onStatus(`❌ Mux failed: ${err.message} — posting with original audio`);
+        console.error('[Mux]', err);
       }
     }
 
@@ -1241,7 +1242,7 @@ Return ONLY the scene description.`;
 
   // ─── Audio Layering (voice over music with volume control) ────────
 
-  async _layerAudio(musicBlob, voiceBlob, musicVolume = 0.3, voiceVolume = 1.0) {
+  async _layerAudio(musicBlob, voiceBlob, musicVolume = 0.4, voiceVolume = 1.0, maxDuration = 6.0) {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
     // Decode both audio blobs
@@ -1250,8 +1251,8 @@ Return ONLY the scene description.`;
       voiceBlob.arrayBuffer().then(buf => audioCtx.decodeAudioData(buf)),
     ]);
 
-    // Use voice duration as target length (music loops/trims to fit)
-    const duration = Math.max(voiceBuf.duration, 5);
+    // Trim to maxDuration (match video length)
+    const duration = Math.min(maxDuration, Math.max(musicBuf.duration, voiceBuf.duration + 1));
     const sampleRate = audioCtx.sampleRate;
     const length = Math.ceil(duration * sampleRate);
 
