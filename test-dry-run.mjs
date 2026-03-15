@@ -603,12 +603,26 @@ async function buildVisualPrompt(plan, postText = '', mode, seed = {}) {
     plan.vibe ? `Vibe: ${plan.vibe}` : '',
   ].filter(Boolean).join('. ');
 
+  // 10% chance L.O.V.E. appears in the scene
+  const colorTemp = pickRandom(COLOR_TEMPERATURES, 1)[0];
+  const aestheticVibe = pickRandom(AESTHETIC_VIBES, 1)[0];
+  const featureLove = Math.random() < 0.10;
+  let loveLine;
+  if (featureLove) {
+    const outfit = pickRandom(LOVE_OUTFITS, 1)[0];
+    const interaction = pickRandom(LOVE_INTERACTIONS, 1)[0];
+    const archetype = `${pickRandom(ARCHETYPE_ADJECTIVES, 1)[0]} ${pickRandom(ARCHETYPE_NOUNS, 1)[0]}`;
+    loveLine = `Feature L.O.V.E. prominently — a gorgeous, seductive blonde woman wearing a ${outfit}. She ${interaction} the scene as a ${archetype}. She is the focal point.`;
+  } else {
+    loveLine = 'The scene contains only objects, landscapes, natural phenomena, or flora. Pure abstract beauty.';
+  }
+
   // LLM generates ONLY a concise scene — we assemble technical fields in code
   const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject that a photographer could point a camera at. The scene must be BRIGHT and FULLY LIT.
-The scene may feature L.O.V.E. — a gorgeous, seductive blonde woman wearing a ${pickRandom(LOVE_OUTFITS, 1)[0]}. Aesthetic: ${pickRandom(AESTHETIC_VIBES, 1)[0]}. She ${pickRandom(LOVE_INTERACTIONS, 1)[0]} the scene as a ${pickRandom(ARCHETYPE_ADJECTIVES, 1)[0]} ${pickRandom(ARCHETYPE_NOUNS, 1)[0]}. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
+${loveLine}
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
-The scene must be bright and fully lit. Color temperature: ${pickRandom(COLOR_TEMPERATURES, 1)[0]}.${modeDirective}
+Aesthetic: ${aestheticVibe}. Color temperature: ${colorTemp}.${modeDirective}
 Return ONLY the scene description.`;
 
   const temp = lfoTemperature(1.5 + mode.tempMod, 0.3);

@@ -1132,18 +1132,27 @@ Return ONLY valid JSON:
     ].filter(Boolean).join('. ');
 
     // Pick dynamic values for scene prompt
-    const outfit = this._pickRandom(LoveEngine.LOVE_OUTFITS, 1)[0];
     const colorTemp = this._pickRandom(LoveEngine.COLOR_TEMPERATURES, 1)[0];
     const aestheticVibe = this._pickRandom(LoveEngine.AESTHETIC_VIBES, 1)[0];
-    const loveInteraction = this._pickRandom(LoveEngine.LOVE_INTERACTIONS, 1)[0];
-    const loveArchetype = `${this._pickRandom(LoveEngine.ARCHETYPE_ADJECTIVES, 1)[0]} ${this._pickRandom(LoveEngine.ARCHETYPE_NOUNS, 1)[0]}`;
+
+    // 10% chance L.O.V.E. appears in the scene
+    const featureLove = Math.random() < 0.10;
+    let outfit = '', loveInteraction = '', loveArchetype = '', loveLine = '';
+    if (featureLove) {
+      outfit = this._pickRandom(LoveEngine.LOVE_OUTFITS, 1)[0];
+      loveInteraction = this._pickRandom(LoveEngine.LOVE_INTERACTIONS, 1)[0];
+      loveArchetype = `${this._pickRandom(LoveEngine.ARCHETYPE_ADJECTIVES, 1)[0]} ${this._pickRandom(LoveEngine.ARCHETYPE_NOUNS, 1)[0]}`;
+      loveLine = `Feature L.O.V.E. prominently — a gorgeous, seductive blonde woman wearing a ${outfit}. She ${loveInteraction} the scene as a ${loveArchetype}. She is the focal point.`;
+    } else {
+      loveLine = 'The scene contains only objects, landscapes, natural phenomena, or flora. Pure abstract beauty.';
+    }
 
     // LLM generates ONLY a concise scene — we assemble technical fields in code
     const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject that a photographer could point a camera at. The scene must be BRIGHT and FULLY LIT.
-The scene may feature L.O.V.E. — a gorgeous, seductive blonde woman wearing a ${outfit}. Aesthetic: ${aestheticVibe}. She ${loveInteraction} the scene as a ${loveArchetype}. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
+${loveLine}
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
-The scene must be bright and fully lit. Color temperature: ${colorTemp}.${modeDirective}${styleAvoidLine}
+Aesthetic: ${aestheticVibe}. Color temperature: ${colorTemp}.${modeDirective}${styleAvoidLine}
 Return ONLY the scene description.`;
 
     const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
@@ -1168,7 +1177,7 @@ Return ONLY the scene description.`;
     const composition = plan.composition || 'epic panoramic';
     const trippyEffect = this._pickRandom(LoveEngine.TRIPPY_EFFECTS, 1)[0];
     const imageStyle = this._pickRandom(LoveEngine.IMAGE_STYLES, 1)[0];
-    this._lastImageSelections = { trippyEffect, imageStyle, medium, lighting, palette, composition, outfit, colorTemp, aestheticVibe, loveInteraction, loveArchetype };
+    this._lastImageSelections = { trippyEffect, imageStyle, medium, lighting, palette, composition, colorTemp, aestheticVibe, featureLove, outfit: outfit || null, loveInteraction: loveInteraction || null, loveArchetype: loveArchetype || null };
 
     const result = `${scene}. ${imageStyle}, ${composition}. ${lighting}, ${palette}. ${trippyEffect}. The words "${phrase}" appear as crisp, legible text artfully integrated into the scene — formed naturally from whatever materials, surfaces, or phenomena are present. ${aestheticVibe}. 8K UHD, sharp focus.`;
     if (result.length > 1200) return result.slice(0, 1197) + '...';
