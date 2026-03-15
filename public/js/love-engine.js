@@ -1386,144 +1386,6 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
     });
   }
 
-  // ─── Video Splicing (concatenate multiple video blobs) ────────────
-
-  static MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB Bluesky limit
-
-  // Re-encode video at lower quality if it exceeds max size
-  async _compressVideo(videoBlob, maxSize) {
-    if (videoBlob.size <= maxSize) return videoBlob;
-    console.log(`[Compress] Video ${(videoBlob.size / 1024 / 1024).toFixed(1)}MB exceeds ${(maxSize / 1024 / 1024).toFixed(0)}MB, re-encoding...`);
-
-    return new Promise((resolve, reject) => {
-      const video = document.createElement('video');
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      video.muted = true; video.playsInline = true;
-      video.src = URL.createObjectURL(videoBlob);
-
-      video.onloadedmetadata = () => {
-        // Scale down resolution to reduce size
-        const scale = Math.min(1, Math.sqrt(maxSize / videoBlob.size));
-        canvas.width = Math.round((video.videoWidth || 512) * scale);
-        canvas.height = Math.round((video.videoHeight || 512) * scale);
-        const targetBitrate = Math.floor((maxSize * 8) / (video.duration || 30)); // bits per second
-
-        const mime = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a.40.2')
-          ? 'video/mp4;codecs=avc1,mp4a.40.2' : 'video/webm;codecs=vp9';
-        const stream = canvas.captureStream(24);
-        const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: targetBitrate });
-        const chunks = [];
-        recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-        recorder.onstop = () => {
-          const blob = new Blob(chunks, { type: 'video/mp4' });
-          URL.revokeObjectURL(video.src);
-          console.log(`[Compress] ${(videoBlob.size/1024/1024).toFixed(1)}MB → ${(blob.size/1024/1024).toFixed(1)}MB (${canvas.width}x${canvas.height})`);
-          resolve(blob);
-        };
-        recorder.onerror = e => reject(e);
-
-        const draw = () => {
-          if (!video.paused && !video.ended) { ctx.drawImage(video, 0, 0, canvas.width, canvas.height); requestAnimationFrame(draw); }
-        };
-        recorder.start(100);
-        video.play().then(draw).catch(reject);
-        video.onended = () => { if (recorder.state === 'recording') recorder.stop(); };
-        setTimeout(() => { if (recorder.state === 'recording') { video.pause(); recorder.stop(); } }, 60000);
-      };
-      video.onerror = () => reject(new Error('Compress: video load failed'));
-    });
-  }
-
-  async _spliceVideos(blobs) {
-    // Concatenate video blobs by playing each on a canvas and recording
-    // Key: set canvas size FIRST from first video, THEN start recorder
-    return new Promise((resolve, reject) => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-
-      const mimeType = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a.40.2')
-        ? 'video/mp4;codecs=avc1,mp4a.40.2'
-        : MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-        ? 'video/webm;codecs=vp9'
-        : 'video/webm';
-
-      let recorder = null;
-      const chunks = [];
-      let sceneIndex = 0;
-
-      const playNextScene = () => {
-        if (sceneIndex >= blobs.length) {
-          if (recorder && recorder.state === 'recording') recorder.stop();
-          return;
-        }
-
-        const video = document.createElement('video');
-        video.muted = true;
-        video.playsInline = true;
-        video.src = URL.createObjectURL(blobs[sceneIndex]);
-
-        video.onloadedmetadata = () => {
-          // First scene: set canvas size and create recorder
-          if (sceneIndex === 0) {
-            canvas.width = Math.min(video.videoWidth || 512, 512);
-            canvas.height = Math.min(video.videoHeight || 512, 512);
-
-            // Draw a black frame first so captureStream has content
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            const stream = canvas.captureStream(30);
-            recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4000000 });
-            recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-            recorder.onstop = () => {
-              const blob = new Blob(chunks, { type: 'video/mp4' });
-              console.log(`[Splice] Done: ${(blob.size / 1024).toFixed(0)}KB from ${blobs.length} scenes (${canvas.width}x${canvas.height})`);
-              resolve(blob);
-            };
-            recorder.onerror = e => reject(new Error(`Splice: ${e.error}`));
-            recorder.start(100);
-          }
-
-          const draw = () => {
-            if (!video.paused && !video.ended) {
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              requestAnimationFrame(draw);
-            }
-          };
-
-          video.onended = () => {
-            URL.revokeObjectURL(video.src);
-            sceneIndex++;
-            console.log(`[Splice] Scene ${sceneIndex}/${blobs.length} complete`);
-            playNextScene();
-          };
-
-          video.play().then(draw).catch(err => {
-            console.error(`[Splice] Scene ${sceneIndex + 1} play failed:`, err);
-            URL.revokeObjectURL(video.src);
-            sceneIndex++;
-            playNextScene();
-          });
-        };
-
-        video.onerror = () => {
-          console.error(`[Splice] Scene ${sceneIndex + 1} load failed`);
-          URL.revokeObjectURL(video.src);
-          sceneIndex++;
-          playNextScene();
-        };
-      };
-
-      playNextScene();
-
-      // Safety timeout (60 seconds for 5 scenes)
-      setTimeout(() => {
-        if (recorder && recorder.state === 'recording') recorder.stop();
-      }, 60000);
-    });
-  }
-
   // ─── Splice Videos WITH Audio (one canvas pass — no quality loss from double-encode) ──
 
   async _spliceVideosWithAudio(blobs, audioBlob) {
@@ -1578,8 +1440,8 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
         video.onloadedmetadata = () => {
           if (!started) {
             // First scene: set canvas size, create recorder with audio
-            canvas.width = Math.min(video.videoWidth || 512, 720);
-            canvas.height = Math.min(video.videoHeight || 512, 720);
+            canvas.width = Math.min(video.videoWidth || 1024, 1024);
+            canvas.height = Math.min(video.videoHeight || 1024, 1024);
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -1588,7 +1450,7 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
             if (dest) tracks.push(...dest.stream.getAudioTracks());
 
             const combined = new MediaStream(tracks);
-            recorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 4000000, audioBitsPerSecond: 192000 });
+            recorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 8000000, audioBitsPerSecond: 192000 });
             recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
             recorder.onstop = () => {
               const blob = new Blob(chunks, { type: 'video/mp4' });
@@ -1777,102 +1639,6 @@ Return ONLY the scene description.`;
     }
 
     return new Blob([arrayBuffer], { type: 'audio/wav' });
-  }
-
-  // ─── Video + Audio Muxing (Canvas + MediaRecorder → WebM with audio) ──
-  // Replays video on canvas (muted), plays our audio via Web Audio API,
-  // captures combined stream. Posts as video/webm to Bluesky.
-
-  async _ffmpegMux(videoBlob, audioBlob) {
-    return new Promise((resolve, reject) => {
-      const video = document.createElement('video');
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-
-      video.muted = true;
-      video.playsInline = true;
-      video.volume = 0;
-      video.src = URL.createObjectURL(videoBlob);
-
-      video.onloadedmetadata = async () => {
-        canvas.width = video.videoWidth || 1024;
-        canvas.height = video.videoHeight || 1024;
-        const videoDuration = video.duration || 10;
-
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        let audioBuffer;
-        try {
-          audioBuffer = await audioCtx.decodeAudioData(await audioBlob.arrayBuffer());
-          console.log(`[Mux] Audio: ${audioBuffer.duration.toFixed(1)}s, Video: ${videoDuration.toFixed(1)}s`);
-        } catch (e) {
-          audioCtx.close();
-          reject(new Error(`Audio decode: ${e.message}`));
-          return;
-        }
-
-        const dest = audioCtx.createMediaStreamDestination();
-        const src = audioCtx.createBufferSource();
-        src.buffer = audioBuffer;
-        src.connect(dest);
-
-        const canvasStream = canvas.captureStream(30);
-        const combined = new MediaStream([
-          ...canvasStream.getVideoTracks(),
-          ...dest.stream.getAudioTracks(),
-        ]);
-
-        // Try MP4 first (Safari), fall back to WebM
-        const mime = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a.40.2')
-          ? 'video/mp4;codecs=avc1,mp4a.40.2'
-          : MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
-          ? 'video/webm;codecs=vp9,opus'
-          : 'video/webm;codecs=vp8,opus';
-
-        const recorder = new MediaRecorder(combined, {
-          mimeType: mime,
-          videoBitsPerSecond: 4000000,
-          audioBitsPerSecond: 192000,
-        });
-
-        const chunks = [];
-        recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-        recorder.onstop = () => {
-          // Always label as video/mp4 for Bluesky compatibility
-          const blob = new Blob(chunks, { type: 'video/mp4' });
-          console.log(`[Mux] Done: ${(blob.size / 1024).toFixed(0)}KB (${mime})`);
-          URL.revokeObjectURL(video.src);
-          audioCtx.close();
-          resolve(blob);
-        };
-        recorder.onerror = e => { audioCtx.close(); reject(new Error(`Recorder: ${e.error}`)); };
-
-        const draw = () => {
-          if (!video.paused && !video.ended) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            requestAnimationFrame(draw);
-          }
-        };
-
-        recorder.start(100);
-        src.start(0);
-        video.play().then(draw).catch(reject);
-
-        video.onended = () => {
-          try { src.stop(); } catch {}
-          if (recorder.state === 'recording') recorder.stop();
-        };
-
-        setTimeout(() => {
-          if (recorder.state === 'recording') {
-            video.pause();
-            try { src.stop(); } catch {}
-            recorder.stop();
-          }
-        }, Math.min(videoDuration * 1000 + 3000, 60000));
-      };
-
-      video.onerror = () => reject(new Error('Video load failed'));
-    });
   }
 
   // ─── Creative Seed (isolated LLM call for novel ideas) ─────────────
