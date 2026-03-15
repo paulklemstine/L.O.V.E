@@ -135,10 +135,10 @@ export class PollinationsClient {
   /**
    * Generate an image and return it as a Blob.
    * GET /image/{prompt} — returns binary image.
-   * Model: dirtberry-pro - high realism, complex scenes
+   * Model: imagen-4 (Google Imagen 4) - best text rendering
    */
   async generateImage(prompt, options = {}) {
-    const { width = 1024, height = 1024, subliminalText = null, model = 'dirtberry-pro', negativePrompt = null } = options;
+    const { width = 1024, height = 1024, subliminalText = null, model = 'imagen-4', negativePrompt = null } = options;
 
     let fullPrompt = prompt;
     if (subliminalText) {
