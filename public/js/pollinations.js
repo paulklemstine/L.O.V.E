@@ -66,20 +66,13 @@ export class PollinationsClient {
    * Model fallback: tries primary model, falls back to secondary on error/empty.
    * Fallback chain: claude-airforce → claude-fast, openai → openai-fast
    */
-  static FALLBACK_MODELS = {
-    'claude-airforce': 'claude-fast',
-    'claude-fast': 'openai',
-    'openai': 'openai-fast',
-  };
-
   async generateText(systemPrompt, userPrompt, options = {}) {
     const { temperature = 0.85, model = 'openai', maxRetries = 2,
       frequencyPenalty = 0.4, presencePenalty = 0.3 } = options;
 
+    const fallbacks = { 'claude-airforce': 'claude-fast', 'claude-fast': 'openai', 'openai': 'openai-fast' };
     const modelsToTry = [model];
-    if (PollinationsClient.FALLBACK_MODELS[model]) {
-      modelsToTry.push(PollinationsClient.FALLBACK_MODELS[model]);
-    }
+    if (fallbacks[model]) modelsToTry.push(fallbacks[model]);
 
     for (const currentModel of modelsToTry) {
       const penaltiesSupported = currentModel.startsWith('claude');
