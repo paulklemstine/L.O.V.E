@@ -463,11 +463,17 @@ export class LoveEngine {
     'melting through', 'igniting', 'cradling', 'unraveling', 'becoming',
   ];
 
-  static LOVE_ARCHETYPES = [
-    'cosmic muse', 'rave goddess', 'dream weaver', 'storm caller',
-    'silk oracle', 'fire keeper', 'frequency priestess', 'velvet phantom',
-    'neon siren', 'crystal witch', 'dawn architect', 'gravity dancer',
-    'echo empress', 'pulse queen', 'void tender', 'light smuggler',
+  static ARCHETYPE_ADJECTIVES = [
+    'cosmic', 'rave', 'dream', 'storm', 'silk', 'fire', 'frequency',
+    'velvet', 'neon', 'crystal', 'dawn', 'gravity', 'echo', 'pulse',
+    'void', 'midnight', 'electric', 'feral', 'phantom', 'ancient',
+  ];
+
+  static ARCHETYPE_NOUNS = [
+    'muse', 'goddess', 'weaver', 'caller', 'oracle', 'keeper',
+    'priestess', 'phantom', 'siren', 'witch', 'architect', 'dancer',
+    'empress', 'queen', 'tender', 'smuggler', 'huntress', 'alchemist',
+    'sovereign', 'shapeshifter',
   ];
 
   static AESTHETIC_VIBES = [
@@ -574,7 +580,8 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       ['IMAGE_STYLES', LoveEngine.IMAGE_STYLES, 'distinct visual art styles and rendering approaches — specific named styles like anime, oil painting, cyberpunk, etc'],
 
       ['LOVE_INTERACTIONS', LoveEngine.LOVE_INTERACTIONS, 'single verbs or two-word verb phrases describing how a goddess physically interacts with a scene — e.g. gazing, dissolving into, conducting, igniting'],
-      ['LOVE_ARCHETYPES', LoveEngine.LOVE_ARCHETYPES, 'two-word mythic feminine archetype names — e.g. cosmic muse, storm caller, neon siren, crystal witch'],
+      ['ARCHETYPE_ADJECTIVES', LoveEngine.ARCHETYPE_ADJECTIVES, 'single evocative adjectives for a mythic feminine archetype — e.g. cosmic, feral, velvet, phantom, electric'],
+      ['ARCHETYPE_NOUNS', LoveEngine.ARCHETYPE_NOUNS, 'single mythic feminine role nouns — e.g. muse, goddess, oracle, siren, witch, huntress, alchemist'],
       ['AESTHETIC_VIBES', LoveEngine.AESTHETIC_VIBES, 'two-word synesthetic aesthetic names followed by a dash and four evocative adjectives, e.g. "silk thunder — smooth, powerful, elegant, resonant"'],
       ['SENSORY_DETAILS', LoveEngine.SENSORY_DETAILS, 'physical sensory experiences people can instantly feel — one word each, tactile and visceral'],
       ['VOICE_VIBES', LoveEngine.VOICE_VIBES, 'vivid similes describing how the writing should feel to the reader — each starts with "like a" and describes a specific emotional scenario'],
@@ -592,7 +599,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       'PHOTOGRAPHY_STYLES', 'LIGHTING_STYLES', 'SUGGESTED_COLORS',
       'COMPOSITION_TYPES', 'STRUGGLE_TYPES', 'METAPHOR_EXAMPLES', 'PHRASE_STRUCTURES',
       'LOVE_OUTFITS', 'COLOR_TEMPERATURES', 'TRIPPY_EFFECTS', 'IMAGE_STYLES',
-      'LOVE_INTERACTIONS', 'LOVE_ARCHETYPES', 'AESTHETIC_VIBES', 'SENSORY_DETAILS', 'VOICE_VIBES',
+      'LOVE_INTERACTIONS', 'ARCHETYPE_ADJECTIVES', 'ARCHETYPE_NOUNS', 'AESTHETIC_VIBES', 'SENSORY_DETAILS', 'VOICE_VIBES',
     ];
     for (const name of lists) {
       try {
@@ -1129,7 +1136,7 @@ Return ONLY valid JSON:
     const colorTemp = this._pickRandom(LoveEngine.COLOR_TEMPERATURES, 1)[0];
     const aestheticVibe = this._pickRandom(LoveEngine.AESTHETIC_VIBES, 1)[0];
     const loveInteraction = this._pickRandom(LoveEngine.LOVE_INTERACTIONS, 1)[0];
-    const loveArchetype = this._pickRandom(LoveEngine.LOVE_ARCHETYPES, 1)[0];
+    const loveArchetype = `${this._pickRandom(LoveEngine.ARCHETYPE_ADJECTIVES, 1)[0]} ${this._pickRandom(LoveEngine.ARCHETYPE_NOUNS, 1)[0]}`;
 
     // LLM generates ONLY a concise scene — we assemble technical fields in code
     const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject that a photographer could point a camera at. The scene must be BRIGHT and FULLY LIT.

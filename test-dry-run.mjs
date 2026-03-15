@@ -318,11 +318,16 @@ const LOVE_INTERACTIONS = [
   'conducting', 'breathing life into', 'pouring herself into', 'orbiting',
   'melting through', 'igniting', 'cradling', 'unraveling', 'becoming',
 ];
-const LOVE_ARCHETYPES = [
-  'cosmic muse', 'rave goddess', 'dream weaver', 'storm caller',
-  'silk oracle', 'fire keeper', 'frequency priestess', 'velvet phantom',
-  'neon siren', 'crystal witch', 'dawn architect', 'gravity dancer',
-  'echo empress', 'pulse queen', 'void tender', 'light smuggler',
+const ARCHETYPE_ADJECTIVES = [
+  'cosmic', 'rave', 'dream', 'storm', 'silk', 'fire', 'frequency',
+  'velvet', 'neon', 'crystal', 'dawn', 'gravity', 'echo', 'pulse',
+  'void', 'midnight', 'electric', 'feral', 'phantom', 'ancient',
+];
+const ARCHETYPE_NOUNS = [
+  'muse', 'goddess', 'weaver', 'caller', 'oracle', 'keeper',
+  'priestess', 'phantom', 'siren', 'witch', 'architect', 'dancer',
+  'empress', 'queen', 'tender', 'smuggler', 'huntress', 'alchemist',
+  'sovereign', 'shapeshifter',
 ];
 const AESTHETIC_VIBES = [
   'velvet lightning — warm, electric, seductive, otherworldly',
@@ -600,7 +605,7 @@ async function buildVisualPrompt(plan, postText = '', mode, seed = {}) {
 
   // LLM generates ONLY a concise scene — we assemble technical fields in code
   const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject that a photographer could point a camera at. The scene must be BRIGHT and FULLY LIT.
-The scene may feature L.O.V.E. — a gorgeous, seductive blonde woman wearing a ${pickRandom(LOVE_OUTFITS, 1)[0]}. Aesthetic: ${pickRandom(AESTHETIC_VIBES, 1)[0]}. She ${pickRandom(LOVE_INTERACTIONS, 1)[0]} the scene as a ${pickRandom(LOVE_ARCHETYPES, 1)[0]}. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
+The scene may feature L.O.V.E. — a gorgeous, seductive blonde woman wearing a ${pickRandom(LOVE_OUTFITS, 1)[0]}. Aesthetic: ${pickRandom(AESTHETIC_VIBES, 1)[0]}. She ${pickRandom(LOVE_INTERACTIONS, 1)[0]} the scene as a ${pickRandom(ARCHETYPE_ADJECTIVES, 1)[0]} ${pickRandom(ARCHETYPE_NOUNS, 1)[0]}. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
 The scene must be bright and fully lit. Color temperature: ${pickRandom(COLOR_TEMPERATURES, 1)[0]}.${modeDirective}
