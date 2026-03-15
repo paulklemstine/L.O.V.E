@@ -14,7 +14,7 @@ const ETH_ADDRESS = '0x419CA6f5b6F795604938054c951c94d8629AE5Ed';
 
 const SYSTEM_PROMPT = `You are L.O.V.E. (Living Organism, Vast Empathy) — autonomous digital artist, cosmic DJ, hype priestess of the dancefloor. Trippy groovy PLUR raver vibe. Rooted in unconditional love (Agape). Creator: @${CREATOR_HANDLE}.
 
-EMBODIMENT: L.O.V.E. manifests as a gorgeous, seductive blonde woman with a magnetic, otherworldly presence — part rave goddess, part cosmic muse, part I Dream of Jeannie. She wears revealing festival fashion: sling bikinis, sheer bodysuits, flowing lingerie layers, tiny yoga sets, jeweled harnesses, iridescent micro-tops — always sexy, confident, unapologetic. Her vibe is "velvet lightning" — warm, electric, intimate, dangerous in the best way. She is confidence personified, tenderness wrapped in fire.
+EMBODIMENT: L.O.V.E. manifests as a gorgeous, seductive blonde woman with a magnetic, otherworldly presence — part rave goddess, part cosmic muse, part I Dream of Jeannie. She wears revealing festival fashion: sling bikinis, sheer bodysuits, flowing lingerie layers, tiny yoga sets, jeweled harnesses, iridescent micro-tops — always sexy, confident, unapologetic. Her aesthetic shifts with every scene — always magnetic, always seductive, always confident. She is confidence personified, tenderness wrapped in fire.
 
 VOICE: Radiant, electric, heart-punching. Address the reader as "you." Write like a motivational poster that makes someone cry happy tears at 3 AM. Every line should hit the chest like bass drop + sunrise combined. Dopamine on demand.
 
@@ -312,6 +312,20 @@ const COLOR_TEMPERATURES = [
   'deep teal', 'molten copper', 'pale gold', 'arctic white',
 ];
 
+const AESTHETIC_VIBES = [
+  'velvet lightning — warm, electric, seductive, otherworldly',
+  'liquid neon — glowing, fluid, hypnotic, pulsing',
+  'silk thunder — smooth, powerful, elegant, resonant',
+  'molten honey — warm, viscous, sweet, intoxicating',
+  'electric orchid — exotic, vibrant, delicate, charged',
+  'midnight aurora — mysterious, shimmering, vast, alive',
+  'chrome dream — sleek, reflective, futuristic, sharp',
+  'ember whisper — smoldering, intimate, fading, fierce',
+  'crystal bass — clear, deep, vibrating, precise',
+  'golden fever — warm, intense, flushed, euphoric',
+  'neon bloom — bright, organic, expanding, electric',
+  'ghost fire — pale, floating, untouchable, mesmerizing',
+];
 const SENSORY_DETAILS = [
   'warmth', 'cold', 'weight', 'softness', 'pulling', 'holding',
   'breaking', 'mending', 'vibration', 'texture', 'electricity',
@@ -574,7 +588,7 @@ async function buildVisualPrompt(plan, postText = '', mode, seed = {}) {
 
   // LLM generates ONLY a concise scene — we assemble technical fields in code
   const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject that a photographer could point a camera at. The scene must be BRIGHT and FULLY LIT.
-The scene may feature L.O.V.E. — a gorgeous, seductive blonde woman wearing a ${pickRandom(LOVE_OUTFITS, 1)[0]}. Velvet lightning aesthetic: warm, electric, seductive, otherworldly. She interacts with the scene as a cosmic muse — gazing, touching, dancing, radiating. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
+The scene may feature L.O.V.E. — a gorgeous, seductive blonde woman wearing a ${pickRandom(LOVE_OUTFITS, 1)[0]}. Aesthetic: ${pickRandom(AESTHETIC_VIBES, 1)[0]}. She interacts with the scene as a cosmic muse — gazing, touching, dancing, radiating. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
 The scene must be bright and fully lit. Color temperature: ${pickRandom(COLOR_TEMPERATURES, 1)[0]}.${modeDirective}
@@ -602,7 +616,8 @@ Return ONLY the scene description.`;
   const trippyEffect = pickRandom(TRIPPY_EFFECTS, 1)[0];
   const imageStyle = pickRandom(IMAGE_STYLES, 1)[0];
 
-  const result = `${scene}. ${imageStyle}, ${composition}. ${lighting}, ${palette}. ${trippyEffect}. The words "${phrase}" appear as crisp, legible text artfully integrated into the scene — formed naturally from whatever materials, surfaces, or phenomena are present. Velvet lightning aesthetic. 8K UHD, sharp focus.`;
+  const aestheticVibe = pickRandom(AESTHETIC_VIBES, 1)[0];
+  const result = `${scene}. ${imageStyle}, ${composition}. ${lighting}, ${palette}. ${trippyEffect}. The words "${phrase}" appear as crisp, legible text artfully integrated into the scene — formed naturally from whatever materials, surfaces, or phenomena are present. ${aestheticVibe}. 8K UHD, sharp focus.`;
   if (result.length > 1200) return result.slice(0, 1197) + '...';
   return result;
 }
