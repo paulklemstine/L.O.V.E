@@ -1183,11 +1183,17 @@ Return ONLY the spoken words, nothing else.`,
     // Save original video for dashboard comparison
     const originalVideoBlob = videoBlob;
 
-    // Note: Browser cannot mux audio into MP4 without destroying quality.
-    // The original MP4 from grok-video is posted to Bluesky with its own audio.
-    // The combined music+voice audio is available for dashboard preview.
-    if (combinedAudio) {
-      onStatus('🎵 Audio ready (music + voice mixed). Video posted with original audio.');
+    // Step E: Replace video audio completely with our music+voice
+    if (combinedAudio && videoBlob) {
+      onStatus('🎬 Replacing video audio...');
+      try {
+        const originalSize = videoBlob.size;
+        videoBlob = await this._ffmpegMux(videoBlob, combinedAudio);
+        onStatus(`✅ Audio replaced! ${(originalSize / 1024).toFixed(0)}KB → ${(videoBlob.size / 1024).toFixed(0)}KB`);
+      } catch (err) {
+        onStatus(`❌ Mux failed: ${err.message} — posting with original audio`);
+        console.error('[Mux]', err);
+      }
     }
 
     this.transmissionNumber++;
