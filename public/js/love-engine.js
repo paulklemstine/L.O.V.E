@@ -1102,58 +1102,73 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     onStatus('Designing cinematic scene...');
     const videoPrompt = await this._generateVideoPrompt(plan, story, mode, seed);
 
-    // Step A: Generate background music
-    const musicGenre = this._pickRandom(LoveEngine.MUSIC_GENRES, 1)[0];
-    const musicMood = this._pickRandom(LoveEngine.MUSIC_MOODS, 1)[0];
-    onStatus(`🎵 Generating ${musicGenre} music...`);
-    let musicBlob = null;
-    try {
-      musicBlob = await this.ai.generateMusic(`${musicGenre}, ${musicMood}, 15 seconds, instrumental`);
-    } catch (err) {
-      onStatus(`Music generation failed (continuing without): ${err.message}`);
-    }
-
-    // Step B: Generate TTS voice narration
-    onStatus('🎙️ Generating voice narration...');
-    let voiceBlob = null;
-    try {
-      voiceBlob = await this.ai.generateAudio(story);
-    } catch (err) {
-      onStatus(`TTS failed (continuing without voice): ${err.message}`);
-    }
-
-    // Step C: Layer voice over music
-    let combinedAudio = null;
-    if (musicBlob && voiceBlob) {
-      onStatus('🎛️ Mixing voice over music...');
-      try {
-        combinedAudio = await this._layerAudio(musicBlob, voiceBlob, 0.3, 1.0);
-      } catch (err) {
-        onStatus(`Audio layering failed: ${err.message}`);
-        combinedAudio = voiceBlob; // fall back to voice only
-      }
-    } else {
-      combinedAudio = voiceBlob || musicBlob; // whatever we have
-    }
-
-    // Step D: Generate video
+    // Step A: Generate video FIRST (takes longest, do it while audio generates would be ideal but we need sequential)
     onStatus('🎬 Generating video (this may take a minute)...');
     let videoBlob = null;
     try {
       videoBlob = await this.ai.generateVideo(videoPrompt);
+      onStatus(`🎬 Video generated (${(videoBlob.size / 1024).toFixed(0)}KB)`);
     } catch (err) {
       onStatus(`Video generation failed: ${err.message}`);
       throw err;
     }
 
-    // Step E: Mux combined audio into video
-    if (combinedAudio && videoBlob) {
-      onStatus('🎬 Mixing audio into video...');
+    // Step B: Generate background music
+    const musicGenre = this._pickRandom(LoveEngine.MUSIC_GENRES, 1)[0];
+    const musicMood = this._pickRandom(LoveEngine.MUSIC_MOODS, 1)[0];
+    const musicPrompt = `${musicGenre}, ${musicMood}, 15 seconds, instrumental`;
+    onStatus(`🎵 Generating ${musicGenre} music...`);
+    let musicBlob = null;
+    try {
+      musicBlob = await this.ai.generateMusic(musicPrompt);
+      onStatus(`🎵 Music generated (${(musicBlob.size / 1024).toFixed(0)}KB)`);
+    } catch (err) {
+      onStatus(`🎵 Music FAILED: ${err.message}`);
+      console.error('[Music]', err);
+    }
+
+    // Step C: Generate TTS voice narration
+    onStatus('🎙️ Generating voice narration...');
+    let voiceBlob = null;
+    try {
+      voiceBlob = await this.ai.generateAudio(story);
+      onStatus(`🎙️ Voice generated (${(voiceBlob.size / 1024).toFixed(0)}KB)`);
+    } catch (err) {
+      onStatus(`🎙️ TTS FAILED: ${err.message}`);
+      console.error('[TTS]', err);
+    }
+
+    // Step D: Layer voice over music
+    let combinedAudio = null;
+    if (musicBlob && voiceBlob) {
+      onStatus('🎛️ Mixing voice over music...');
       try {
-        videoBlob = await this._muxVideoAudio(videoBlob, combinedAudio);
-        onStatus('✅ Video + music + voice mixed successfully.');
+        combinedAudio = await this._layerAudio(musicBlob, voiceBlob, 0.3, 1.0);
+        onStatus(`🎛️ Audio mixed (${(combinedAudio.size / 1024).toFixed(0)}KB)`);
       } catch (err) {
-        onStatus(`Audio mux failed (posting video without audio): ${err.message}`);
+        onStatus(`🎛️ Audio layer FAILED: ${err.message}`);
+        console.error('[Layer]', err);
+        combinedAudio = voiceBlob;
+      }
+    } else if (voiceBlob) {
+      combinedAudio = voiceBlob;
+      onStatus('🎛️ Using voice only (no music)');
+    } else if (musicBlob) {
+      combinedAudio = musicBlob;
+      onStatus('🎛️ Using music only (no voice)');
+    } else {
+      onStatus('🎛️ No audio generated — posting silent video');
+    }
+
+    // Step E: Mux combined audio into video (replace original audio completely)
+    if (combinedAudio && videoBlob) {
+      onStatus('🎬 Replacing video audio with music+voice...');
+      try {
+        const originalSize = videoBlob.size;
+        videoBlob = await this._muxVideoAudio(videoBlob, combinedAudio);
+        onStatus(`✅ Audio replaced! ${(originalSize / 1024).toFixed(0)}KB → ${(videoBlob.size / 1024).toFixed(0)}KB`);
+      } catch (err) {
+        onStatus(`❌ Audio mux FAILED: ${err.message} — posting with original audio`);
         console.error('[Mux]', err);
       }
     }
