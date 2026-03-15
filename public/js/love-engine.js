@@ -1263,12 +1263,12 @@ Subliminal phrase: "${phrase}"
 Post text: "${story.slice(0, 120)}"
 Style: ${imageStyle}. Lighting: ${lighting}. Effect: ${trippyEffect}. Aesthetic: ${aestheticVibe}.
 
-Use this proven ad psychology arc:
-Scene 1 (HOOK): Arresting visual that stops the scroll. Dramatic, unexpected, visceral. Camera pushing in.
-Scene 2 (PROBLEM): Visualize the pain/struggle. Dark-to-light transition beginning. Slow dolly.
-Scene 3 (TRANSFORMATION): The metaphor in action. Things changing, shifting, becoming. Camera orbiting.
-Scene 4 (PROOF): The result — beauty, strength, resolution. Wide reveal. The phrase "${phrase}" appears naturally carved/etched/formed in the scene.
-Scene 5 (CTA): Emotional peak. Pull back to show the full picture. Triumphant. Uplifting.
+Use advertising psychology + Hollywood filmmaking science:
+Scene 1 (HOOK — pattern interrupt): Arresting extreme close-up that breaks expectations. Hitchcock tension: show something familiar at an unfamiliar scale. Camera pushing in fast. High contrast. Dopamine trigger.
+Scene 2 (PROBLEM — empathy beat): Visualize the pain/struggle using Spielberg's "face then reveal" technique. Start tight on texture, dolly back to reveal context. The viewer feels the weight. Dark-to-light transition begins.
+Scene 3 (TRANSFORMATION — Kubrick one-point): The metaphor in action. Symmetrical centered composition. Things morphing, shifting, becoming. Slow deliberate orbit. The visual rhythm changes — faster cuts in the mind, slower camera.
+Scene 4 (PROOF — wide Malick reveal): Beautiful sweeping wide shot. The result of transformation. Golden-hour light flooding the frame. The phrase "${phrase}" appears naturally carved/etched/formed in the environment. Awe and wonder.
+Scene 5 (CTA — Nolan crescendo): Emotional peak. Crane rising or infinite zoom out. Everything clicks into place. The full picture revealed. Triumphant. The viewer feels changed.
 
 Each scene: ONE sentence, under 200 chars, vivid camera movement, bright, no people/hands.
 Return ONLY valid JSON: { "scenes": ["scene 1 description", "scene 2", "scene 3", "scene 4", "scene 5"] }`,
