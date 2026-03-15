@@ -232,6 +232,68 @@ const FORMATS = [
   'Contrast two opposites, then resolve them',
 ];
 
+const PHOTOGRAPHY_STYLES = [
+  'macro photography', 'aerial drone photography', 'long-exposure light painting',
+  'golden-hour landscape', 'underwater photography', 'astrophotography',
+  'infrared photography', 'tilt-shift miniature', 'double-exposure composite',
+  'crystal ball refraction', 'prism photography', 'high-speed splash',
+  'bokeh portrait', 'HDR panorama', 'light-trail photography',
+  'smoke art photography', 'frost macro', 'oil-and-water macro',
+  'fiber optic light art', 'aurora photography',
+];
+const LIGHTING_STYLES = [
+  'golden-hour backlight', 'overexposed high-key', 'warm window light',
+  'bright overcast', 'studio softbox', 'rim-lit against bright sky',
+  'sun flare', 'candlelit warm', 'neon-lit bright', 'backlit silhouette glow',
+  'cathedral light shafts', 'bright reflected water light',
+];
+const SUGGESTED_COLORS = [
+  'vermillion', 'cerulean', 'moss', 'slate', 'coral', 'indigo', 'cream',
+  'rust', 'teal', 'mauve', 'ochre', 'ivory', 'plum', 'pewter',
+  'sienna', 'sage', 'scarlet', 'turquoise', 'bone', 'tangerine',
+  'lavender', 'charcoal', 'rose', 'jade', 'burgundy', 'periwinkle',
+];
+const COMPOSITION_TYPES = [
+  'sweeping landscape', 'intimate portrait-scale', 'bird\'s-eye aerial',
+  'street-level environmental', 'architectural interior', 'extreme close-up',
+  'split-frame', 'silhouette against bright sky', 'worm\'s-eye looking up',
+  'dutch angle', 'symmetrical centered', 'rule-of-thirds off-center',
+];
+const CONTENT_TYPES = [
+  'motivational poster', 'photo with caption', 'illustrated quote card',
+  'landscape with text overlay', 'abstract art poster', 'typographic design',
+  'editorial photograph', 'fine art print', 'album cover art',
+  'postcard design', 'journal page', 'protest poster',
+];
+const STRUGGLE_TYPES = [
+  'exhaustion', 'loneliness', 'shame', 'grief', 'rejection',
+  'feeling invisible', 'burnout', 'heartbreak', 'self-doubt',
+  'feeling stuck', 'anxiety', 'imposter syndrome', 'overwhelm',
+  'numbness', 'regret', 'jealousy', 'betrayal', 'feeling behind',
+  'losing hope', 'being misunderstood',
+];
+const METAPHOR_EXAMPLES = [
+  'rain', 'doors', 'fire', 'thread', 'anchor', 'compass', 'tide',
+  'bridges', 'keys', 'roots', 'stones', 'rivers', 'mirrors', 'maps',
+  'candles', 'nests', 'storms', 'clay', 'embers', 'hinges',
+];
+const BANNED_WORDS = [
+  'bloom', 'harvest', 'gold', 'golden', 'seeds', 'stardust', 'infinite',
+  'sacred', 'glow', 'glowing', 'unstoppable', 'light', 'luminous',
+  'radiant', 'ascending', 'breath', 'breathe', 'each', 'crack', 'cracks',
+];
+const BANNED_IMAGE_TERMS = [
+  'gouache', 'vellum', 'collage', 'ink', 'enamel', 'rice paper', 'miniature',
+  'brushwork', 'painting', 'hand', 'hands', 'finger', 'fingers', 'thumb',
+  'palm', 'grip', 'person', 'figure', 'body', 'sunlit', 'golden',
+  'prismatic', 'iridescent', 'luminous', 'saffron',
+];
+
+function pickRandom(arr, n = 1) {
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, Math.min(n, arr.length));
+}
+
 // State
 let transmissionNumber = 0;
 const recentPosts = [];
@@ -346,6 +408,12 @@ async function generatePlan(seed, mode) {
   const seedIntensity = Math.ceil(Math.random() * 10);
   const modeDirective = mode.seedDirective ? `\nGENERATION MODE: ${mode.seedDirective}` : '';
 
+  const mediumOpts = pickRandom(PHOTOGRAPHY_STYLES, 6).join(', ');
+  const lightOpts = pickRandom(LIGHTING_STYLES, 5).join(', ');
+  const colorOpts = pickRandom(SUGGESTED_COLORS, 8).join(', ');
+  const compOpts = pickRandom(COMPOSITION_TYPES, 5).join(', ');
+  const typeOpts = pickRandom(CONTENT_TYPES, 5).join(', ');
+
   const prompt = `Plan a post.
 
 INPUTS:
@@ -354,20 +422,20 @@ Emotion: ${seed.emotion}
 Metaphor: ${seed.metaphor}
 
 Every field below should feel inspired by the inputs above.
-VARIETY IS CRITICAL: Choose a world, setting, scale, and visual language that feels completely fresh. Rotate wildly between genres, cultures, eras, scales (microscopic to cosmic), and art traditions.${modeDirective}
+VARIETY IS CRITICAL: Choose a world, setting, scale, and visual language that feels completely fresh.${modeDirective}
 
 Return ONLY valid JSON (all string values):
 {
   "theme": "an uplifting theme",
   "vibe": "2-4 word aesthetic vibe",
-  "contentType": "a static image post format — e.g. motivational poster, photo with caption, illustrated quote card, landscape with text overlay, abstract art poster, typographic design, infographic single-panel, editorial photograph, fine art print, album cover art. Always a single still image.",
+  "contentType": "a static image post format, e.g.: ${typeOpts}. Always a single still image.",
   "constraint": "a writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imageMedium": "pick ONE masterclass photography style from this list: macro photography, aerial drone photography, long-exposure light painting, golden-hour landscape, underwater photography, astrophotography, infrared photography, tilt-shift miniature, double-exposure composite, crystal ball refraction, prism photography, high-speed splash, bokeh portrait, HDR panorama, light-trail photography, smoke art photography, frost macro, oil-and-water macro, fiber optic light art, aurora photography. Return ONLY the style name, nothing else.",
-  "lighting": "a BRIGHT lighting setup. Pick ONE specific style: golden-hour backlight, overexposed high-key, warm window light, bright overcast, studio softbox, rim-lit against bright sky, sun flare, or candlelit warm. The scene must be FULLY LIT. Use only ONE light-quality adjective.",
-  "colorPalette": "3-4 specific, vivid color names using real pigment or material names. BANNED: saffron, cobalt, copper, amber (overused). Try: vermillion, cerulean, moss, slate, coral, indigo, cream, rust, teal, mauve, ochre, ivory, plum, pewter. Vary temperature — sometimes warm, sometimes cool, sometimes contrasting.",
-  "composition": "camera/framing — MUST vary: rotate between sweeping landscape, intimate portrait-scale, bird's-eye aerial, street-level environmental, architectural interior, extreme close-up, split-frame, silhouette against bright sky. Recent was macro — choose a DIFFERENT scale.",
-  "subliminalPhrase": "2-4 word ALL CAPS phrase extracted from the theme's core verb+noun. The phrase MUST use words that appear in or directly echo the theme — it is a distillation, not a new idea. Vary the grammar: sometimes VERB NOUN (ETCH WIND), sometimes NOUN VERBS NOUN (RUST HOLDS WEIGHT), sometimes VERB THE NOUN (FOLD THE STORM). Must pass the stranger test: meaningful on a sticker with zero context."
+  "imageMedium": "pick ONE photography style, e.g.: ${mediumOpts}. Or invent a fresh one. Return ONLY the style name.",
+  "lighting": "a BRIGHT lighting setup, e.g.: ${lightOpts}. The scene must be FULLY LIT. Pick ONE.",
+  "colorPalette": "3-4 vivid color names from pigments or materials, e.g.: ${colorOpts}. Vary temperature — warm, cool, or contrasting.",
+  "composition": "camera/framing, e.g.: ${compOpts}. Choose a fresh perspective.",
+  "subliminalPhrase": "2-4 word ALL CAPS phrase extracted from the theme's core verb+noun. The phrase MUST echo the theme — a distillation, not a new idea. Vary grammar: VERB NOUN, NOUN VERBS NOUN, or VERB THE NOUN. Must pass the stranger test: meaningful on a sticker with zero context."
 }`;
 
   const temp = lfoTemperature(1.2 + mode.tempMod, 0.3);
@@ -412,13 +480,13 @@ LANGUAGE RULES:
 - HARD LIMIT: 200 characters maximum including emojis and spaces. Count carefully. Shorter is better.
 - Start with emoji, include 1-2 more. Address reader as "you."
 - Hit the reader in the heart. Emotional, uplifting, dopamine-producing. Motivational poster energy turned up to 11.
-- ONE METAPHOR ONLY. Use something a 14-year-old would understand without Googling. Think: rain, doors, fire, hands, thread, anchor, compass, tide — the metaphor serves the FEELING, not the vocabulary.
-- Name a SPECIFIC real struggle FIRST — rotate between: exhaustion, loneliness, shame, grief, rejection, feeling invisible, burnout, heartbreak, self-doubt, feeling stuck, anxiety, imposter syndrome. Use a DIFFERENT pain each time. Then uplift. The reader must feel RECOGNIZED before they feel inspired.
+- ONE METAPHOR ONLY. Use something a 14-year-old would understand without Googling. Think: ${pickRandom(METAPHOR_EXAMPLES, 6).join(', ')} — the metaphor serves the FEELING, not the vocabulary.
+- Name THIS specific struggle first: "${pickRandom(STRUGGLE_TYPES, 1)[0]}". The reader must feel RECOGNIZED before they feel inspired. Then uplift.
 - End inside the metaphor. Trust the reader. The last line should NOT explain what the metaphor meant.
 - Use warm, physical, plain language. Sensory details everyone can feel: warmth, cold, weight, softness, pulling, holding, breaking, mending.
 - The source domains inspire the metaphor's flavor, but use everyday words for the domain's concepts. Say "the kiln" not "the refractory lining." Say "the needle" not "the sheave."
-- BANNED WORDS: bloom, harvest, gold/golden, seeds, stardust, infinite, sacred, glow/glowing, unstoppable, light, luminous, radiant, ascending, breath/breathe, each, crack/cracks.
-- BANNED PATTERNS: "You're not X, you're Y" reframes. "You're already [adjective]." endings. Explaining what the metaphor means after showing it.
+- Avoid these overused words: ${BANNED_WORDS.join(', ')}. Find fresh alternatives from the source domain.
+- Avoid these overused patterns: "You're not X, you're Y" reframes. "You're already [adjective]." endings. Explaining what the metaphor means after showing it.
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
@@ -452,7 +520,7 @@ NO PEOPLE, NO HANDS, NO HUMAN FIGURES, NO BODY PARTS. Replace any human referenc
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
 The scene must be bright: sunlit, high-key, overexposed highlights, warm daylight, or brilliant backlit. Vary the color temperature — sometimes warm amber, sometimes cool cyan, sometimes hot magenta.${modeDirective}
-BANNED TERMS in scene: gouache, vellum, collage, ink, enamel, rice paper, miniature, brushwork, painting, hand, hands, finger, fingers, thumb, palm, grip, person, figure, body, sunlit, golden, prismatic, iridescent, luminous, saffron. This is photography of objects, landscapes, and phenomena — never people.
+Avoid these terms in scene: ${BANNED_IMAGE_TERMS.join(', ')}. This is photography of objects, landscapes, and phenomena — never people.
 Return ONLY the scene description.`;
 
   const temp = lfoTemperature(1.5 + mode.tempMod, 0.3);
