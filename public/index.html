@@ -13,7 +13,7 @@
   <header class="header">
     <div>
       <div class="header-title">L.O.V.E. Control Panel</div>
-      <div class="header-subtitle">Living Organism, Vast Empathy — Peace Love Unity Respect — build #<span id="build-version">11</span></div>
+      <div class="header-subtitle">Living Organism, Vast Empathy — Peace Love Unity Respect — build #<span id="build-version">51</span></div>
     </div>
     <div id="status-indicator" class="status-indicator stopped">
       <span class="dot"></span>
@@ -61,66 +61,7 @@
       </div>
     </div>
 
-    <!-- Stats Dashboard -->
-    <div class="card">
-      <div class="card-header">Dashboard</div>
-      <div class="stats-grid">
-        <div class="stat-item">
-          <div class="stat-value" id="stat-posts">0</div>
-          <div class="stat-label">Transmissions</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="stat-replies">0</div>
-          <div class="stat-label">Replies</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="stat-follows">0</div>
-          <div class="stat-label">Follows</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="stat-dms">0</div>
-          <div class="stat-label">DMs</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="stat-errors">0</div>
-          <div class="stat-label">Errors</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="stat-uptime">0h 0m</div>
-          <div class="stat-label">Uptime</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="stat-next">--:--</div>
-          <div class="stat-label">Next Post</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="stat-pollen-balance">--</div>
-          <div class="stat-label">Pollen Balance</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="stat-post-cost">--</div>
-          <div class="stat-label">Avg Cost/Post</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="stat-last-cost">--</div>
-          <div class="stat-label">Last Post Cost</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="stat-pollen-rate">--</div>
-          <div class="stat-label">Burn Rate</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="stat-posts-remaining">--</div>
-          <div class="stat-label">Posts Left</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="stat-reset">--</div>
-          <div class="stat-label">Next Reset</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Post History -->
+    <!-- Post History (moved ABOVE dashboard) -->
     <div class="card">
       <div class="card-header post-history-header">
         <span>Post History</span>
@@ -135,11 +76,91 @@
       </div>
     </div>
 
-    <!-- Activity Log -->
-    <div class="card">
-      <div class="card-header">Activity Log</div>
-      <div id="activity-log">
-        <div class="placeholder-text">Waiting for activity...</div>
+    <!-- Post Details (collapsible tags panel) -->
+    <div class="card collapsible-panel" id="panel-details">
+      <div class="card-header panel-toggle" data-target="panel-details-body">
+        <span>Post Details</span>
+        <span class="toggle-icon">▼</span>
+      </div>
+      <div id="panel-details-body" class="panel-body">
+        <div class="placeholder-text">Select a post to see details.</div>
+      </div>
+    </div>
+
+    <!-- Stats Dashboard (moved BELOW post) -->
+    <div class="card collapsible-panel" id="panel-dashboard">
+      <div class="card-header panel-toggle" data-target="panel-dashboard-body">
+        <span>Dashboard</span>
+        <span class="toggle-icon">▼</span>
+      </div>
+      <div id="panel-dashboard-body" class="panel-body">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-value" id="stat-posts">0</div>
+            <div class="stat-label">Transmissions</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="stat-replies">0</div>
+            <div class="stat-label">Replies</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="stat-follows">0</div>
+            <div class="stat-label">Follows</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="stat-dms">0</div>
+            <div class="stat-label">DMs</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="stat-errors">0</div>
+            <div class="stat-label">Errors</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="stat-uptime">0h 0m</div>
+            <div class="stat-label">Uptime</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="stat-next">--:--</div>
+            <div class="stat-label">Next Post</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="stat-pollen-balance">--</div>
+            <div class="stat-label">Pollen Balance</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="stat-post-cost">--</div>
+            <div class="stat-label">Avg Cost/Post</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="stat-last-cost">--</div>
+            <div class="stat-label">Last Post Cost</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="stat-pollen-rate">--</div>
+            <div class="stat-label">Burn Rate</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="stat-posts-remaining">--</div>
+            <div class="stat-label">Posts Left</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="stat-reset">--</div>
+            <div class="stat-label">Next Reset</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Activity Log (collapsible) -->
+    <div class="card collapsible-panel" id="panel-log">
+      <div class="card-header panel-toggle" data-target="panel-log-body">
+        <span>Activity Log</span>
+        <span class="toggle-icon">▼</span>
+      </div>
+      <div id="panel-log-body" class="panel-body">
+        <div id="activity-log">
+          <div class="placeholder-text">Waiting for activity...</div>
+        </div>
       </div>
     </div>
 
@@ -152,7 +173,6 @@
       const btn = document.getElementById('btn-force-video');
       if (btn) {
         console.log('[DEBUG] Force Video button found');
-        // Add a backup click handler
         btn.addEventListener('click', () => {
           console.log('[DEBUG] Force Video clicked!');
           if (!window._forceVideoPost) {
@@ -168,6 +188,18 @@
       } else {
         console.error('[DEBUG] Force Video button NOT found!');
       }
+
+      // Collapsible panels
+      document.querySelectorAll('.panel-toggle').forEach(toggle => {
+        toggle.addEventListener('click', () => {
+          const body = document.getElementById(toggle.dataset.target);
+          const icon = toggle.querySelector('.toggle-icon');
+          if (body) {
+            body.classList.toggle('collapsed');
+            icon.textContent = body.classList.contains('collapsed') ? '▶' : '▼';
+          }
+        });
+      });
     });
   </script>
 </body>

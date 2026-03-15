@@ -460,6 +460,38 @@ body {
   border-color: rgba(255, 165, 0, 0.2);
 }
 
+/* ─── Collapsible Panels ────────────────────────────── */
+
+.panel-toggle {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+}
+
+.panel-toggle:hover {
+  opacity: 0.8;
+}
+
+.toggle-icon {
+  font-size: 10px;
+  color: var(--text-secondary);
+  transition: transform 0.2s;
+}
+
+.panel-body {
+  transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.2s ease;
+  overflow: hidden;
+}
+
+.panel-body.collapsed {
+  max-height: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  opacity: 0;
+}
+
 /* ─── Log Filter Bar ─────────────────────────────── */
 
 .log-filter-bar {

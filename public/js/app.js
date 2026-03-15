@@ -1181,35 +1181,43 @@ function displayPost(index) {
         </div>
       </div>` : '';
 
+  // Main post panel — media + text only
   container.innerHTML = `
     ${typeBadge}
     ${mediaHtml}
     <div class="post-text">${escapeHtml(result.text)}</div>
-    <div class="post-details">
-      <div class="detail-group">
-        <div class="detail-label">Seed</div>
-        <div class="detail-tags">
-          ${tag('Domains', domains.join(' \u00d7 '), 'tag-domain')}
-          ${tag('Concept', seed.concept, 'tag-seed')}
-          ${tag('Emotion', seed.emotion, 'tag-seed')}
-          ${tag('Metaphor', seed.metaphor, 'tag-seed')}
-        </div>
-      </div>
-      <div class="detail-group">
-        <div class="detail-label">Plan</div>
-        <div class="detail-tags">
-          ${tag('Mode', result.mode, 'tag-mode')}
-          ${tag('Theme', plan.theme, 'tag-plan')}
-          ${tag('Vibe', plan.vibe, 'tag-vibe')}
-          ${tag('Type', plan.contentType, 'tag-plan')}
-          ${tag('Constraint', plan.constraint, 'tag-plan')}
-          ${tag('Intensity', plan.intensity, 'tag-plan')}
-          ${tag('Subliminal', plan.subliminalPhrase, 'tag-subliminal')}
-        </div>
-      </div>
-      ${styleSection}
-    </div>
   `;
+
+  // Separate details panel — all tags
+  const detailsBody = document.getElementById('panel-details-body');
+  if (detailsBody) {
+    detailsBody.innerHTML = `
+      <div class="post-details">
+        <div class="detail-group">
+          <div class="detail-label">Seed</div>
+          <div class="detail-tags">
+            ${tag('Domains', domains.join(' \u00d7 '), 'tag-domain')}
+            ${tag('Concept', seed.concept, 'tag-seed')}
+            ${tag('Emotion', seed.emotion, 'tag-seed')}
+            ${tag('Metaphor', seed.metaphor, 'tag-seed')}
+          </div>
+        </div>
+        <div class="detail-group">
+          <div class="detail-label">Plan</div>
+          <div class="detail-tags">
+            ${tag('Mode', result.mode, 'tag-mode')}
+            ${tag('Theme', plan.theme, 'tag-plan')}
+            ${tag('Vibe', plan.vibe, 'tag-vibe')}
+            ${tag('Type', plan.contentType, 'tag-plan')}
+            ${tag('Constraint', plan.constraint, 'tag-plan')}
+            ${tag('Intensity', plan.intensity, 'tag-plan')}
+            ${tag('Subliminal', plan.subliminalPhrase, 'tag-subliminal')}
+          </div>
+        </div>
+        ${styleSection}
+      </div>
+    `;
+  }
 
   updatePostNav();
 }
