@@ -1160,19 +1160,16 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       onStatus('🎛️ No audio generated — posting silent video');
     }
 
-    // Step E: Mux combined audio into video for dashboard preview
-    // Keep original MP4 for Bluesky (WebM not supported by Bluesky)
-    let previewBlob = videoBlob;
+    // Step E: Replace video audio with music+voice using ffmpeg.wasm → MP4 output
     if (combinedAudio && videoBlob) {
-      onStatus('🎬 Mixing audio into preview video...');
+      onStatus('🎬 Replacing video audio (ffmpeg)...');
       try {
         const originalSize = videoBlob.size;
-        previewBlob = await this._muxVideoAudio(videoBlob, combinedAudio);
-        onStatus(`✅ Preview mixed! ${(originalSize / 1024).toFixed(0)}KB → ${(previewBlob.size / 1024).toFixed(0)}KB`);
+        videoBlob = await this._ffmpegMux(videoBlob, combinedAudio);
+        onStatus(`✅ Audio replaced! ${(originalSize / 1024).toFixed(0)}KB → ${(videoBlob.size / 1024).toFixed(0)}KB (MP4)`);
       } catch (err) {
-        onStatus(`❌ Audio mux failed: ${err.message}`);
-        console.error('[Mux]', err);
-        previewBlob = videoBlob;
+        onStatus(`❌ ffmpeg mux failed: ${err.message} — posting with original audio`);
+        console.error('[ffmpeg]', err);
       }
     }
 
@@ -1186,7 +1183,6 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       text: story,
       subliminal: plan.subliminalPhrase,
       videoBlob,
-      previewVideoBlob: previewBlob,
       audioBlob: combinedAudio,
       vibe: plan.vibe,
       visualPrompt: videoPrompt,
@@ -1335,127 +1331,59 @@ Return ONLY the scene description.`;
     return new Blob([arrayBuffer], { type: 'audio/wav' });
   }
 
-  // ─── Video + Audio Muxing (browser-native MediaRecorder) ───────────
-  // Plays video on canvas + audio via Web Audio API, captures combined
-  // stream with MediaRecorder into a single video file with audio.
+  // ─── Video + Audio Muxing (ffmpeg.wasm → MP4 output) ───────────────
+  // Uses ffmpeg.wasm to replace video audio with our music+voice mix.
+  // Input: original MP4 video + WAV audio → Output: MP4 with new audio.
 
-  async _muxVideoAudio(videoBlob, audioBlob) {
-    return new Promise((resolve, reject) => {
-      const video = document.createElement('video');
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
+  async _ffmpegMux(videoBlob, audioBlob) {
+    // Dynamically import ffmpeg.wasm from CDN (cached after first load)
+    if (!this._ffmpeg) {
+      const mod = await import('https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js');
+      const { toBlobURL } = await import('https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js');
 
-      // CRITICAL: mute the video element so its original audio is silenced
-      video.muted = true;
-      video.playsInline = true;
-      video.volume = 0;
-      video.src = URL.createObjectURL(videoBlob);
+      this._ffmpeg = new mod.FFmpeg();
 
-      video.onloadedmetadata = async () => {
-        canvas.width = video.videoWidth || 512;
-        canvas.height = video.videoHeight || 512;
-        const videoDuration = video.duration || 10;
+      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+      await this._ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+      });
+    }
 
-        // Create audio context for our replacement audio
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ffmpeg = this._ffmpeg;
 
-        // Decode our replacement audio (music+voice mix or voice-only)
-        let audioBuffer;
-        try {
-          const arrayBuf = await audioBlob.arrayBuffer();
-          audioBuffer = await audioCtx.decodeAudioData(arrayBuf);
-          console.log(`[Mux] Audio decoded: ${audioBuffer.duration.toFixed(1)}s, video: ${videoDuration.toFixed(1)}s`);
-        } catch (e) {
-          audioCtx.close();
-          reject(new Error(`Audio decode failed: ${e.message}`));
-          return;
-        }
+    // Write input files
+    const videoData = new Uint8Array(await videoBlob.arrayBuffer());
+    const audioData = new Uint8Array(await audioBlob.arrayBuffer());
 
-        // Create audio source → MediaStream destination (for capture)
-        const dest = audioCtx.createMediaStreamDestination();
-        const audioSource = audioCtx.createBufferSource();
-        audioSource.buffer = audioBuffer;
-        audioSource.connect(dest);
+    await ffmpeg.writeFile('input.mp4', videoData);
+    await ffmpeg.writeFile('audio.wav', audioData);
 
-        // Capture canvas as video-only stream (NO audio from original video)
-        const canvasStream = canvas.captureStream(30);
-        const videoTracks = canvasStream.getVideoTracks();
-        const audioTracks = dest.stream.getAudioTracks();
+    // Replace video audio with our audio, keep video stream, output MP4
+    // -shortest ensures output matches the shorter of video/audio
+    await ffmpeg.exec([
+      '-i', 'input.mp4',
+      '-i', 'audio.wav',
+      '-c:v', 'copy',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-map', '0:v:0',
+      '-map', '1:a:0',
+      '-shortest',
+      '-y', 'output.mp4'
+    ]);
 
-        console.log(`[Mux] Video tracks: ${videoTracks.length}, Audio tracks: ${audioTracks.length}`);
+    // Read output
+    const outputData = await ffmpeg.readFile('output.mp4');
+    const outputBlob = new Blob([outputData.buffer], { type: 'video/mp4' });
 
-        // Build combined stream: canvas video + our audio ONLY
-        const combinedStream = new MediaStream([...videoTracks, ...audioTracks]);
+    // Cleanup
+    await ffmpeg.deleteFile('input.mp4');
+    await ffmpeg.deleteFile('audio.wav');
+    await ffmpeg.deleteFile('output.mp4');
 
-        // Pick best supported codec
-        const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
-          ? 'video/webm;codecs=vp9,opus'
-          : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
-          ? 'video/webm;codecs=vp8,opus'
-          : 'video/webm';
-
-        const recorder = new MediaRecorder(combinedStream, {
-          mimeType,
-          videoBitsPerSecond: 8000000,
-          audioBitsPerSecond: 192000,
-        });
-
-        const chunks = [];
-        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-
-        recorder.onstop = () => {
-          const muxedBlob = new Blob(chunks, { type: mimeType });
-          console.log(`[Mux] Complete: ${(muxedBlob.size / 1024).toFixed(0)}KB`);
-          URL.revokeObjectURL(video.src);
-          audioCtx.close();
-          resolve(muxedBlob);
-        };
-
-        recorder.onerror = (e) => {
-          audioCtx.close();
-          reject(new Error(`MediaRecorder error: ${e.error}`));
-        };
-
-        // Draw video frames to canvas at 30fps
-        const drawFrame = () => {
-          if (video.paused || video.ended) return;
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          requestAnimationFrame(drawFrame);
-        };
-
-        // Start recording, audio, and video playback
-        recorder.start(100); // collect data every 100ms
-        audioSource.start(0);
-        video.play().then(drawFrame).catch(e => {
-          console.error('[Mux] Video play failed:', e);
-          reject(e);
-        });
-
-        // Stop when video ends
-        video.onended = () => {
-          try { audioSource.stop(); } catch {}
-          if (recorder.state === 'recording') recorder.stop();
-        };
-
-        // Also stop if audio ends before video
-        audioSource.onended = () => {
-          if (!video.ended && recorder.state === 'recording') {
-            // Let video finish naturally
-          }
-        };
-
-        // Safety timeout
-        setTimeout(() => {
-          if (recorder.state === 'recording') {
-            video.pause();
-            try { audioSource.stop(); } catch {}
-            recorder.stop();
-          }
-        }, Math.min(videoDuration * 1000 + 5000, 60000));
-      };
-
-      video.onerror = () => reject(new Error('Video element failed to load'));
-    });
+    console.log(`[ffmpeg] Muxed: ${(outputBlob.size / 1024).toFixed(0)}KB MP4`);
+    return outputBlob;
   }
 
   // ─── Creative Seed (isolated LLM call for novel ideas) ─────────────

@@ -1016,7 +1016,7 @@ function updateUI() {
 
 function showLatestPost(result) {
   // Convert blobs to data URLs for persistence, then store and display
-  const blob = result.imageBlob || result.previewVideoBlob || result.videoBlob;
+  const blob = result.imageBlob || result.videoBlob;
   let pending = 0;
   const done = () => { pending--; if (pending <= 0) storeAndDisplayPost(result); };
 
@@ -1024,7 +1024,7 @@ function showLatestPost(result) {
     pending++;
     const reader = new FileReader();
     reader.onload = () => {
-      if (result.previewVideoBlob || result.videoBlob) result._videoDataUrl = reader.result;
+      if (result.videoBlob) result._videoDataUrl = reader.result;
       else result._imageDataUrl = reader.result;
       done();
     };
