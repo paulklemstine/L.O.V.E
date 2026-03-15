@@ -1015,19 +1015,28 @@ function updateUI() {
 }
 
 function showLatestPost(result) {
-  // Convert blob to data URL for persistence, then store and display
+  // Convert blobs to data URLs for persistence, then store and display
   const blob = result.imageBlob || result.videoBlob;
+  let pending = 0;
+  const done = () => { pending--; if (pending <= 0) storeAndDisplayPost(result); };
+
   if (blob) {
+    pending++;
     const reader = new FileReader();
     reader.onload = () => {
-      if (result.videoBlob) {
-        result._videoDataUrl = reader.result;
-      } else {
-        result._imageDataUrl = reader.result;
-      }
-      storeAndDisplayPost(result);
+      if (result.videoBlob) result._videoDataUrl = reader.result;
+      else result._imageDataUrl = reader.result;
+      done();
     };
     reader.readAsDataURL(blob);
+  }
+  if (result.audioBlob) {
+    pending++;
+    const reader2 = new FileReader();
+    reader2.onload = () => { result._audioDataUrl = reader2.result; done(); };
+    reader2.readAsDataURL(result.audioBlob);
+  }
+  if (pending === 0) {
   } else {
     storeAndDisplayPost(result);
   }
@@ -1048,6 +1057,7 @@ function displayPost(index) {
 
   const imageUrl = result._imageDataUrl || '';
   const videoUrl = result._videoDataUrl || '';
+  const audioUrl = result._audioDataUrl || '';
   const plan = result.plan || {};
   const seed = result.seed || {};
   const domains = seed.domains || [];
@@ -1058,7 +1068,10 @@ function displayPost(index) {
 
   let mediaHtml = '';
   if (videoUrl) {
-    mediaHtml = `<video src="${videoUrl}" controls autoplay muted loop class="post-image"></video>`;
+    mediaHtml = `<video src="${videoUrl}" controls autoplay loop class="post-image"></video>`;
+    if (audioUrl) {
+      mediaHtml += `<div style="margin-top:8px"><audio src="${audioUrl}" controls style="width:100%"></audio><div style="font-size:11px;color:var(--text-secondary);margin-top:2px">🎙️ TTS Narration</div></div>`;
+    }
   } else if (imageUrl) {
     mediaHtml = `<img src="${imageUrl}" alt="Generated image" class="post-image">`;
   }

@@ -179,7 +179,7 @@ export class BlueskyClient {
       $type: 'app.bsky.embed.video',
       video: videoRef,
       alt: altText || text.slice(0, 100),
-      aspectRatio: { width: 16, height: 9 }
+      aspectRatio: { width: 1, height: 1 }
     };
 
     return await this._fetch('com.atproto.repo.createRecord', {

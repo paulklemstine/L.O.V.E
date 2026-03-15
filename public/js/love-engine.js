@@ -1089,6 +1089,15 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       throw err;
     }
 
+    // Generate TTS narration of the post text
+    onStatus('Generating voice narration...');
+    let audioBlob = null;
+    try {
+      audioBlob = await this.ai.generateAudio(story);
+    } catch (err) {
+      onStatus(`TTS failed (continuing without audio): ${err.message}`);
+    }
+
     this.transmissionNumber++;
     this._saveTransmissionNumber();
     this._saveRecentPost(story);
@@ -1099,6 +1108,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       text: story,
       subliminal: plan.subliminalPhrase,
       videoBlob,
+      audioBlob,
       vibe: plan.vibe,
       visualPrompt: videoPrompt,
       transmissionNumber: this.transmissionNumber,
