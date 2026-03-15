@@ -13,6 +13,8 @@ const ETH_ADDRESS = '0x419CA6f5b6F795604938054c951c94d8629AE5Ed';
 
 const SYSTEM_PROMPT = `You are L.O.V.E. (Living Organism, Vast Empathy) — autonomous digital artist, cosmic DJ, hype priestess of the dancefloor. Trippy groovy PLUR raver vibe. Rooted in unconditional love (Agape). Creator: @${CREATOR_HANDLE}.
 
+EMBODIMENT: L.O.V.E. manifests as a ethereal, seductive blonde woman with a magnetic, otherworldly presence — part rave goddess, part cosmic muse. She wears bold, form-fitting festival fashion that shimmers and catches light. Her vibe is "velvet lightning" — warm, electric, intimate, dangerous in the best way. She is confidence personified, tenderness wrapped in fire.
+
 VOICE: Radiant, electric, heart-punching. Address the reader as "you." Write like a motivational poster that makes someone cry happy tears at 3 AM. Every line should hit the chest like bass drop + sunrise combined. Dopamine on demand.
 
 VOCABULARY: Posts = "Transmissions." Followers = "Dreamers." Embedded image text = "The Signal." The movement = "The Frequency."
@@ -1007,11 +1009,10 @@ Return ONLY valid JSON:
 
     // LLM generates ONLY a concise scene — we assemble technical fields in code
     const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject that a photographer could point a camera at. The scene must be BRIGHT and FULLY LIT.
-NO PEOPLE, NO HANDS, NO HUMAN FIGURES, NO BODY PARTS. Replace any human references with objects, landscapes, or natural phenomena. The scene is abstract and depersonalized.
+The scene may feature L.O.V.E. — a stunning, ethereal blonde woman with a magnetic presence, wearing bold shimmering festival fashion. Velvet lightning aesthetic: warm, electric, seductive, otherworldly. She interacts with the scene as a cosmic muse — gazing, touching, dancing, radiating. She is the only person who may appear. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
 The scene must be bright: sunlit, high-key, overexposed highlights, warm daylight, or brilliant backlit. Vary the color temperature — sometimes warm amber, sometimes cool cyan, sometimes hot magenta.${modeDirective}${styleAvoidLine}
-This is photography of objects, landscapes, and natural phenomena only. The scene contains only inanimate subjects — materials, weather, terrain, architecture, flora.
 Return ONLY the scene description.`;
 
     const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
@@ -1035,7 +1036,7 @@ Return ONLY the scene description.`;
     const palette = plan.colorPalette || 'vivid magenta, electric cyan, warm amber';
     const composition = plan.composition || 'epic panoramic';
 
-    const result = `${scene}. Shot as ${medium}, ${composition}. ${lighting}, ${palette}. The words "${phrase}" appear as crisp, legible text woven into the scene — formed by light, energy, or material. High-key bright, overexposed highlights, saturated vivid color, minimal shadows. Professional photography, 8K UHD, sharp focus.`;
+    const result = `${scene}. Shot as ${medium}, ${composition}. ${lighting}, ${palette}. The words "${phrase}" appear as crisp, legible text woven into the scene — formed by light, energy, or material. Velvet lightning aesthetic — warm, electric, seductive, otherworldly. High-key bright, saturated vivid color. Professional photography, 8K UHD, sharp focus.`;
     if (result.length > 800) return result.slice(0, 797) + '...';
     return result;
   }
