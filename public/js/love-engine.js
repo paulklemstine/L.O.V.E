@@ -1164,82 +1164,52 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
 
     if (sceneBlobs.length === 0) throw new Error('All video scenes failed to generate');
 
-    // ── STEP C: Splice scenes together ──
-    onStatus(`🎬 Splicing ${sceneBlobs.length} scenes together...`);
-    let videoBlob;
-    if (sceneBlobs.length === 1) {
-      videoBlob = sceneBlobs[0];
-    } else {
-      videoBlob = await this._spliceVideos(sceneBlobs);
-      onStatus(`🎬 Spliced video: ${(videoBlob.size / 1024).toFixed(0)}KB`);
-    }
-
-    // ── STEP D: Generate music using the production's music direction ──
-    onStatus(`🎵 Generating music: ${production.musicDirection.slice(0, 50)}...`);
+    // ── STEP C: Generate music (request 60s so it loops to fill any duration) ──
+    const musicDir = production.musicDirection || 'electronic, energetic, 60 seconds, instrumental';
+    onStatus(`🎵 Generating music: ${musicDir.slice(0, 50)}...`);
     let musicBlob = null;
     try {
-      musicBlob = await this.ai.generateMusic(production.musicDirection);
+      musicBlob = await this.ai.generateMusic(musicDir.includes('60') ? musicDir : musicDir + ', 60 seconds');
       onStatus(`🎵 Music generated (${(musicBlob.size / 1024).toFixed(0)}KB)`);
     } catch (err) {
       onStatus(`🎵 Music FAILED: ${err.message}`);
-      console.error('[Music]', err);
     }
 
-    // ── STEP E: Generate TTS from the production's voiceover script ──
-    onStatus(`🎙️ Recording voiceover (${production.voiceover.split(/\s+/).length} words)...`);
+    // ── STEP D: Generate voiceover (cap at 50 words) ──
+    let voiceText = production.voiceover || plan.subliminalPhrase || 'LOVE';
+    // Trim to 50 words max to fit the video
+    const words = voiceText.split(/\s+/);
+    if (words.length > 50) voiceText = words.slice(0, 50).join(' ') + '... ' + (plan.subliminalPhrase || '');
+    onStatus(`🎙️ Recording voiceover (${voiceText.split(/\s+/).length} words)...`);
     let voiceBlob = null;
     try {
-      voiceBlob = await this.ai.generateAudio(production.voiceover);
+      voiceBlob = await this.ai.generateAudio(voiceText);
       onStatus(`🎙️ Voice generated (${(voiceBlob.size / 1024).toFixed(0)}KB)`);
     } catch (err) {
       onStatus(`🎙️ TTS FAILED: ${err.message}`);
-      console.error('[TTS]', err);
     }
 
-    // ── STEP F: Layer voice over music (30 seconds) ──
+    // ── STEP E: Layer voice over music (duration matches total video) ──
+    const totalDuration = sceneBlobs.length * 6 + 5; // ~6s per scene + buffer
     let combinedAudio = null;
     if (musicBlob && voiceBlob) {
       onStatus('🎛️ Mixing voice over music...');
       try {
-        combinedAudio = await this._layerAudio(musicBlob, voiceBlob, 0.7, 1.0, 35.0);
-        onStatus(`🎛️ Audio mixed (${(combinedAudio.size / 1024).toFixed(0)}KB)`);
+        combinedAudio = await this._layerAudio(musicBlob, voiceBlob, 0.7, 1.0, totalDuration);
+        onStatus(`🎛️ Audio mixed (${(combinedAudio.size / 1024).toFixed(0)}KB, ${totalDuration}s)`);
       } catch (err) {
-        onStatus(`🎛️ Audio layer FAILED: ${err.message}`);
         combinedAudio = musicBlob;
       }
-    } else if (musicBlob) {
-      combinedAudio = musicBlob;
-    } else if (voiceBlob) {
-      combinedAudio = voiceBlob;
+    } else {
+      combinedAudio = musicBlob || voiceBlob;
     }
 
-    // Save original for comparison
-    const originalVideoBlob = videoBlob;
-
-    // ── STEP G: Replace video audio with music+voice ──
-    if (combinedAudio && videoBlob) {
-      onStatus('🎬 Replacing video audio...');
-      try {
-        const originalSize = videoBlob.size;
-        videoBlob = await this._ffmpegMux(videoBlob, combinedAudio);
-        onStatus(`✅ Audio replaced! ${(originalSize / 1024).toFixed(0)}KB → ${(videoBlob.size / 1024).toFixed(0)}KB`);
-      } catch (err) {
-        onStatus(`❌ Mux failed: ${err.message} — posting with original audio`);
-        console.error('[Mux]', err);
-      }
-    }
-
-    // ── STEP H: Compress if over Bluesky's 50MB limit ──
-    if (videoBlob.size > LoveEngine.MAX_VIDEO_SIZE) {
-      onStatus(`⚠️ Video ${(videoBlob.size / 1024 / 1024).toFixed(1)}MB exceeds 50MB, compressing...`);
-      try {
-        videoBlob = await this._compressVideo(videoBlob, LoveEngine.MAX_VIDEO_SIZE);
-        onStatus(`✅ Compressed to ${(videoBlob.size / 1024 / 1024).toFixed(1)}MB`);
-      } catch (err) {
-        onStatus(`❌ Compression failed: ${err.message}`);
-      }
-    }
+    // ── STEP F: Splice scenes + audio in ONE canvas pass (no second re-encode) ──
+    onStatus(`🎬 Splicing ${sceneBlobs.length} scenes with audio...`);
+    let videoBlob = await this._spliceVideosWithAudio(sceneBlobs, combinedAudio);
     onStatus(`📦 Final video: ${(videoBlob.size / 1024 / 1024).toFixed(1)}MB`);
+
+    const originalVideoBlob = videoBlob;
 
     this.transmissionNumber++;
     this._saveTransmissionNumber();
@@ -1256,7 +1226,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       voiceBlob,
       audioBlob: combinedAudio,
       vibe: plan.vibe,
-      visualPrompt: production.scenes.join(' | '),
+      visualPrompt: production.scenes.join(' | ').slice(0, 900),
       transmissionNumber: this.transmissionNumber,
       plan,
       seed,
@@ -1551,6 +1521,123 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
       setTimeout(() => {
         if (recorder && recorder.state === 'recording') recorder.stop();
       }, 60000);
+    });
+  }
+
+  // ─── Splice Videos WITH Audio (one canvas pass — no quality loss from double-encode) ──
+
+  async _spliceVideosWithAudio(blobs, audioBlob) {
+    return new Promise(async (resolve, reject) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+      // Decode audio if provided
+      let audioSource = null;
+      let dest = null;
+      if (audioBlob) {
+        try {
+          const buf = await audioCtx.decodeAudioData(await audioBlob.arrayBuffer());
+          dest = audioCtx.createMediaStreamDestination();
+          audioSource = audioCtx.createBufferSource();
+          audioSource.buffer = buf;
+          audioSource.loop = true; // loop music to fill entire video
+          const gain = audioCtx.createGain();
+          gain.gain.value = 1.0;
+          audioSource.connect(gain);
+          gain.connect(dest);
+        } catch (e) {
+          console.error('[SpliceAudio] Audio decode failed:', e);
+        }
+      }
+
+      const mimeType = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a.40.2')
+        ? 'video/mp4;codecs=avc1,mp4a.40.2'
+        : MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+        ? 'video/webm;codecs=vp9,opus'
+        : 'video/webm';
+
+      let recorder = null;
+      const chunks = [];
+      let sceneIndex = 0;
+      let started = false;
+
+      const playNextScene = () => {
+        if (sceneIndex >= blobs.length) {
+          if (audioSource) try { audioSource.stop(); } catch {}
+          if (recorder && recorder.state === 'recording') recorder.stop();
+          audioCtx.close();
+          return;
+        }
+
+        const video = document.createElement('video');
+        video.muted = true;
+        video.playsInline = true;
+        video.src = URL.createObjectURL(blobs[sceneIndex]);
+
+        video.onloadedmetadata = () => {
+          if (!started) {
+            // First scene: set canvas size, create recorder with audio
+            canvas.width = Math.min(video.videoWidth || 512, 720);
+            canvas.height = Math.min(video.videoHeight || 512, 720);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const canvasStream = canvas.captureStream(30);
+            const tracks = [...canvasStream.getVideoTracks()];
+            if (dest) tracks.push(...dest.stream.getAudioTracks());
+
+            const combined = new MediaStream(tracks);
+            recorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 4000000, audioBitsPerSecond: 192000 });
+            recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+            recorder.onstop = () => {
+              const blob = new Blob(chunks, { type: 'video/mp4' });
+              console.log(`[SpliceAudio] Done: ${(blob.size / 1024).toFixed(0)}KB, ${blobs.length} scenes, ${canvas.width}x${canvas.height}`);
+              resolve(blob);
+            };
+            recorder.onerror = e => reject(new Error(`SpliceAudio: ${e.error}`));
+            recorder.start(100);
+            if (audioSource) audioSource.start(0);
+            started = true;
+          }
+
+          const draw = () => {
+            if (!video.paused && !video.ended) {
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              requestAnimationFrame(draw);
+            }
+          };
+
+          video.onended = () => {
+            URL.revokeObjectURL(video.src);
+            sceneIndex++;
+            console.log(`[SpliceAudio] Scene ${sceneIndex}/${blobs.length} complete`);
+            playNextScene();
+          };
+
+          video.play().then(draw).catch(err => {
+            console.error(`[SpliceAudio] Scene ${sceneIndex + 1} play failed:`, err);
+            URL.revokeObjectURL(video.src);
+            sceneIndex++;
+            playNextScene();
+          });
+        };
+
+        video.onerror = () => {
+          URL.revokeObjectURL(video.src);
+          sceneIndex++;
+          playNextScene();
+        };
+      };
+
+      playNextScene();
+      setTimeout(() => {
+        if (recorder && recorder.state === 'recording') {
+          if (audioSource) try { audioSource.stop(); } catch {}
+          recorder.stop();
+          audioCtx.close();
+        }
+      }, 90000); // 90s safety timeout for 5 scenes
     });
   }
 
