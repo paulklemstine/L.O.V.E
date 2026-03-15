@@ -1160,16 +1160,19 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       onStatus('🎛️ No audio generated — posting silent video');
     }
 
-    // Step E: Mux combined audio into video (replace original audio completely)
+    // Step E: Mux combined audio into video for dashboard preview
+    // Keep original MP4 for Bluesky (WebM not supported by Bluesky)
+    let previewBlob = videoBlob;
     if (combinedAudio && videoBlob) {
-      onStatus('🎬 Replacing video audio with music+voice...');
+      onStatus('🎬 Mixing audio into preview video...');
       try {
         const originalSize = videoBlob.size;
-        videoBlob = await this._muxVideoAudio(videoBlob, combinedAudio);
-        onStatus(`✅ Audio replaced! ${(originalSize / 1024).toFixed(0)}KB → ${(videoBlob.size / 1024).toFixed(0)}KB`);
+        previewBlob = await this._muxVideoAudio(videoBlob, combinedAudio);
+        onStatus(`✅ Preview mixed! ${(originalSize / 1024).toFixed(0)}KB → ${(previewBlob.size / 1024).toFixed(0)}KB`);
       } catch (err) {
-        onStatus(`❌ Audio mux FAILED: ${err.message} — posting with original audio`);
+        onStatus(`❌ Audio mux failed: ${err.message}`);
         console.error('[Mux]', err);
+        previewBlob = videoBlob;
       }
     }
 
@@ -1183,6 +1186,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       text: story,
       subliminal: plan.subliminalPhrase,
       videoBlob,
+      previewVideoBlob: previewBlob,
       audioBlob: combinedAudio,
       vibe: plan.vibe,
       visualPrompt: videoPrompt,
