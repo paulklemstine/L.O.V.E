@@ -618,6 +618,27 @@ export class LoveEngine {
     'Mamiya RZ67', 'Contax 645', 'Rolleiflex 2.8F', 'Linhof Technika',
   ];
 
+  static TEXT_SUBSTRATES = [
+    'neon sign glowing on a brick wall', 'carved into a wooden signpost',
+    'chiseled into stone monument', 'spray-painted graffiti on concrete',
+    'embossed on a leather journal cover', 'printed on a vintage poster',
+    'chalked on a blackboard', 'typed on a typewriter page',
+    'engraved on a brass plaque', 'stitched into a denim jacket back',
+    'stamped into wet cement sidewalk', 'written in skywriting smoke',
+    'illuminated on a movie theater marquee', 'etched into frosted glass',
+    'tattooed in bold script', 'painted on a wooden surfboard',
+    'spelled in Scrabble tiles on a table', 'formed by lit birthday candles',
+    'pressed into a wax seal', 'branded into leather with a hot iron',
+    'projected on a building facade', 'written in lipstick on a mirror',
+    'spelled in magnetic fridge letters', 'scratched into beach sand',
+    'formed by autumn leaves arranged on grass', 'printed on a coffee cup sleeve',
+    'hand-lettered on a protest sign', 'embroidered on a pillow',
+    'laser-cut from brushed steel', 'spelled in string lights at night',
+    'printed on a bumper sticker', 'carved into a tree trunk',
+    'stenciled on a shipping crate', 'written in condensation on a window',
+    'formed by city lights in a long exposure', 'painted on a highway overpass',
+  ];
+
   static ANALOG_TEXTURES = [
     'subtle film grain', 'matte finish', 'halation glow on highlights',
     'light chemical bloom', 'slight vignette falloff', 'soft lens flare artifacts',
@@ -842,6 +863,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       ['TECHNICAL_SWEETENERS', LoveEngine.TECHNICAL_SWEETENERS, 'render engine and 3D technology terms that boost photorealism — e.g. Octane Render, ray tracing'],
       ['CAMERA_BODIES', LoveEngine.CAMERA_BODIES, 'specific professional camera body models with brand and model — e.g. Sony α7R IV, Hasselblad X2D'],
       ['ANALOG_TEXTURES', LoveEngine.ANALOG_TEXTURES, 'subtle analog film imperfections that prevent digital plastic look — e.g. subtle film grain, halation, matte finish'],
+      ['TEXT_SUBSTRATES', LoveEngine.TEXT_SUBSTRATES, 'simple real-world ways text physically appears on objects — e.g. neon sign on brick wall, carved into wooden signpost, spray-painted graffiti on concrete'],
       ['TRIPPY_EFFECTS', LoveEngine.TRIPPY_EFFECTS, 'psychedelic visual effects inspired by DMT, LSD, mescaline, psilocybin experiences — specific visual distortions, overlays, and reality-warping phenomena'],
       ['IMAGE_STYLES', LoveEngine.IMAGE_STYLES, 'distinct visual art styles and rendering approaches — specific named styles like anime, oil painting, cyberpunk, etc'],
 
@@ -864,7 +886,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     const lists = [
       'PHOTOGRAPHY_STYLES', 'LIGHTING_STYLES', 'SUGGESTED_COLORS',
       'COMPOSITION_TYPES', 'STRUGGLE_TYPES', 'METAPHOR_EXAMPLES', 'PHRASE_STRUCTURES',
-      'LOVE_OUTFITS', 'FILM_STOCKS', 'LENS_SPECS', 'TECHNICAL_SWEETENERS', 'CAMERA_BODIES', 'ANALOG_TEXTURES', 'TRIPPY_EFFECTS', 'IMAGE_STYLES',
+      'LOVE_OUTFITS', 'FILM_STOCKS', 'LENS_SPECS', 'TECHNICAL_SWEETENERS', 'CAMERA_BODIES', 'ANALOG_TEXTURES', 'TEXT_SUBSTRATES', 'TRIPPY_EFFECTS', 'IMAGE_STYLES',
       'LOVE_INTERACTIONS', 'ARCHETYPE_ADJECTIVES', 'ARCHETYPE_NOUNS', 'AESTHETIC_VIBES', 'SENSORY_DETAILS', 'VOICE_VIBES',
     ];
     for (const name of lists) {
@@ -1418,18 +1440,22 @@ Return ONLY valid JSON:
       loveLine = 'The scene contains only objects, landscapes, natural phenomena, or flora. Pure abstract beauty.';
     }
 
-    // LLM generates spatial scene layers with text substrate baked in
-    const prompt = `Describe a BRIGHT scene in THREE spatial layers plus how text physically exists. Each layer under 40 chars.
+    // Give LLM example substrates for quality calibration
+    const substrateExamples = this._pickRandom(LoveEngine.TEXT_SUBSTRATES, 4).join('; ');
+
+    // LLM generates spatial scene layers + invents scene-appropriate text rendering
+    const prompt = `Describe a BRIGHT scene in THREE spatial layers. Each layer under 40 chars.
 ${loveLine}
-Scenes are observed, never touched. Objects mid-action as if frozen in time. Tools mid-cut, materials mid-fall. No person holding or operating anything.
+Scenes are observed, never touched. Objects frozen mid-action. No people, no hands.
 Creative direction: ${seedContext}
 Aesthetic: ${aestheticVibe}.${modeDirective}${styleAvoidLine}
+The phrase "${phrase}" must appear in the scene. Describe in under 15 words how the text is physically rendered using a material or object ALREADY IN the scene. The text should look like it belongs — as if it was always part of this world. Examples of the quality level: ${substrateExamples}.
 Return ONLY valid JSON:
 {
-  "foreground": "close physical detail, frozen mid-action",
+  "foreground": "close physical detail",
   "midground": "main subject",
   "background": "environment or atmosphere",
-  "textSubstrate": "exactly how the words '${phrase}' are physically formed — the material, technique, and surface (e.g. carved into weathered oak, etched into brass plate, spelled by bioluminescent plankton, formed by morning frost on glass, pressed into wet clay)"
+  "textRendering": "under 15 words: how ${phrase} physically appears using materials from THIS scene"
 }`;
 
     const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
@@ -1439,22 +1465,23 @@ Return ONLY valid JSON:
       { temperature: temp, label: 'Image Prompt' }
     );
 
-    // Parse spatial layers with text substrate baked into scene
+    // Parse spatial layers — LLM chose best-fitting text rendering
     const sceneData = this.ai.extractJSON(raw);
     let scene;
+    const chosenSubstrate = sceneData?.textRendering || this._pickRandom(LoveEngine.TEXT_SUBSTRATES, 1)[0];
     if (sceneData?.foreground && sceneData?.midground) {
       const bg = sceneData.background ? `. In the background, ${sceneData.background}` : '';
-      const substrate = sceneData.textSubstrate ? `, ${sceneData.textSubstrate}` : `, "${phrase}" carved into the surface`;
-      scene = `In the foreground, ${sceneData.foreground}. ${sceneData.midground}${substrate}${bg}`;
+      scene = `In the foreground, ${sceneData.foreground}. ${sceneData.midground}${bg}. "${phrase}" ${chosenSubstrate}`;
     } else {
       scene = (raw || '').trim();
       if (scene.startsWith('"') && scene.endsWith('"')) scene = scene.slice(1, -1);
       if (scene.startsWith('```')) scene = scene.replace(/```\w*\n?/g, '').trim();
+      if (scene) scene += `. "${phrase}" ${chosenSubstrate}`;
     }
     if (!scene || scene.length < 10) {
-      scene = `"${phrase}" carved into weathered stone in a vivid dreamscape`;
+      scene = `"${phrase}" ${chosenSubstrate}`;
     }
-    if (scene.length > 350) scene = scene.slice(0, 347) + '...';
+    if (scene.length > 400) scene = scene.slice(0, 397) + '...';
 
     // Assemble: Subject → Lighting → Style → Color → Composition → Effects → Text → Technical
     const medium = plan.imageMedium || this._pickRandom(LoveEngine.PHOTOGRAPHY_STYLES, 1)[0];

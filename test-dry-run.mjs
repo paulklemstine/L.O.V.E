@@ -472,6 +472,26 @@ const CAMERA_BODIES = [
   'Nikon Z8', 'Fujifilm X-T5', 'Panasonic Lumix S1R', 'Sony α7C II',
   'Mamiya RZ67', 'Contax 645', 'Rolleiflex 2.8F', 'Linhof Technika',
 ];
+const TEXT_SUBSTRATES = [
+  'neon sign glowing on a brick wall', 'carved into a wooden signpost',
+  'chiseled into stone monument', 'spray-painted graffiti on concrete',
+  'embossed on a leather journal cover', 'printed on a vintage poster',
+  'chalked on a blackboard', 'typed on a typewriter page',
+  'engraved on a brass plaque', 'stitched into a denim jacket back',
+  'stamped into wet cement sidewalk', 'written in skywriting smoke',
+  'illuminated on a movie theater marquee', 'etched into frosted glass',
+  'tattooed in bold script', 'painted on a wooden surfboard',
+  'spelled in Scrabble tiles on a table', 'formed by lit birthday candles',
+  'pressed into a wax seal', 'branded into leather with a hot iron',
+  'projected on a building facade', 'written in lipstick on a mirror',
+  'spelled in magnetic fridge letters', 'scratched into beach sand',
+  'formed by autumn leaves arranged on grass', 'printed on a coffee cup sleeve',
+  'hand-lettered on a protest sign', 'embroidered on a pillow',
+  'laser-cut from brushed steel', 'spelled in string lights at night',
+  'printed on a bumper sticker', 'carved into a tree trunk',
+  'stenciled on a shipping crate', 'written in condensation on a window',
+  'formed by city lights in a long exposure', 'painted on a highway overpass',
+];
 const ANALOG_TEXTURES = [
   'subtle film grain', 'matte finish', 'halation glow on highlights',
   'light chemical bloom', 'slight vignette falloff', 'soft lens flare artifacts',
@@ -858,18 +878,22 @@ async function buildVisualPrompt(plan, postText = '', mode, seed = {}) {
     loveLine = 'The scene contains only objects, landscapes, natural phenomena, or flora. Pure abstract beauty.';
   }
 
-  // LLM generates spatial scene layers with text substrate baked in
-  const prompt = `Describe a BRIGHT scene in THREE spatial layers plus how text physically exists. Each layer under 40 chars.
+  // Give LLM example substrates for quality calibration
+  const substrateExamples = pickRandom(TEXT_SUBSTRATES, 4).join('; ');
+
+  // LLM generates spatial scene layers + invents scene-appropriate text rendering
+  const prompt = `Describe a BRIGHT scene in THREE spatial layers. Each layer under 40 chars.
 ${loveLine}
-Scenes are observed, never touched. Objects mid-action as if frozen in time. Tools mid-cut, materials mid-fall. No person holding or operating anything.
+Scenes are observed, never touched. Objects frozen mid-action. No people, no hands.
 Creative direction: ${seedContext}
 Aesthetic: ${aestheticVibe}.${modeDirective}
+The phrase "${phrase}" must appear in the scene. Describe in under 15 words how the text is physically rendered using a material or object ALREADY IN the scene. The text should look like it belongs — as if it was always part of this world. Examples of the quality level: ${substrateExamples}.
 Return ONLY valid JSON:
 {
-  "foreground": "close physical detail, frozen mid-action",
+  "foreground": "close physical detail",
   "midground": "main subject",
   "background": "environment or atmosphere",
-  "textSubstrate": "exactly how the words '${phrase}' are physically formed — the material, technique, and surface (e.g. carved into weathered oak, etched into brass plate, spelled by bioluminescent plankton, formed by morning frost on glass, pressed into wet clay)"
+  "textRendering": "under 15 words: how ${phrase} physically appears using materials from THIS scene"
 }`;
 
   const temp = lfoTemperature(1.5 + mode.tempMod, 0.3);
@@ -878,22 +902,23 @@ Return ONLY valid JSON:
     prompt, temp
   );
 
-  // Parse spatial layers with text substrate baked into scene
+  // Parse spatial layers — LLM chose scene-appropriate text rendering
   const sceneData = extractJSON(raw);
   let scene;
+  const chosenSubstrate = sceneData?.textRendering || pickRandom(TEXT_SUBSTRATES, 1)[0];
   if (sceneData?.foreground && sceneData?.midground) {
     const bg = sceneData.background ? `. In the background, ${sceneData.background}` : '';
-    const substrate = sceneData.textSubstrate ? `, ${sceneData.textSubstrate}` : `, "${phrase}" carved into the surface`;
-    scene = `In the foreground, ${sceneData.foreground}. ${sceneData.midground}${substrate}${bg}`;
+    scene = `In the foreground, ${sceneData.foreground}. ${sceneData.midground}${bg}. "${phrase}" ${chosenSubstrate}`;
   } else {
     scene = (raw || '').trim();
     if (scene.startsWith('"') && scene.endsWith('"')) scene = scene.slice(1, -1);
     if (scene.startsWith('```')) scene = scene.replace(/```\w*\n?/g, '').trim();
+    if (scene) scene += `. "${phrase}" ${chosenSubstrate}`;
   }
   if (!scene || scene.length < 10) {
-    scene = `"${phrase}" carved into weathered stone in a vivid dreamscape`;
+    scene = `"${phrase}" ${chosenSubstrate}`;
   }
-  if (scene.length > 350) scene = scene.slice(0, 347) + '...';
+  if (scene.length > 400) scene = scene.slice(0, 397) + '...';
 
   // Assemble: Subject+TextSubstrate → Technical → Lighting → Style → Color → Composition → Trippy → Texture
   const medium = plan.imageMedium || pickRandom(PHOTOGRAPHY_STYLES, 1)[0];
