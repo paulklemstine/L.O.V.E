@@ -459,11 +459,7 @@ async function forceVideoPost() {
   const pollinationsKey = document.getElementById('pollinations-key').value.trim();
   if (!pollinationsKey) {
     log('ERROR: Pollinations API key required.');
-    return;
-  }
-
-  if (!bsky?.isLoggedIn) {
-    log('ERROR: Log in to Bluesky first (start the loop or save credentials).');
+    alert('Pollinations API key required. Enter it in Settings.');
     return;
   }
 
@@ -471,8 +467,10 @@ async function forceVideoPost() {
   love = love || new LoveEngine(ai);
 
   log('🎬 Force VIDEO post — generating cinematic content...');
+  setStatus('Generating video...');
   try {
     const result = await love.generateVideoPost((status) => {
+      setStatus(status);
       log(status);
     });
 
@@ -484,19 +482,26 @@ async function forceVideoPost() {
     const txNum = result.transmissionNumber || '?';
     log(`🎬 Video Transmission #${txNum} (${result.text.length} chars): ${result.text.slice(0, 80)}...`, formatCallLog(result.callLog) || result.text);
     log(`🔮 Signal: ${result.subliminal} | Vibe: ${result.vibe}`);
+    showLatestPost(result);
 
-    try {
-      setStatus('Broadcasting Video Transmission...');
-      const postResult = await bsky.createVideoPost(result.text, result.videoBlob, result.visualPrompt);
-      stats.posts++;
-      log(`✅ Video Transmission #${txNum} broadcast: ${postResult.uri}`);
-      showLatestPost(result);
-    } catch (err) {
-      log(`⏳ Video post FAILED (${err.message})`);
-      showLatestPost(result);
+    // Try to post to Bluesky if logged in
+    if (bsky?.isLoggedIn) {
+      try {
+        setStatus('Broadcasting Video Transmission...');
+        const postResult = await bsky.createVideoPost(result.text, result.videoBlob, result.visualPrompt);
+        stats.posts++;
+        log(`✅ Video Transmission #${txNum} broadcast: ${postResult.uri}`);
+      } catch (err) {
+        log(`⏳ Video post to Bluesky FAILED (${err.message}) — video saved in dashboard`);
+      }
+    } else {
+      log('📺 Video generated and saved in dashboard. Start L.O.V.E. to post to Bluesky.');
     }
+
+    setStatus(isRunning ? 'Running' : 'Idle');
   } catch (err) {
-    log(`Video post FAILED: ${err.message}`);
+    log(`Video generation FAILED: ${err.message}`);
+    setStatus(isRunning ? 'Running' : 'Idle');
     console.error(err);
   }
 }
