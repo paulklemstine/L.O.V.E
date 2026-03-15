@@ -417,18 +417,6 @@ export class LoveEngine {
     'candles', 'nests', 'storms', 'clay', 'embers', 'hinges',
   ];
 
-  static BANNED_WORDS = [
-    'bloom', 'harvest', 'gold', 'golden', 'seeds', 'stardust', 'infinite',
-    'sacred', 'glow', 'glowing', 'unstoppable', 'light', 'luminous',
-    'radiant', 'ascending', 'breath', 'breathe', 'each', 'crack', 'cracks',
-  ];
-
-  static BANNED_IMAGE_TERMS = [
-    'gouache', 'vellum', 'collage', 'ink', 'enamel', 'rice paper', 'miniature',
-    'brushwork', 'painting', 'hand', 'hands', 'finger', 'fingers', 'thumb',
-    'palm', 'grip', 'person', 'figure', 'body', 'sunlit', 'golden',
-    'prismatic', 'iridescent', 'luminous', 'saffron',
-  ];
 
   _pickRandom(arr, n = 1) {
     const shuffled = [...arr].sort(() => Math.random() - 0.5);
@@ -857,17 +845,6 @@ Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"
       { temperature: 0, label: 'Critic' }
     );
     const data = this.ai.extractJSON(raw);
-    // Auto-grow banned words from critic feedback
-    if (data?.cliches?.length) {
-      for (const cliche of data.cliches) {
-        const words = cliche.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-        for (const word of words) {
-          if (!LoveEngine.BANNED_WORDS.includes(word)) {
-            LoveEngine.BANNED_WORDS.push(word);
-          }
-        }
-      }
-    }
     return data || { score: 5, cliches: [] };
   }
 
@@ -962,8 +939,8 @@ LANGUAGE RULES:
 - End inside the metaphor. Trust the reader. The last line should NOT explain what the metaphor meant.
 - Use warm, physical, plain language. Sensory details everyone can feel: warmth, cold, weight, softness, pulling, holding, breaking, mending.
 - The source domains inspire the metaphor's flavor, but use everyday words for the domain's concepts. Say "the kiln" not "the refractory lining." Say "the needle" not "the sheave."
-- Avoid these overused words: ${LoveEngine.BANNED_WORDS.join(', ')}. Find fresh alternatives from the source domain.
-- Avoid these overused patterns: "You're not X, you're Y" reframes. "You're already [adjective]." endings. Explaining what the metaphor means after showing it.
+- Use fresh, surprising vocabulary drawn from the source domain's specific tools, textures, and processes. Every word should feel chosen for the first time.
+- End inside the metaphor. Trust the reader to feel the meaning without explanation.
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
@@ -1012,7 +989,7 @@ Return ONLY valid JSON:
     const modeDirective = mode.imageDirective ? ` ${mode.imageDirective}.` : '';
     const recentStyles = this._getRecentImageStyleString();
     const styleAvoidLine = recentStyles
-      ? ` Avoid these recent styles: ${recentStyles}.`
+      ? ` Recent images used: ${recentStyles}. Choose something completely different.`
       : '';
 
     const phrase = plan.subliminalPhrase || 'LOVE';
@@ -1034,7 +1011,7 @@ NO PEOPLE, NO HANDS, NO HUMAN FIGURES, NO BODY PARTS. Replace any human referenc
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
 The scene must be bright: sunlit, high-key, overexposed highlights, warm daylight, or brilliant backlit. Vary the color temperature — sometimes warm amber, sometimes cool cyan, sometimes hot magenta.${modeDirective}${styleAvoidLine}
-Avoid these terms in scene: ${LoveEngine.BANNED_IMAGE_TERMS.join(', ')}. This is photography of objects, landscapes, and phenomena — never people.
+This is photography of objects, landscapes, and natural phenomena only. The scene contains only inanimate subjects — materials, weather, terrain, architecture, flora.
 Return ONLY the scene description.`;
 
     const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);

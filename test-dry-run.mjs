@@ -277,17 +277,6 @@ const METAPHOR_EXAMPLES = [
   'bridges', 'keys', 'roots', 'stones', 'rivers', 'mirrors', 'maps',
   'candles', 'nests', 'storms', 'clay', 'embers', 'hinges',
 ];
-const BANNED_WORDS = [
-  'bloom', 'harvest', 'gold', 'golden', 'seeds', 'stardust', 'infinite',
-  'sacred', 'glow', 'glowing', 'unstoppable', 'light', 'luminous',
-  'radiant', 'ascending', 'breath', 'breathe', 'each', 'crack', 'cracks',
-];
-const BANNED_IMAGE_TERMS = [
-  'gouache', 'vellum', 'collage', 'ink', 'enamel', 'rice paper', 'miniature',
-  'brushwork', 'painting', 'hand', 'hands', 'finger', 'fingers', 'thumb',
-  'palm', 'grip', 'person', 'figure', 'body', 'sunlit', 'golden',
-  'prismatic', 'iridescent', 'luminous', 'saffron',
-];
 
 function pickRandom(arr, n = 1) {
   const shuffled = [...arr].sort(() => Math.random() - 0.5);
@@ -485,8 +474,8 @@ LANGUAGE RULES:
 - End inside the metaphor. Trust the reader. The last line should NOT explain what the metaphor meant.
 - Use warm, physical, plain language. Sensory details everyone can feel: warmth, cold, weight, softness, pulling, holding, breaking, mending.
 - The source domains inspire the metaphor's flavor, but use everyday words for the domain's concepts. Say "the kiln" not "the refractory lining." Say "the needle" not "the sheave."
-- Avoid these overused words: ${BANNED_WORDS.join(', ')}. Find fresh alternatives from the source domain.
-- Avoid these overused patterns: "You're not X, you're Y" reframes. "You're already [adjective]." endings. Explaining what the metaphor means after showing it.
+- Use fresh, surprising vocabulary drawn from the source domain's specific tools, textures, and processes. Every word should feel chosen for the first time.
+- End inside the metaphor. Trust the reader to feel the meaning without explanation.
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
@@ -520,7 +509,7 @@ NO PEOPLE, NO HANDS, NO HUMAN FIGURES, NO BODY PARTS. Replace any human referenc
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
 The scene must be bright: sunlit, high-key, overexposed highlights, warm daylight, or brilliant backlit. Vary the color temperature — sometimes warm amber, sometimes cool cyan, sometimes hot magenta.${modeDirective}
-Avoid these terms in scene: ${BANNED_IMAGE_TERMS.join(', ')}. This is photography of objects, landscapes, and phenomena — never people.
+This is photography of objects, landscapes, and natural phenomena only. The scene contains only inanimate subjects — materials, weather, terrain, architecture, flora.
 Return ONLY the scene description.`;
 
   const temp = lfoTemperature(1.5 + mode.tempMod, 0.3);
