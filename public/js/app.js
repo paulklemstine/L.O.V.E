@@ -457,7 +457,10 @@ async function forcePost() {
 
 window._forceVideoPost = forceVideoPost;
 async function forceVideoPost() {
+  const handle = document.getElementById('bsky-handle').value.trim();
+  const password = document.getElementById('bsky-password').value.trim();
   const pollinationsKey = document.getElementById('pollinations-key').value.trim();
+
   if (!pollinationsKey) {
     log('ERROR: Pollinations API key required.');
     alert('Pollinations API key required. Enter it in Settings.');
@@ -466,6 +469,18 @@ async function forceVideoPost() {
 
   ai = ai || new PollinationsClient(pollinationsKey);
   love = love || new LoveEngine(ai);
+
+  // Auto-login to Bluesky if not already logged in
+  if (!bsky?.isLoggedIn && handle && password) {
+    bsky = bsky || new BlueskyClient();
+    try {
+      log('Logging in to Bluesky...');
+      const session = await bsky.login(handle, password);
+      log(`Logged in as @${session.handle} (${session.did})`);
+    } catch (err) {
+      log(`Bluesky login failed: ${err.message} — video will be generated but not posted`);
+    }
+  }
 
   log('🎬 Force VIDEO post — generating cinematic content...');
   setStatus('Generating video...');
