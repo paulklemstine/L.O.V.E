@@ -1134,11 +1134,11 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     try {
       const voiceScript = await this.ai.generateText(
         'You write ultra-short spoken voiceover scripts for 6-second motivational videos. Warm, intimate, powerful.',
-        `Write a single spoken line (under 15 words) that a narrator reads aloud over a 6-second video.
-The subliminal phrase is: "${plan.subliminalPhrase}"
-The post text is: "${story.slice(0, 120)}"
-Bridge both — capture the emotional core in one breath. Spoken aloud, warm and direct.
-Return ONLY the spoken line, nothing else.`,
+        `Write ONE short spoken line (under 10 words, MAX 10 words) for a 6-second video voiceover.
+Subliminal phrase: "${plan.subliminalPhrase}"
+Post: "${story.slice(0, 80)}"
+Capture the emotional core in one quick breath. Warm, direct, punchy.
+Return ONLY the spoken words, nothing else.`,
         { temperature: 0.9, label: 'Voiceover Script' }
       );
       const script = (voiceScript || '').trim().replace(/^["']|["']$/g, '');
@@ -1304,9 +1304,8 @@ Return ONLY the scene description.`;
     // Music plays from 0 for the full duration (loops to fill)
     // Voice starts at 1.5s — gives a solid music intro before narration
     musicSource.start(0);
-    const voiceStart = Math.min(1.5, duration * 0.2);
-    voiceSource.start(voiceStart);
-    console.log(`[Layer] Music: 0-${duration.toFixed(1)}s (vol ${musicVolume}), Voice: ${voiceStart.toFixed(1)}s (vol ${voiceVolume})`);
+    voiceSource.start(0);
+    console.log(`[Layer] Music: 0-${duration.toFixed(1)}s (vol ${musicVolume}), Voice: 0s (vol ${voiceVolume})`);
 
     // Render to buffer
     const renderedBuffer = await offlineCtx.startRendering();
