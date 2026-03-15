@@ -29,6 +29,10 @@ let activityLogDetails = new Map(); // key: entry string, value: fullText
 let nextPostTime = null; // timestamp for countdown
 let countdownTimer = null;
 
+// ── Post History ──
+const postHistory = [];
+let postHistoryIndex = -1; // -1 means no posts yet
+
 // ── Pollen Budget-Aware Scheduling ──
 // 10 pollen/day = 5/12 pollen/hr ≈ 0.417/hr
 // Cost per post is measured dynamically via balance deltas.
@@ -156,6 +160,12 @@ function setupEventListeners() {
   document.getElementById('btn-stop').addEventListener('click', stopLoop);
   document.getElementById('btn-force-post').addEventListener('click', forcePost);
   document.getElementById('toggle-settings').addEventListener('click', toggleSettings);
+  document.getElementById('btn-prev-post').addEventListener('click', () => {
+    if (postHistoryIndex > 0) displayPost(postHistoryIndex - 1);
+  });
+  document.getElementById('btn-next-post').addEventListener('click', () => {
+    if (postHistoryIndex < postHistory.length - 1) displayPost(postHistoryIndex + 1);
+  });
 
 }
 
@@ -907,14 +917,33 @@ function updateUI() {
 }
 
 function showLatestPost(result) {
-  const container = document.getElementById('latest-post');
-  if (!container) return;
-
-  let imageUrl = '';
+  // Convert blob to data URL for persistence, then store and display
   if (result.imageBlob) {
-    imageUrl = URL.createObjectURL(result.imageBlob);
+    const reader = new FileReader();
+    reader.onload = () => {
+      result._imageDataUrl = reader.result;
+      storeAndDisplayPost(result);
+    };
+    reader.readAsDataURL(result.imageBlob);
+  } else {
+    storeAndDisplayPost(result);
   }
+}
 
+function storeAndDisplayPost(result) {
+  postHistory.push(result);
+  postHistoryIndex = postHistory.length - 1;
+  displayPost(postHistoryIndex);
+}
+
+function displayPost(index) {
+  const container = document.getElementById('latest-post');
+  if (!container || index < 0 || index >= postHistory.length) return;
+
+  postHistoryIndex = index;
+  const result = postHistory[index];
+
+  const imageUrl = result._imageDataUrl || '';
   const plan = result.plan || {};
   const seed = result.seed || {};
   const domains = seed.domains || [];
@@ -958,6 +987,22 @@ function showLatestPost(result) {
       </div>
     </div>
   `;
+
+  updatePostNav();
+}
+
+function updatePostNav() {
+  const counter = document.getElementById('post-counter');
+  const btnPrev = document.getElementById('btn-prev-post');
+  const btnNext = document.getElementById('btn-next-post');
+  if (!counter) return;
+
+  const total = postHistory.length;
+  const current = postHistoryIndex + 1;
+  counter.textContent = total > 0 ? `${current} of ${total}` : '0 of 0';
+
+  if (btnPrev) btnPrev.disabled = postHistoryIndex <= 0;
+  if (btnNext) btnNext.disabled = postHistoryIndex >= total - 1;
 }
 
 function escapeHtml(text) {
