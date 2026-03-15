@@ -63,71 +63,93 @@ export class PollinationsClient {
   /**
    * Generate text using Pollinations OpenAI-compatible API.
    * POST /v1/chat/completions — returns OpenAI JSON format.
-   * Default model: openai (GPT-5 Mini) for planning, claude-airforce (Claude Sonnet 4.6) for content
+   * Model fallback: tries primary model, falls back to secondary on error/empty.
+   * Fallback chain: claude-airforce → claude-fast, openai → openai-fast
    */
+  static FALLBACK_MODELS = {
+    'claude-airforce': 'claude-fast',
+    'claude-fast': 'openai',
+    'openai': 'openai-fast',
+  };
+
   async generateText(systemPrompt, userPrompt, options = {}) {
     const { temperature = 0.85, model = 'openai', maxRetries = 2,
       frequencyPenalty = 0.4, presencePenalty = 0.3 } = options;
 
-    // Only claude models support penalty params on Pollinations
-    const penaltiesSupported = model.startsWith('claude');
+    const modelsToTry = [model];
+    if (PollinationsClient.FALLBACK_MODELS[model]) {
+      modelsToTry.push(PollinationsClient.FALLBACK_MODELS[model]);
+    }
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const body = {
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature,
-          seed: Math.floor(Math.random() * 2147483647),
-          stream: false,
-        };
+    for (const currentModel of modelsToTry) {
+      const penaltiesSupported = currentModel.startsWith('claude');
 
-        if (penaltiesSupported) {
-          body.frequency_penalty = frequencyPenalty;
-          body.presence_penalty = presencePenalty;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const body = {
+            model: currentModel,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature,
+            seed: Math.floor(Math.random() * 2147483647),
+            stream: false,
+          };
+
+          if (penaltiesSupported) {
+            body.frequency_penalty = frequencyPenalty;
+            body.presence_penalty = presencePenalty;
+          }
+
+          if (userPrompt.includes('Return ONLY valid JSON') || userPrompt.includes('Return ONLY raw JSON')) {
+            body.response_format = { type: 'json_object' };
+          }
+
+          const response = await fetch(TEXT_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${this.apiKey}`
+            },
+            body: JSON.stringify(body)
+          });
+
+          if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Pollinations text ${response.status}: ${errText.slice(0, 200)}`);
+          }
+
+          const data = await response.json();
+          const text = data.choices?.[0]?.message?.content || '';
+
+          // If response is empty, try fallback model
+          if (!text.trim() && currentModel !== modelsToTry[modelsToTry.length - 1]) {
+            console.log(`[Pollinations] ${currentModel} returned empty, falling back`);
+            break; // break retry loop, try next model
+          }
+
+          this.callLog.push({
+            label: options.label || 'LLM Call',
+            systemPrompt,
+            userPrompt,
+            response: text,
+            model: currentModel,
+          });
+
+          return text;
+        } catch (err) {
+          if (attempt === maxRetries) {
+            // If we have a fallback model, try it instead of throwing
+            if (currentModel !== modelsToTry[modelsToTry.length - 1]) {
+              console.log(`[Pollinations] ${currentModel} failed, falling back: ${err.message}`);
+              break; // break retry loop, try next model
+            }
+            throw err;
+          }
+          const delay = 5000 * Math.pow(2, attempt);
+          await new Promise(r => setTimeout(r, delay));
         }
-
-        // Force JSON output if prompt asks for JSON
-        if (userPrompt.includes('Return ONLY valid JSON') || userPrompt.includes('Return ONLY raw JSON')) {
-          body.response_format = { type: 'json_object' };
-        }
-
-        const response = await fetch(TEXT_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.apiKey}`
-          },
-          body: JSON.stringify(body)
-        });
-
-        if (!response.ok) {
-          const errText = await response.text();
-          throw new Error(`Pollinations text ${response.status}: ${errText.slice(0, 200)}`);
-        }
-
-        // New API returns OpenAI-compatible JSON
-        const data = await response.json();
-        const text = data.choices?.[0]?.message?.content || '';
-
-        // Log prompt + response for activity log expansion
-        this.callLog.push({
-          label: options.label || 'LLM Call',
-          systemPrompt,
-          userPrompt,
-          response: text,
-          model,
-        });
-
-        return text;
-      } catch (err) {
-        if (attempt === maxRetries) throw err;
-        // Exponential backoff (longer for pk_ key rate limits)
-        const delay = 5000 * Math.pow(2, attempt);
-        await new Promise(r => setTimeout(r, delay));
       }
     }
   }
