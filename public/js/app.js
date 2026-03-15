@@ -167,6 +167,7 @@ function setupEventListeners() {
   document.getElementById('btn-start').addEventListener('click', startLoop);
   document.getElementById('btn-stop').addEventListener('click', stopLoop);
   document.getElementById('btn-force-post').addEventListener('click', forcePost);
+  document.getElementById('btn-force-video').addEventListener('click', forceVideoPost);
   document.getElementById('toggle-settings').addEventListener('click', toggleSettings);
   document.getElementById('btn-prev-post').addEventListener('click', () => {
     if (postHistoryIndex > 0) displayPost(postHistoryIndex - 1);
@@ -450,6 +451,52 @@ async function forcePost() {
     }
   } catch (err) {
     log(`Force post FAILED: ${err.message}`);
+    console.error(err);
+  }
+}
+
+async function forceVideoPost() {
+  const pollinationsKey = document.getElementById('pollinations-key').value.trim();
+  if (!pollinationsKey) {
+    log('ERROR: Pollinations API key required.');
+    return;
+  }
+
+  if (!bsky?.isLoggedIn) {
+    log('ERROR: Log in to Bluesky first (start the loop or save credentials).');
+    return;
+  }
+
+  ai = ai || new PollinationsClient(pollinationsKey);
+  love = love || new LoveEngine(ai);
+
+  log('🎬 Force VIDEO post — generating cinematic content...');
+  try {
+    const result = await love.generateVideoPost((status) => {
+      log(status);
+    });
+
+    if (!result.text) {
+      log('ERROR: No text generated.');
+      return;
+    }
+
+    const txNum = result.transmissionNumber || '?';
+    log(`🎬 Video Transmission #${txNum} (${result.text.length} chars): ${result.text.slice(0, 80)}...`, formatCallLog(result.callLog) || result.text);
+    log(`🔮 Signal: ${result.subliminal} | Vibe: ${result.vibe}`);
+
+    try {
+      setStatus('Broadcasting Video Transmission...');
+      const postResult = await bsky.createVideoPost(result.text, result.videoBlob, result.visualPrompt);
+      stats.posts++;
+      log(`✅ Video Transmission #${txNum} broadcast: ${postResult.uri}`);
+      showLatestPost(result);
+    } catch (err) {
+      log(`⏳ Video post FAILED (${err.message})`);
+      showLatestPost(result);
+    }
+  } catch (err) {
+    log(`Video post FAILED: ${err.message}`);
     console.error(err);
   }
 }
@@ -963,13 +1010,18 @@ function updateUI() {
 
 function showLatestPost(result) {
   // Convert blob to data URL for persistence, then store and display
-  if (result.imageBlob) {
+  const blob = result.imageBlob || result.videoBlob;
+  if (blob) {
     const reader = new FileReader();
     reader.onload = () => {
-      result._imageDataUrl = reader.result;
+      if (result.videoBlob) {
+        result._videoDataUrl = reader.result;
+      } else {
+        result._imageDataUrl = reader.result;
+      }
       storeAndDisplayPost(result);
     };
-    reader.readAsDataURL(result.imageBlob);
+    reader.readAsDataURL(blob);
   } else {
     storeAndDisplayPost(result);
   }
@@ -989,6 +1041,7 @@ function displayPost(index) {
   const result = postHistory[index];
 
   const imageUrl = result._imageDataUrl || '';
+  const videoUrl = result._videoDataUrl || '';
   const plan = result.plan || {};
   const seed = result.seed || {};
   const domains = seed.domains || [];
@@ -997,8 +1050,15 @@ function displayPost(index) {
   const tag = (label, value, cls) =>
     value ? `<span class="meta-tag ${cls}"><b>${escapeHtml(label)}</b> ${escapeHtml(String(value))}</span>` : '';
 
+  let mediaHtml = '';
+  if (videoUrl) {
+    mediaHtml = `<video src="${videoUrl}" controls autoplay muted loop class="post-image"></video>`;
+  } else if (imageUrl) {
+    mediaHtml = `<img src="${imageUrl}" alt="Generated image" class="post-image">`;
+  }
+
   container.innerHTML = `
-    ${imageUrl ? `<img src="${imageUrl}" alt="Generated image" class="post-image">` : ''}
+    ${mediaHtml}
     <div class="post-text">${escapeHtml(result.text)}</div>
     <div class="post-details">
       <div class="detail-group">

@@ -198,6 +198,49 @@ export class PollinationsClient {
   }
 
   /**
+   * Generate a video and return it as a Blob.
+   * Model: grok-video (only free-tier option, 65 videos/pollen)
+   */
+  async generateVideo(prompt, options = {}) {
+    const { model = 'grok-video', seed = Math.floor(Math.random() * 2147483647) } = options;
+    const encoded = encodeURIComponent(prompt);
+    const url = `${BASE_URL}/video/${encoded}?model=${model}&seed=${seed}&nologo=true`;
+
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${this.apiKey}` }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Pollinations video ${response.status}`);
+    }
+
+    return await response.blob();
+  }
+
+  /**
+   * Generate TTS audio and return it as a Blob.
+   * Model: qwen3-tts (cheapest) or elevenlabs (better quality)
+   */
+  async generateAudio(text, options = {}) {
+    const { model = 'qwen3-tts', voice = 'alloy' } = options;
+
+    const response = await fetch(`${BASE_URL}/v1/audio/speech`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`
+      },
+      body: JSON.stringify({ model, input: text, voice })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Pollinations audio ${response.status}`);
+    }
+
+    return await response.blob();
+  }
+
+  /**
    * Generate text and parse JSON from the response.
    */
   async generateJSON(systemPrompt, userPrompt, options = {}) {

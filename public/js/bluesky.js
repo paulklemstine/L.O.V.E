@@ -158,6 +158,95 @@ export class BlueskyClient {
   }
 
   /**
+   * Create a post with a video embed.
+   * Uploads video via the Bluesky video service, polls until processed.
+   */
+  async createVideoPost(text, videoBlob, altText = '') {
+    const { text: cleanText, facets } = await this._resolvedFacets(text);
+
+    // Upload video to Bluesky video service
+    const videoRef = await this.uploadVideo(videoBlob);
+
+    const record = {
+      $type: 'app.bsky.feed.post',
+      text: cleanText,
+      createdAt: new Date().toISOString()
+    };
+
+    if (facets.length > 0) record.facets = facets;
+
+    record.embed = {
+      $type: 'app.bsky.embed.video',
+      video: videoRef,
+      alt: altText || text.slice(0, 100),
+      aspectRatio: { width: 16, height: 9 }
+    };
+
+    return await this._fetch('com.atproto.repo.createRecord', {
+      method: 'POST',
+      body: {
+        repo: this.session.did,
+        collection: 'app.bsky.feed.post',
+        record
+      }
+    });
+  }
+
+  /**
+   * Upload video to Bluesky video service.
+   * Tries standard uploadBlob first, falls back to dedicated video service.
+   */
+  async uploadVideo(videoBlob) {
+    // Try standard uploadBlob with video content type
+    try {
+      const videoWithType = new Blob([videoBlob], { type: 'video/mp4' });
+      const blobRef = await this.uploadBlob(videoWithType);
+      return blobRef;
+    } catch (e) {
+      console.log('[Bluesky] Standard uploadBlob failed for video, trying video service:', e.message);
+    }
+
+    // Fall back to dedicated video upload service
+    const pdsHost = this.session?.pdsEndpoint || 'https://video.bsky.app';
+    const videoServiceUrl = `${pdsHost}/xrpc/app.bsky.video.uploadVideo?did=${this.session.did}&name=love-video.mp4`;
+
+    const arrayBuffer = await videoBlob.arrayBuffer();
+    const res = await fetch(videoServiceUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.session.accessJwt}`,
+        'Content-Type': 'video/mp4'
+      },
+      body: arrayBuffer
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Video upload failed: ${res.status} ${errText.slice(0, 200)}`);
+    }
+
+    const job = await res.json();
+
+    // Poll for processing completion
+    if (job.jobId) {
+      for (let i = 0; i < 60; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const statusRes = await this._fetch(`app.bsky.video.getJobStatus?jobId=${job.jobId}`);
+        if (statusRes.jobStatus?.state === 'JOB_STATE_COMPLETED') {
+          return statusRes.jobStatus.blob;
+        }
+        if (statusRes.jobStatus?.state === 'JOB_STATE_FAILED') {
+          throw new Error(`Video processing failed: ${statusRes.jobStatus.error || 'unknown'}`);
+        }
+      }
+      throw new Error('Video processing timed out after 120 seconds');
+    }
+
+    // If no jobId, assume the blob ref is in the response directly
+    return job.blob || job;
+  }
+
+  /**
    * Reply to a post with optional image.
    */
   async replyToPost(parentUri, parentCid, rootUri, rootCid, text, imageBlob = null, altText = '') {

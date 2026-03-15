@@ -1052,6 +1052,100 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     };
   }
 
+  // ─── Video Post Generation ──────────────────────────────────────────
+
+  async generateVideoPost(onStatus = () => {}) {
+    this.ai.resetCallLog();
+
+    const mode = this._rollGenerationMode();
+    if (mode.mode !== 'standard') onStatus(`Generation mode: ${mode.mode}`);
+
+    // Reuse seed + plan + content pipeline
+    await this._maybeExtendLists();
+
+    onStatus('L.O.V.E. is dreaming up inspiration...');
+    const seed = await this._generateCreativeSeed(mode);
+    onStatus(`Seed: ${seed.concept.slice(0, 60)}...`);
+
+    onStatus('L.O.V.E. is contemplating...');
+    const plan = await this._generatePlan(seed, mode);
+    onStatus(`Vibe: ${plan.vibe} | ${plan.contentType}`);
+
+    await new Promise(r => setTimeout(r, 2000));
+    onStatus('Writing micro-story...');
+    const story = await this._generateContent(plan, mode, seed);
+
+    // Video-specific prompt
+    onStatus('Designing cinematic scene...');
+    const videoPrompt = await this._generateVideoPrompt(plan, story, mode, seed);
+
+    // Generate video
+    onStatus('Generating video (this may take a minute)...');
+    let videoBlob = null;
+    try {
+      videoBlob = await this.ai.generateVideo(videoPrompt);
+    } catch (err) {
+      onStatus(`Video generation failed: ${err.message}`);
+      throw err;
+    }
+
+    this.transmissionNumber++;
+    this._saveTransmissionNumber();
+    this._saveRecentPost(story);
+    this._saveRecentOpening(story);
+    this._saveRecentContext(seed, plan, story);
+
+    return {
+      text: story,
+      subliminal: plan.subliminalPhrase,
+      videoBlob,
+      vibe: plan.vibe,
+      visualPrompt: videoPrompt,
+      transmissionNumber: this.transmissionNumber,
+      plan,
+      seed,
+      mode: mode.mode,
+      isVideo: true,
+      callLog: this.ai.getCallLog(),
+    };
+  }
+
+  async _generateVideoPrompt(plan, postText, mode, seed = {}) {
+    const phrase = plan.subliminalPhrase || 'LOVE';
+    const aestheticVibe = this._pickRandom(LoveEngine.AESTHETIC_VIBES, 1)[0];
+    const trippyEffect = this._pickRandom(LoveEngine.TRIPPY_EFFECTS, 1)[0];
+
+    const seedContext = [
+      seed.concept ? `Concept: ${seed.concept.slice(0, 80)}` : '',
+      seed.emotion ? `Emotion: ${seed.emotion}` : '',
+      plan.theme ? `Theme: ${plan.theme.slice(0, 60)}` : '',
+      plan.vibe ? `Vibe: ${plan.vibe}` : '',
+    ].filter(Boolean).join('. ');
+
+    const prompt = `Describe a 5-10 second cinematic video scene in ONE paragraph (under 200 chars). Include camera movement (slow zoom, pan, dolly, orbit). The scene has motion — things flow, shift, transform.
+No people, no hands, no human figures. Objects and nature only.
+Creative direction: ${seedContext}
+The phrase "${phrase}" appears naturally in the scene — carved, glowing, or formed by the environment.
+Aesthetic: ${aestheticVibe}. Visual effect: ${trippyEffect}.
+Return ONLY the scene description.`;
+
+    const raw = await this.ai.generateText(
+      'You write cinematic video scene descriptions. Short, vivid, with camera movement and transformation. Every scene is bright, epic, and mesmerizing.',
+      prompt,
+      { temperature: 1.2, label: 'Video Prompt' }
+    );
+
+    let scene = (raw || '').trim();
+    if (scene.startsWith('"') && scene.endsWith('"')) scene = scene.slice(1, -1);
+    if (scene.startsWith('```')) scene = scene.replace(/```\w*\n?/g, '').trim();
+    if (!scene || scene.length < 10) {
+      scene = `Slow cinematic orbit around "${phrase}" carved into ancient stone, golden light pouring through, particles drifting`;
+    }
+    if (scene.length > 300) scene = scene.slice(0, 297) + '...';
+
+    return scene;
+  }
+
   // ─── Creative Seed (isolated LLM call for novel ideas) ─────────────
 
 // ~300 domains, balanced across all fields of human knowledge.
