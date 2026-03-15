@@ -135,10 +135,10 @@ export class PollinationsClient {
   /**
    * Generate an image and return it as a Blob.
    * GET /image/{prompt} — returns binary image.
-   * Model: imagen-4 (Google Imagen 4) - best text rendering
+   * Model: flux (FLUX Schnell) - best text rendering via T5 encoder, cheapest at 0.001/img
    */
   async generateImage(prompt, options = {}) {
-    const { width = 1024, height = 1024, subliminalText = null, model = 'imagen-4', negativePrompt = null } = options;
+    const { width = 1024, height = 1024, subliminalText = null, model = 'flux', negativePrompt = null } = options;
 
     let fullPrompt = prompt;
     if (subliminalText) {
