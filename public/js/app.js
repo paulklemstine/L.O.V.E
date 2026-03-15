@@ -156,6 +156,10 @@ document.addEventListener('DOMContentLoaded', () => {
   loadRepliedUris();
   loadRespondedMsgIds();
   log('Control panel loaded. Configure credentials and press START.');
+  fetch('/version.json').then(r => r.json()).then(v => {
+    const el = document.getElementById('build-version');
+    if (el) el.textContent = `build #${v.build}`;
+  }).catch(() => {});
 });
 
 function setupEventListeners() {
