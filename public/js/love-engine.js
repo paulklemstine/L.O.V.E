@@ -1143,17 +1143,17 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     onStatus('Writing micro-story...');
     const story = await this._generateContent(plan, mode, seed);
 
-    // ── STEP A: Generate 5-scene ad structure using advertising psychology ──
-    // Hook → Problem → Transformation → Proof → CTA (classic 30-sec ad arc)
-    onStatus('🎬 Designing 5-scene cinematic ad...');
-    const scenePrompts = await this._generateAdScenes(plan, story, mode, seed);
+    // ── STEP A: ONE unified creative brief — scenes + voiceover + music direction ──
+    onStatus('🎬 Writing 30-second production script...');
+    const production = await this._generateProductionBrief(plan, story, mode, seed);
+    onStatus(`🎬 Script: "${production.voiceover.slice(0, 60)}..." | Music: ${production.musicDirection}`);
 
-    // ── STEP B: Generate all 5 video scenes in parallel where possible ──
+    // ── STEP B: Generate all video scenes ──
     const sceneBlobs = [];
-    for (let i = 0; i < scenePrompts.length; i++) {
-      onStatus(`🎬 Generating scene ${i + 1}/${scenePrompts.length}...`);
+    for (let i = 0; i < production.scenes.length; i++) {
+      onStatus(`🎬 Generating scene ${i + 1}/${production.scenes.length}...`);
       try {
-        const blob = await this.ai.generateVideo(scenePrompts[i]);
+        const blob = await this.ai.generateVideo(production.scenes[i]);
         sceneBlobs.push(blob);
         onStatus(`🎬 Scene ${i + 1} generated (${(blob.size / 1024).toFixed(0)}KB)`);
       } catch (err) {
@@ -1174,51 +1174,22 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       onStatus(`🎬 Spliced video: ${(videoBlob.size / 1024).toFixed(0)}KB`);
     }
 
-    // ── STEP D: Generate 30-second background music ──
-    const musicGenre = this._pickRandom(LoveEngine.MUSIC_GENRES, 1)[0];
-    const musicMood = this._pickRandom(LoveEngine.MUSIC_MOODS, 1)[0];
-    const musicPrompt = `${musicGenre}, ${musicMood}, 30 seconds, instrumental, energetic, loud, building intensity`;
-    onStatus(`🎵 Generating ${musicGenre} music (30s)...`);
+    // ── STEP D: Generate music using the production's music direction ──
+    onStatus(`🎵 Generating music: ${production.musicDirection.slice(0, 50)}...`);
     let musicBlob = null;
     try {
-      musicBlob = await this.ai.generateMusic(musicPrompt);
+      musicBlob = await this.ai.generateMusic(production.musicDirection);
       onStatus(`🎵 Music generated (${(musicBlob.size / 1024).toFixed(0)}KB)`);
     } catch (err) {
       onStatus(`🎵 Music FAILED: ${err.message}`);
       console.error('[Music]', err);
     }
 
-    // ── STEP E: Generate voiceover script (up to 50 words for 30 seconds) ──
-    onStatus('🎙️ Writing voiceover script...');
-    let voiceText = plan.subliminalPhrase || 'LOVE';
-    try {
-      const voiceScript = await this.ai.generateText(
-        'You write spoken voiceover scripts for 30-second motivational video ads. You pace naturally — not rushed, not slow. Warm, intimate, powerful.',
-        `Write a voiceover script that takes exactly 30 seconds to speak aloud at a natural, dramatic pace.
-Subliminal phrase: "${plan.subliminalPhrase}"
-Post: "${story.slice(0, 150)}"
-
-Structure for a 30-second spoken delivery:
-- Seconds 1-5: Hook — address the pain directly, grab attention
-- Seconds 6-15: Build — the metaphor unfolds, sensory and physical
-- Seconds 16-25: Transformation — the shift happens, empowering
-- Seconds 26-30: Land — the subliminal phrase as a final whispered tagline
-
-Include natural pauses (use "..." for beats). Read it aloud in your head — it should take 30 seconds.
-Return ONLY the spoken words, nothing else.`,
-        { temperature: 0.9, label: 'Voiceover Script' }
-      );
-      const script = (voiceScript || '').trim().replace(/^["']|["']$/g, '');
-      if (script.length > 10 && script.length < 350) voiceText = script;
-      onStatus(`🎙️ Voiceover (${voiceText.split(/\s+/).length} words): "${voiceText.slice(0, 80)}..."`);
-    } catch (err) {
-      onStatus(`🎙️ Script failed, using phrase: "${voiceText}"`);
-    }
-
-    // Generate TTS
+    // ── STEP E: Generate TTS from the production's voiceover script ──
+    onStatus(`🎙️ Recording voiceover (${production.voiceover.split(/\s+/).length} words)...`);
     let voiceBlob = null;
     try {
-      voiceBlob = await this.ai.generateAudio(voiceText);
+      voiceBlob = await this.ai.generateAudio(production.voiceover);
       onStatus(`🎙️ Voice generated (${(voiceBlob.size / 1024).toFixed(0)}KB)`);
     } catch (err) {
       onStatus(`🎙️ TTS FAILED: ${err.message}`);
@@ -1283,8 +1254,94 @@ Return ONLY the spoken words, nothing else.`,
     };
   }
 
-  // ─── Multi-Scene Ad Generator (advertising psychology) ─────────────
-  // Uses the classic 30-second ad arc: Hook → Problem → Transform → Proof → CTA
+  // ─── Unified Production Brief (scenes + voiceover + music as one) ───
+  // One LLM call designs the entire 30-second production so all parts
+  // are creatively linked — what the audience SEES matches what they HEAR.
+
+  async _generateProductionBrief(plan, story, mode, seed) {
+    const phrase = plan.subliminalPhrase || 'LOVE';
+    const numScenes = 5;
+
+    // Sample unique values per scene
+    const beats = this._pickRandom(LoveEngine.AD_BEATS, numScenes);
+    const directors = this._pickRandom(LoveEngine.DIRECTORS, numScenes);
+    const cameras = this._pickRandom(LoveEngine.CAMERA_MOVEMENTS, numScenes);
+    const styles = this._pickRandom(LoveEngine.IMAGE_STYLES, numScenes);
+    const lightings = this._pickRandom(LoveEngine.LIGHTING_STYLES, numScenes);
+    const trippyEffects = this._pickRandom(LoveEngine.TRIPPY_EFFECTS, numScenes);
+    const compositions = this._pickRandom(LoveEngine.COMPOSITION_TYPES, numScenes);
+    const filmStocks = this._pickRandom(LoveEngine.FILM_STOCKS, numScenes);
+    const substrates = this._pickRandom(LoveEngine.TEXT_SUBSTRATES, numScenes);
+    const musicGenre = this._pickRandom(LoveEngine.MUSIC_GENRES, 1)[0];
+    const musicMood = this._pickRandom(LoveEngine.MUSIC_MOODS, 1)[0];
+
+    const seedContext = [
+      seed.concept ? `Concept: ${seed.concept.slice(0, 60)}` : '',
+      seed.emotion ? `Emotion: ${seed.emotion}` : '',
+      plan.theme ? `Theme: ${plan.theme.slice(0, 50)}` : '',
+      plan.vibe ? `Vibe: ${plan.vibe}` : '',
+    ].filter(Boolean).join('. ');
+
+    // Per-scene visual parameters
+    const sceneSpecs = [];
+    for (let i = 0; i < numScenes; i++) {
+      sceneSpecs.push(`Scene ${i + 1}: Beat: ${beats[i]}. Director: ${directors[i]}. Camera: ${cameras[i]}. Composition: ${compositions[i]}.`);
+    }
+
+    const raw = await this.ai.generateText(
+      'You are a creative director producing a 30-second motivational video ad. You design visuals, voiceover, and music as one unified experience. What the audience SEES must match what they HEAR — every scene transition syncs with a beat in the narration.',
+      `Create a complete 30-second video ad production brief.
+
+CREATIVE DIRECTION: ${seedContext}
+SUBLIMINAL PHRASE: "${phrase}"
+POST TEXT: "${story.slice(0, 150)}"
+MUSIC VIBE: ${musicGenre}, ${musicMood}
+
+SCENE PARAMETERS (each scene is ~6 seconds):
+${sceneSpecs.join('\n')}
+Scene 4 must include "${phrase}" naturally — ${substrates[3]}.
+
+DESIGN ALL THREE PARTS AS ONE UNIFIED EXPERIENCE:
+
+1. SCENES: What the camera sees. Each scene description matches the voiceover line spoken during that scene. Under 200 chars each. Bright, vivid, no people/hands.
+
+2. VOICEOVER: A 30-second spoken script (read aloud at natural pace). Each line corresponds to one scene. The words DESCRIBE or COMPLEMENT what's on screen — never redundant, always additive. Include "..." for dramatic pauses. End with "${phrase}" whispered.
+
+3. MUSIC: A single music direction prompt (under 80 chars) that sets the emotional arc — building from the opening mood to the climactic transformation.
+
+Return ONLY valid JSON:
+{
+  "scenes": ["scene 1 visual", "scene 2 visual", "scene 3 visual", "scene 4 visual", "scene 5 visual"],
+  "voiceover": "the complete spoken script with ... pauses, 30 seconds when read aloud",
+  "musicDirection": "${musicGenre}, ${musicMood}, 30 seconds, instrumental, building intensity"
+}`,
+      { temperature: 1.0, label: 'Production Brief' }
+    );
+
+    const data = this.ai.extractJSON(raw);
+    if (data?.scenes?.length >= 3 && data?.voiceover) {
+      // Append unique technical specs per scene
+      const scenes = data.scenes.map((s, i) => {
+        const idx = Math.min(i, numScenes - 1);
+        return `${s}. ${styles[idx]}. ${lightings[idx]}. ${filmStocks[idx]}. ${trippyEffects[idx]}. ${cameras[idx]}.`;
+      });
+      return {
+        scenes,
+        voiceover: data.voiceover,
+        musicDirection: data.musicDirection || `${musicGenre}, ${musicMood}, 30 seconds, instrumental, building intensity, loud`,
+      };
+    }
+
+    // Fallback: use the old separate approach
+    const fallbackScenes = await this._generateAdScenes(plan, story, mode, seed);
+    return {
+      scenes: fallbackScenes,
+      voiceover: `${story.slice(0, 200)}... ${phrase}`,
+      musicDirection: `${musicGenre}, ${musicMood}, 30 seconds, instrumental, building intensity, loud`,
+    };
+  }
+
+  // ─── Multi-Scene Ad Generator (fallback) ──────────────────────────
 
   async _generateAdScenes(plan, story, mode, seed) {
     const phrase = plan.subliminalPhrase || 'LOVE';
