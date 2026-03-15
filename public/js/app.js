@@ -372,13 +372,26 @@ async function doPost() {
   const beforeInfo = await getPollenBalance();
   const balanceBefore = beforeInfo?.balance ?? null;
 
-  try {
-    setStatus('Dreaming next Transmission...');
+  // 5% chance to generate a video post instead of image
+  const isVideoPost = Math.random() < 0.05;
 
-    const result = await love.generatePost((status) => {
-      setStatus(status);
-      log(status);
-    });
+  try {
+    let result;
+
+    if (isVideoPost) {
+      log('🎬 Rolling video post (5% chance)...');
+      setStatus('Generating video transmission...');
+      result = await love.generateVideoPost((status) => {
+        setStatus(status);
+        log(status);
+      });
+    } else {
+      setStatus('Dreaming next Transmission...');
+      result = await love.generatePost((status) => {
+        setStatus(status);
+        log(status);
+      });
+    }
 
     if (!result.text) {
       log('ERROR: No text generated.');
@@ -387,16 +400,24 @@ async function doPost() {
     }
 
     const txNum = result.transmissionNumber || '?';
-    log(`📡 Transmission #${txNum} (${result.text.length} chars): ${result.text.slice(0, 80)}...`, formatCallLog(result.callLog) || result.text);
+    const emoji = result.isVideo ? '🎬' : '📡';
+    log(`${emoji} Transmission #${txNum} (${result.text.length} chars): ${result.text.slice(0, 80)}...`, formatCallLog(result.callLog) || result.text);
     log(`🔮 Signal: ${result.subliminal} | Vibe: ${result.vibe}`);
 
     try {
-      await tryPostToBluesky(result);
+      if (result.isVideo) {
+        setStatus('Broadcasting Video Transmission...');
+        const postResult = await bsky.createVideoPost(result.text, result.videoBlob, result.visualPrompt);
+        stats.posts++;
+        log(`✅ Video Transmission #${txNum} broadcast: ${postResult.uri}`);
+        showLatestPost(result);
+      } else {
+        await tryPostToBluesky(result);
+      }
     } catch (err) {
-      // Post failed (502, network error, etc.) — queue for retry
       retryQueue.push({ result, attempts: 1 });
       log(`⏳ POST FAILED (${err.message}) — queued for retry. ${retryQueue.length} in queue.`);
-      showLatestPost(result); // still show it in the UI
+      showLatestPost(result);
     }
 
   } catch (err) {
@@ -1093,33 +1114,8 @@ function displayPost(index) {
   const tag = (label, value, cls) =>
     value ? `<span class="meta-tag ${cls}"><b>${escapeHtml(label)}</b> ${escapeHtml(String(value))}</span>` : '';
 
-  const originalVideoUrl = result._originalVideoDataUrl || '';
-  const musicUrl = result._musicDataUrl || '';
-  const voiceUrl = result._voiceDataUrl || '';
-  const combinedAudioUrl = result._audioDataUrl || '';
-
   let mediaHtml = '';
-  if (videoUrl && originalVideoUrl) {
-    mediaHtml = `<div style="display:flex;gap:8px;flex-wrap:wrap">
-      <div style="flex:1;min-width:200px;text-align:center">
-        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">Original</div>
-        <video src="${originalVideoUrl}" controls muted loop style="width:100%;border-radius:8px;border:1px solid var(--border)"></video>
-      </div>
-      <div style="flex:1;min-width:200px;text-align:center">
-        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">Final (posted to Bluesky)</div>
-        <video src="${videoUrl}" controls autoplay loop style="width:100%;border-radius:8px;border:1px solid var(--accent)"></video>
-      </div>
-    </div>`;
-    // Audio debug players
-    const audioPlayers = [
-      musicUrl ? `<div><span style="font-size:11px;color:var(--text-secondary)">🎵 Music</span><audio src="${musicUrl}" controls style="width:100%;height:28px"></audio></div>` : '',
-      voiceUrl ? `<div><span style="font-size:11px;color:var(--text-secondary)">🎙️ Voice</span><audio src="${voiceUrl}" controls style="width:100%;height:28px"></audio></div>` : '',
-      combinedAudioUrl ? `<div><span style="font-size:11px;color:var(--text-secondary)">🎛️ Combined</span><audio src="${combinedAudioUrl}" controls style="width:100%;height:28px"></audio></div>` : '',
-    ].filter(Boolean).join('');
-    if (audioPlayers) {
-      mediaHtml += `<div style="display:flex;flex-direction:column;gap:4px;margin-top:8px">${audioPlayers}</div>`;
-    }
-  } else if (videoUrl) {
+  if (videoUrl) {
     mediaHtml = `<video src="${videoUrl}" controls autoplay loop class="post-image"></video>`;
   } else if (imageUrl) {
     mediaHtml = `<img src="${imageUrl}" alt="Generated image" class="post-image">`;
