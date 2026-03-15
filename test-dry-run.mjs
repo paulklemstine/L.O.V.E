@@ -618,11 +618,14 @@ async function buildVisualPrompt(plan, postText = '', mode, seed = {}) {
   }
 
   // LLM generates ONLY a concise scene — we assemble technical fields in code
-  const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject that a photographer could point a camera at. The scene must be BRIGHT and FULLY LIT.
+  const textNouns = postText ? `The post says: "${postText.slice(0, 120)}". Use ONLY objects and imagery from this text.` : '';
+  const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject. The scene must be BRIGHT and FULLY LIT.
 ${loveLine}
+${textNouns}
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
 Aesthetic: ${aestheticVibe}. Color temperature: ${colorTemp}.${modeDirective}
+Every noun in your scene must come from the post text or creative direction above. Invent nothing new.
 Return ONLY the scene description.`;
 
   const temp = lfoTemperature(1.5 + mode.tempMod, 0.3);
@@ -640,10 +643,11 @@ Return ONLY the scene description.`;
   if (scene.length > 250) scene = scene.slice(0, 247) + '...';
 
   // Assemble: scene + plan fields + trippy effect + style + sweetener
-  const medium = plan.imageMedium || 'macro photography';
-  const lighting = plan.lighting || 'bright high-key natural sunlight';
-  const palette = plan.colorPalette || 'vivid magenta, electric cyan, warm amber';
-  const composition = plan.composition || 'epic panoramic';
+  // Override composition from code array to break macro lock
+  const medium = plan.imageMedium || pickRandom(PHOTOGRAPHY_STYLES, 1)[0];
+  const lighting = plan.lighting || pickRandom(LIGHTING_STYLES, 1)[0];
+  const palette = plan.colorPalette || `${pickRandom(SUGGESTED_COLORS, 3).join(', ')}`;
+  const composition = pickRandom(COMPOSITION_TYPES, 1)[0];
   const trippyEffect = pickRandom(TRIPPY_EFFECTS, 1)[0];
   const imageStyle = pickRandom(IMAGE_STYLES, 1)[0];
 

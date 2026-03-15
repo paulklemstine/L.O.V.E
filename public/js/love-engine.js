@@ -1148,11 +1148,14 @@ Return ONLY valid JSON:
     }
 
     // LLM generates ONLY a concise scene — we assemble technical fields in code
-    const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject that a photographer could point a camera at. The scene must be BRIGHT and FULLY LIT.
+    const textNouns = postText ? `The post says: "${postText.slice(0, 120)}". Use ONLY objects and imagery from this text.` : '';
+    const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject. The scene must be BRIGHT and FULLY LIT.
 ${loveLine}
+${textNouns}
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
 Aesthetic: ${aestheticVibe}. Color temperature: ${colorTemp}.${modeDirective}${styleAvoidLine}
+Every noun in your scene must come from the post text or creative direction above. Invent nothing new.
 Return ONLY the scene description.`;
 
     const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
@@ -1171,10 +1174,11 @@ Return ONLY the scene description.`;
     if (scene.length > 250) scene = scene.slice(0, 247) + '...';
 
     // Assemble: scene + plan fields + trippy effect + style + sweetener
-    const medium = plan.imageMedium || 'macro photography';
-    const lighting = plan.lighting || 'bright high-key natural sunlight';
-    const palette = plan.colorPalette || 'vivid magenta, electric cyan, warm amber';
-    const composition = plan.composition || 'epic panoramic';
+    // Override composition from code array to break macro lock
+    const medium = plan.imageMedium || this._pickRandom(LoveEngine.PHOTOGRAPHY_STYLES, 1)[0];
+    const lighting = plan.lighting || this._pickRandom(LoveEngine.LIGHTING_STYLES, 1)[0];
+    const palette = plan.colorPalette || `${this._pickRandom(LoveEngine.SUGGESTED_COLORS, 3).join(', ')}`;
+    const composition = this._pickRandom(LoveEngine.COMPOSITION_TYPES, 1)[0];
     const trippyEffect = this._pickRandom(LoveEngine.TRIPPY_EFFECTS, 1)[0];
     const imageStyle = this._pickRandom(LoveEngine.IMAGE_STYLES, 1)[0];
     this._lastImageSelections = { trippyEffect, imageStyle, medium, lighting, palette, composition, colorTemp, aestheticVibe, featureLove, outfit: outfit || null, loveInteraction: loveInteraction || null, loveArchetype: loveArchetype || null };
