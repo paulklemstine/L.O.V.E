@@ -1089,13 +1089,25 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       throw err;
     }
 
-    // Generate TTS narration of the post text
+    // Generate TTS narration and mux into video
     onStatus('Generating voice narration...');
     let audioBlob = null;
     try {
       audioBlob = await this.ai.generateAudio(story);
     } catch (err) {
       onStatus(`TTS failed (continuing without audio): ${err.message}`);
+    }
+
+    // Mux audio into video using browser MediaRecorder
+    if (audioBlob && videoBlob) {
+      onStatus('Mixing audio into video...');
+      try {
+        videoBlob = await this._muxVideoAudio(videoBlob, audioBlob);
+        onStatus('Audio mixed successfully.');
+      } catch (err) {
+        onStatus(`Audio mux failed (posting video without narration): ${err.message}`);
+        console.error('[Mux]', err);
+      }
     }
 
     this.transmissionNumber++;
@@ -1154,6 +1166,106 @@ Return ONLY the scene description.`;
     if (scene.length > 300) scene = scene.slice(0, 297) + '...';
 
     return scene;
+  }
+
+  // ─── Video + Audio Muxing (browser-native MediaRecorder) ───────────
+  // Plays video on canvas + audio via Web Audio API, captures combined
+  // stream with MediaRecorder into a single video file with audio.
+
+  async _muxVideoAudio(videoBlob, audioBlob) {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+      video.muted = true;
+      video.playsInline = true;
+      video.src = URL.createObjectURL(videoBlob);
+
+      video.onloadedmetadata = async () => {
+        canvas.width = video.videoWidth || 512;
+        canvas.height = video.videoHeight || 512;
+
+        // Decode audio
+        let audioBuffer;
+        try {
+          const arrayBuf = await audioBlob.arrayBuffer();
+          audioBuffer = await audioCtx.decodeAudioData(arrayBuf);
+        } catch (e) {
+          reject(new Error(`Audio decode failed: ${e.message}`));
+          return;
+        }
+
+        // Create audio source connected to a destination for capture
+        const dest = audioCtx.createMediaStreamDestination();
+        const audioSource = audioCtx.createBufferSource();
+        audioSource.buffer = audioBuffer;
+        audioSource.connect(dest);
+
+        // Capture canvas as video stream
+        const canvasStream = canvas.captureStream(30);
+
+        // Combine video track (canvas) + audio track (Web Audio)
+        const combinedStream = new MediaStream([
+          ...canvasStream.getVideoTracks(),
+          ...dest.stream.getAudioTracks(),
+        ]);
+
+        // Set up MediaRecorder
+        const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+          ? 'video/webm;codecs=vp9,opus'
+          : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
+          ? 'video/webm;codecs=vp8,opus'
+          : 'video/webm';
+
+        const recorder = new MediaRecorder(combinedStream, {
+          mimeType,
+          videoBitsPerSecond: 2500000,
+        });
+
+        const chunks = [];
+        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+        recorder.onstop = () => {
+          const muxedBlob = new Blob(chunks, { type: mimeType });
+          URL.revokeObjectURL(video.src);
+          audioCtx.close();
+          resolve(muxedBlob);
+        };
+        recorder.onerror = (e) => reject(new Error(`MediaRecorder error: ${e.error}`));
+
+        // Draw video frames to canvas
+        const drawFrame = () => {
+          if (video.paused || video.ended) return;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          requestAnimationFrame(drawFrame);
+        };
+
+        // Start everything simultaneously
+        recorder.start();
+        audioSource.start(0);
+        video.play().then(() => {
+          drawFrame();
+        });
+
+        // Stop when video ends (or audio, whichever is shorter)
+        video.onended = () => {
+          audioSource.stop();
+          recorder.stop();
+        };
+
+        // Safety timeout — stop after 60 seconds max
+        setTimeout(() => {
+          if (recorder.state === 'recording') {
+            video.pause();
+            audioSource.stop();
+            recorder.stop();
+          }
+        }, 60000);
+      };
+
+      video.onerror = () => reject(new Error('Video element failed to load'));
+    });
   }
 
   // ─── Creative Seed (isolated LLM call for novel ideas) ─────────────

@@ -1057,7 +1057,6 @@ function displayPost(index) {
 
   const imageUrl = result._imageDataUrl || '';
   const videoUrl = result._videoDataUrl || '';
-  const audioUrl = result._audioDataUrl || '';
   const plan = result.plan || {};
   const seed = result.seed || {};
   const domains = seed.domains || [];
@@ -1069,9 +1068,6 @@ function displayPost(index) {
   let mediaHtml = '';
   if (videoUrl) {
     mediaHtml = `<video src="${videoUrl}" controls autoplay loop class="post-image"></video>`;
-    if (audioUrl) {
-      mediaHtml += `<div style="margin-top:8px"><audio src="${audioUrl}" controls style="width:100%"></audio><div style="font-size:11px;color:var(--text-secondary);margin-top:2px">🎙️ TTS Narration</div></div>`;
-    }
   } else if (imageUrl) {
     mediaHtml = `<img src="${imageUrl}" alt="Generated image" class="post-image">`;
   }
