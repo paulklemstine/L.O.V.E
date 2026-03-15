@@ -4,7 +4,7 @@
  * Uses the new gen.pollinations.ai API (OpenAI-compatible chat completions).
  * Pollen budget: 10 pollen/day, 1 pollen/hr rate limit
  * Text planning: openai (GPT-5 Mini) - reliable structured JSON output
- * Text content: claude-fast (Claude Haiku 4.5) - best working creative model
+ * Text content: openai (GPT-5 Mini) - reliable creative model
  * Image model: dirtberry-pro - high realism, complex scenes
  */
 
@@ -64,18 +64,18 @@ export class PollinationsClient {
    * Generate text using Pollinations OpenAI-compatible API.
    * POST /v1/chat/completions — returns OpenAI JSON format.
    * Model fallback: tries primary model, falls back to secondary on error/empty.
-   * Fallback chain: claude-airforce → claude-fast, openai → openai-fast
+   * Fallback chain: openai → openai-fast
    */
   async generateText(systemPrompt, userPrompt, options = {}) {
     const { temperature = 0.85, model = 'openai', maxRetries = 2,
       frequencyPenalty = 0.4, presencePenalty = 0.3 } = options;
 
-    const fallbacks = { 'claude-airforce': 'claude-fast', 'claude-fast': 'openai', 'openai': 'openai-fast' };
+    const fallbacks = { 'openai': 'openai-fast' };
     const modelsToTry = [model];
     if (fallbacks[model]) modelsToTry.push(fallbacks[model]);
 
     for (const currentModel of modelsToTry) {
-      const penaltiesSupported = currentModel.startsWith('claude');
+      const penaltiesSupported = currentModel.startsWith('claude') || currentModel.startsWith('openai');
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
@@ -215,7 +215,7 @@ export class PollinationsClient {
    * Model: qwen3-tts (cheapest) or elevenlabs (better quality)
    */
   async generateAudio(text, options = {}) {
-    const { model = 'qwen3-tts', voice = 'alloy' } = options;
+    const { model = 'elevenlabs', voice = 'nova' } = options;
 
     const response = await fetch(`${BASE_URL}/v1/audio/speech`, {
       method: 'POST',

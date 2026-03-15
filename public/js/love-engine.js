@@ -1460,7 +1460,7 @@ Return ONLY valid JSON:
 { "story": "your post text here" }`;
 
       const temp = this._lfoTemperature(0.85 + mode.tempMod, 0.2);
-      const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'claude-airforce', temperature: temp, label: `Content (attempt ${attempt + 1})` });
+      const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai', temperature: temp, label: `Content (attempt ${attempt + 1})` });
       const data = this.ai.extractJSON(raw);
       story = (data?.story || '').replace(/^✨?\s*Transmission\s*#\d+\s*/i, '').trim();
       story = story.replace(/@\w+\b(?!\.\w)/g, '').replace(/\s{2,}/g, ' ').trim();
@@ -1623,7 +1623,7 @@ Return ONLY valid JSON:
 Return ONLY valid JSON:
 { "reply": "welcome message", "subliminal": "PHRASE", "imagePrompt": "complete image prompt" }`;
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'claude-airforce', label: 'Welcome' });
+    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai', label: 'Welcome' });
     const data = this.ai.extractJSON(raw);
 
     let text = data?.reply || `Welcome, @${handle}. ✨`;
@@ -1693,7 +1693,7 @@ Reply warmly. Mirror their words. Make them feel seen. UNDER 280 chars. Include 
 Also write a one-line image prompt for a BRIGHT, radiant, awe-inspiring visual poster with text "${phrase}". High-key lighting, brilliant saturated colors, fully lit throughout.
 Return ONLY valid JSON: { "reply": "...", "imagePrompt": "..." }`;
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'claude-airforce', label: 'Reply' });
+    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai', label: 'Reply' });
     const data = this.ai.extractJSON(raw);
 
     let replyText = data?.reply || `We see you, @${authorHandle}. ✨`;
@@ -1746,7 +1746,7 @@ Reply warmly, UNDER 500 chars. Include emoji. Be genuine and specific.
 
 Return ONLY valid JSON: { "reply": "your DM reply" }`;
 
-    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'claude-airforce', label: 'DM Reply' });
+    const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'openai', label: 'DM Reply' });
     const data = this.ai.extractJSON(raw);
 
     let replyText = data?.reply || `Thank you, @${authorHandle}. ✨`;
