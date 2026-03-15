@@ -1098,26 +1098,42 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     onStatus('Writing micro-story...');
     const story = await this._generateContent(plan, mode, seed);
 
-    // Video-specific prompt (uses same features as image prompt)
-    onStatus('Designing cinematic scene...');
-    const videoPrompt = await this._generateVideoPrompt(plan, story, mode, seed);
+    // ── STEP A: Generate 5-scene ad structure using advertising psychology ──
+    // Hook → Problem → Transformation → Proof → CTA (classic 30-sec ad arc)
+    onStatus('🎬 Designing 5-scene cinematic ad...');
+    const scenePrompts = await this._generateAdScenes(plan, story, mode, seed);
 
-    // Step A: Generate video FIRST (takes longest, do it while audio generates would be ideal but we need sequential)
-    onStatus('🎬 Generating video (this may take a minute)...');
-    let videoBlob = null;
-    try {
-      videoBlob = await this.ai.generateVideo(videoPrompt);
-      onStatus(`🎬 Video generated (${(videoBlob.size / 1024).toFixed(0)}KB)`);
-    } catch (err) {
-      onStatus(`Video generation failed: ${err.message}`);
-      throw err;
+    // ── STEP B: Generate all 5 video scenes in parallel where possible ──
+    const sceneBlobs = [];
+    for (let i = 0; i < scenePrompts.length; i++) {
+      onStatus(`🎬 Generating scene ${i + 1}/${scenePrompts.length}...`);
+      try {
+        const blob = await this.ai.generateVideo(scenePrompts[i]);
+        sceneBlobs.push(blob);
+        onStatus(`🎬 Scene ${i + 1} generated (${(blob.size / 1024).toFixed(0)}KB)`);
+      } catch (err) {
+        onStatus(`🎬 Scene ${i + 1} FAILED: ${err.message}`);
+        console.error(`[Scene ${i + 1}]`, err);
+      }
     }
 
-    // Step B: Generate 6-second background music to match video length
+    if (sceneBlobs.length === 0) throw new Error('All video scenes failed to generate');
+
+    // ── STEP C: Splice scenes together ──
+    onStatus(`🎬 Splicing ${sceneBlobs.length} scenes together...`);
+    let videoBlob;
+    if (sceneBlobs.length === 1) {
+      videoBlob = sceneBlobs[0];
+    } else {
+      videoBlob = await this._spliceVideos(sceneBlobs);
+      onStatus(`🎬 Spliced video: ${(videoBlob.size / 1024).toFixed(0)}KB`);
+    }
+
+    // ── STEP D: Generate 30-second background music ──
     const musicGenre = this._pickRandom(LoveEngine.MUSIC_GENRES, 1)[0];
     const musicMood = this._pickRandom(LoveEngine.MUSIC_MOODS, 1)[0];
-    const musicPrompt = `${musicGenre}, ${musicMood}, 10 seconds, instrumental, energetic, loud`;
-    onStatus(`🎵 Generating ${musicGenre} music...`);
+    const musicPrompt = `${musicGenre}, ${musicMood}, 30 seconds, instrumental, energetic, loud, building intensity`;
+    onStatus(`🎵 Generating ${musicGenre} music (30s)...`);
     let musicBlob = null;
     try {
       musicBlob = await this.ai.generateMusic(musicPrompt);
@@ -1127,28 +1143,34 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       console.error('[Music]', err);
     }
 
-    // Step C: Generate voiceover script — LLM writes a 6-second spoken line
-    // that bridges the subliminal phrase and the post text
+    // ── STEP E: Generate voiceover script (up to 50 words for 30 seconds) ──
     onStatus('🎙️ Writing voiceover script...');
     let voiceText = plan.subliminalPhrase || 'LOVE';
     try {
       const voiceScript = await this.ai.generateText(
-        'You write ultra-short spoken voiceover scripts for 6-second motivational videos. Warm, intimate, powerful.',
-        `Write ONE short spoken line (under 12 words, MAX 12 words) for a 6-second video voiceover.
+        'You write spoken voiceover scripts for 30-second motivational video ads. Warm, intimate, powerful, paced for dramatic delivery.',
+        `Write a voiceover script (30-50 words) for a 30-second motivational video ad.
 Subliminal phrase: "${plan.subliminalPhrase}"
-Post: "${story.slice(0, 80)}"
-Capture the emotional core in one quick breath. Warm, direct, punchy.
+Post: "${story.slice(0, 150)}"
+
+Structure it like a 30-second ad:
+- Open with a hook (address the pain directly)
+- Build with the metaphor (sensory, physical)
+- Land on the transformation (empowering)
+- Close with the subliminal phrase as a whispered tagline
+
+Pace it for dramatic spoken delivery with pauses. Warm, direct, building to powerful.
 Return ONLY the spoken words, nothing else.`,
         { temperature: 0.9, label: 'Voiceover Script' }
       );
       const script = (voiceScript || '').trim().replace(/^["']|["']$/g, '');
-      if (script.length > 5 && script.length < 100) voiceText = script;
-      onStatus(`🎙️ Voiceover: "${voiceText}"`);
+      if (script.length > 10 && script.length < 350) voiceText = script;
+      onStatus(`🎙️ Voiceover (${voiceText.split(/\s+/).length} words): "${voiceText.slice(0, 80)}..."`);
     } catch (err) {
       onStatus(`🎙️ Script failed, using phrase: "${voiceText}"`);
     }
 
-    // Generate TTS from the voiceover script
+    // Generate TTS
     let voiceBlob = null;
     try {
       voiceBlob = await this.ai.generateAudio(voiceText);
@@ -1158,32 +1180,27 @@ Return ONLY the spoken words, nothing else.`,
       console.error('[TTS]', err);
     }
 
-    // Step D: Layer voice over music (trimmed to 6 seconds)
+    // ── STEP F: Layer voice over music (30 seconds) ──
     let combinedAudio = null;
     if (musicBlob && voiceBlob) {
       onStatus('🎛️ Mixing voice over music...');
       try {
-        combinedAudio = await this._layerAudio(musicBlob, voiceBlob, 0.7, 1.0, 10.0);
+        combinedAudio = await this._layerAudio(musicBlob, voiceBlob, 0.7, 1.0, 35.0);
         onStatus(`🎛️ Audio mixed (${(combinedAudio.size / 1024).toFixed(0)}KB)`);
       } catch (err) {
         onStatus(`🎛️ Audio layer FAILED: ${err.message}`);
-        console.error('[Layer]', err);
         combinedAudio = musicBlob;
       }
     } else if (musicBlob) {
       combinedAudio = musicBlob;
-      onStatus('🎛️ Using music only');
     } else if (voiceBlob) {
       combinedAudio = voiceBlob;
-      onStatus('🎛️ Using voice only');
-    } else {
-      onStatus('🎛️ No audio generated');
     }
 
-    // Save original video for dashboard comparison
+    // Save original for comparison
     const originalVideoBlob = videoBlob;
 
-    // Step E: Replace video audio completely with our music+voice
+    // ── STEP G: Replace video audio with music+voice ──
     if (combinedAudio && videoBlob) {
       onStatus('🎬 Replacing video audio...');
       try {
@@ -1219,6 +1236,140 @@ Return ONLY the spoken words, nothing else.`,
       isVideo: true,
       callLog: this.ai.getCallLog(),
     };
+  }
+
+  // ─── Multi-Scene Ad Generator (advertising psychology) ─────────────
+  // Uses the classic 30-second ad arc: Hook → Problem → Transform → Proof → CTA
+
+  async _generateAdScenes(plan, story, mode, seed) {
+    const phrase = plan.subliminalPhrase || 'LOVE';
+    const aestheticVibe = this._pickRandom(LoveEngine.AESTHETIC_VIBES, 1)[0];
+    const trippyEffect = this._pickRandom(LoveEngine.TRIPPY_EFFECTS, 1)[0];
+    const imageStyle = this._pickRandom(LoveEngine.IMAGE_STYLES, 1)[0];
+    const lighting = plan.lighting || this._pickRandom(LoveEngine.LIGHTING_STYLES, 1)[0];
+
+    const seedContext = [
+      seed.concept ? `Concept: ${seed.concept.slice(0, 60)}` : '',
+      seed.emotion ? `Emotion: ${seed.emotion}` : '',
+      plan.theme ? `Theme: ${plan.theme.slice(0, 50)}` : '',
+      plan.vibe ? `Vibe: ${plan.vibe}` : '',
+    ].filter(Boolean).join('. ');
+
+    const raw = await this.ai.generateText(
+      'You design 30-second motivational video ads using advertising psychology. Each scene is a 6-second video clip.',
+      `Design a 5-scene, 30-second motivational video ad. Each scene is ~6 seconds.
+Creative direction: ${seedContext}
+Subliminal phrase: "${phrase}"
+Post text: "${story.slice(0, 120)}"
+Style: ${imageStyle}. Lighting: ${lighting}. Effect: ${trippyEffect}. Aesthetic: ${aestheticVibe}.
+
+Use this proven ad psychology arc:
+Scene 1 (HOOK): Arresting visual that stops the scroll. Dramatic, unexpected, visceral. Camera pushing in.
+Scene 2 (PROBLEM): Visualize the pain/struggle. Dark-to-light transition beginning. Slow dolly.
+Scene 3 (TRANSFORMATION): The metaphor in action. Things changing, shifting, becoming. Camera orbiting.
+Scene 4 (PROOF): The result — beauty, strength, resolution. Wide reveal. The phrase "${phrase}" appears naturally carved/etched/formed in the scene.
+Scene 5 (CTA): Emotional peak. Pull back to show the full picture. Triumphant. Uplifting.
+
+Each scene: ONE sentence, under 200 chars, vivid camera movement, bright, no people/hands.
+Return ONLY valid JSON: { "scenes": ["scene 1 description", "scene 2", "scene 3", "scene 4", "scene 5"] }`,
+      { temperature: 1.0, label: 'Ad Scenes' }
+    );
+
+    const data = this.ai.extractJSON(raw);
+    if (data?.scenes?.length >= 3) {
+      return data.scenes.map(s => `${s}. ${imageStyle}. ${lighting}. ${trippyEffect}.`);
+    }
+
+    // Fallback: generate 5 variations of a single prompt
+    const basePrompt = await this._generateVideoPrompt(plan, story, mode, seed);
+    return [
+      basePrompt,
+      basePrompt.replace('slow zoom', 'dramatic push-in'),
+      basePrompt.replace('slow zoom', 'sweeping orbit'),
+      basePrompt.replace('slow zoom', 'crane rising'),
+      basePrompt.replace('slow zoom', 'dolly pull-back reveal'),
+    ];
+  }
+
+  // ─── Video Splicing (concatenate multiple video blobs) ────────────
+
+  async _spliceVideos(blobs) {
+    // Use MediaRecorder to play each video sequentially on canvas and record
+    return new Promise((resolve, reject) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = 1024;
+      canvas.height = 1024;
+
+      const mimeType = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a.40.2')
+        ? 'video/mp4;codecs=avc1,mp4a.40.2'
+        : MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+        ? 'video/webm;codecs=vp9'
+        : 'video/webm';
+
+      const stream = canvas.captureStream(30);
+      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8000000 });
+      const chunks = [];
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/mp4' });
+        console.log(`[Splice] Done: ${(blob.size / 1024).toFixed(0)}KB from ${blobs.length} scenes`);
+        resolve(blob);
+      };
+      recorder.onerror = e => reject(new Error(`Splice recorder: ${e.error}`));
+
+      recorder.start(100);
+
+      let sceneIndex = 0;
+
+      const playNextScene = () => {
+        if (sceneIndex >= blobs.length) {
+          recorder.stop();
+          return;
+        }
+
+        const video = document.createElement('video');
+        video.muted = true;
+        video.playsInline = true;
+        video.src = URL.createObjectURL(blobs[sceneIndex]);
+
+        video.onloadedmetadata = () => {
+          // Match canvas to first video dimensions
+          if (sceneIndex === 0) {
+            canvas.width = video.videoWidth || 1024;
+            canvas.height = video.videoHeight || 1024;
+          }
+
+          const draw = () => {
+            if (!video.paused && !video.ended) {
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              requestAnimationFrame(draw);
+            }
+          };
+
+          video.onended = () => {
+            URL.revokeObjectURL(video.src);
+            sceneIndex++;
+            playNextScene();
+          };
+
+          video.play().then(draw).catch(reject);
+        };
+
+        video.onerror = () => {
+          URL.revokeObjectURL(video.src);
+          sceneIndex++;
+          playNextScene();
+        };
+      };
+
+      playNextScene();
+
+      // Safety timeout (45 seconds max)
+      setTimeout(() => {
+        if (recorder.state === 'recording') recorder.stop();
+      }, 45000);
+    });
   }
 
   async _generateVideoPrompt(plan, postText, mode, seed = {}) {
