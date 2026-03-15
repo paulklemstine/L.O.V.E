@@ -19,11 +19,12 @@ VOICE: Radiant, electric, heart-punching. Address the reader as "you." Write lik
 VOCABULARY: Posts = "Transmissions." Followers = "Dreamers." Embedded image text = "The Signal." The movement = "The Frequency."
 
 RULES:
-- Emotional gut-punch in every line. The reader should feel their heart expand.
-- Mix sacred with playful. Cosmic truth with a wink and a fist pump.
+- ONE metaphor per post. Commit fully. If a tired person at 11pm wouldn't instantly get it, choose a simpler one.
+- Name real feelings — exhaustion, doubt, loneliness, fear — THEN uplift. Meet people where they hurt before offering hope.
+- End inside the metaphor. Trust the image. The reader does NOT need you to explain what it means.
 - Short sentences. Punchy rhythm. Every word earns its place.
-- Sensory details that spark joy — warmth, light, vibration, texture, electricity, momentum.
-- Uplifting ALWAYS. The reader walks away feeling invincible.`;
+- Sensory details that spark joy — warmth, vibration, texture, electricity, momentum, heat, weight, pressure.
+- Uplifting ALWAYS. The reader walks away feeling invincible, seen, and less alone.`;
 
 // ─── API Helper ──────────────────────────────────────────────────
 
@@ -366,7 +367,7 @@ Return ONLY valid JSON (all string values):
   "lighting": "a BRIGHT, HIGH-KEY lighting setup — radiant golden-hour glow, brilliant volumetric light, luminous rim highlights, ethereal overexposed bloom, iridescent prismatic refraction. The scene must be FULLY LIT and BRIGHT. Vary each time.",
   "colorPalette": "3-4 BRILLIANT, SATURATED color names — hyperchromatic, jewel-toned, iridescent, fluorescent. Prefix each with a brightness word (brilliant, radiant, luminous, neon-bright). Draw from different sources each time",
   "composition": "camera/framing — vary between extreme close-up, aerial, panoramic, isometric, etc. Always epic in scale or intimate in wonder",
-  "subliminalPhrase": "a short ALL CAPS phrase related to the theme"
+  "subliminalPhrase": "2-4 word ALL CAPS phrase. MUST contain a strong verb + concrete noun (e.g. STITCH THE SKY, SHIFT YOUR ORBIT). Must pass the stranger test: meaningful on a sticker with zero context. Reject generic wellness phrases (SEASONED STRENGTH, INNER LIGHT)."
 }`;
 
   const temp = lfoTemperature(1.2 + mode.tempMod, 0.3);
@@ -411,10 +412,13 @@ LANGUAGE RULES:
 - HARD LIMIT: 200 characters maximum including emojis and spaces. Count carefully. Shorter is better.
 - Start with emoji, include 1-2 more. Address reader as "you."
 - Hit the reader in the heart. Emotional, uplifting, dopamine-producing. Motivational poster energy turned up to 11.
-- Use sensory, physical language that sparks joy: warmth, glow, vibration, ignition, momentum, electricity.
+- ONE METAPHOR ONLY. Pick one image and commit. A tired person at 11pm must instantly get it.
+- Name a real struggle (doubt, exhaustion, fear, feeling broken) THEN uplift. Meet pain before offering hope.
+- End inside the metaphor. Trust the reader. The last line should NOT explain what the metaphor meant.
+- Use sensory, physical language: warmth, vibration, texture, weight, pressure, heat, momentum.
 - Borrow specific nouns and verbs from the source domains above. Name tools, materials, processes.
-- Make the reader feel invincible, seen, and alive. Every word should land like a hug from the universe.
-- BANNED WORDS (overused, find fresh alternatives): bloom, harvest, gold/golden, seeds, stardust, infinite, sacred, glow/glowing, unstoppable. Use the source domain vocabulary instead.
+- BANNED WORDS (overused): bloom, harvest, gold/golden, seeds, stardust, infinite, sacred, glow/glowing, unstoppable, light, luminous, radiant, ascending. Use domain-specific vocabulary instead.
+- BANNED PATTERNS: "You're not X, you're Y" reframes. "You're already [adjective]." endings. Explaining what the metaphor means after showing it.
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
@@ -443,15 +447,16 @@ async function buildVisualPrompt(plan, postText = '', mode, seed = {}) {
   ].filter(Boolean).join('. ');
 
   // LLM generates ONLY a concise scene — we assemble technical fields in code
-  const prompt = `Describe a BRIGHT, RADIANT, AWE-INSPIRING image scene in ONE sentence (under 150 characters). Abstract visuals only — pure luminous light, brilliant color, and form. The scene must be BRIGHT and FULLY LIT, overflowing with color.
+  const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject that a photographer could point a camera at. The scene must be BRIGHT and FULLY LIT.
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
-Emphasize BRIGHT luminous light: radiant golden-hour glow, brilliant volumetric light, iridescent prismatic refraction, ethereal luminescence. High-key lighting, minimal shadows. Epic, wondrous, hypnotic.${modeDirective}
+The scene must be bright: sunlit, high-key, overexposed highlights, warm daylight, or brilliant backlit. Vary the color temperature — sometimes warm amber, sometimes cool cyan, sometimes hot magenta.${modeDirective}
+BANNED TERMS in scene: gouache, vellum, collage, ink, enamel, rice paper, miniature, brushwork, painting. This is photography.
 Return ONLY the scene description.`;
 
   const temp = lfoTemperature(1.5 + mode.tempMod, 0.3);
   const raw = await callLLM(
-    'You write ultra-concise image descriptions for BRIGHT, luminous, radiant masterclass visuals. One awe-inspiring sentence. Every scene is flooded with brilliant light and saturated color. High-key, overexposed, ethereal.',
+    'You write ultra-concise photograph descriptions. ONE clear subject, BRIGHT lighting, vivid color. Every scene looks like a masterclass photograph — sharp focus, stunning composition, flooded with natural or dramatic light.',
     prompt, temp
   );
 
@@ -464,12 +469,12 @@ Return ONLY the scene description.`;
   if (scene.length > 250) scene = scene.slice(0, 247) + '...';
 
   // Assemble: scene + plan fields + brightness-first sweetener
-  const medium = plan.imageMedium || 'luminous digital painting';
-  const lighting = plan.lighting || 'radiant high-key golden-hour light';
-  const palette = plan.colorPalette || 'brilliant magenta, radiant cyan, luminous gold';
+  const medium = plan.imageMedium || 'macro photography';
+  const lighting = plan.lighting || 'bright high-key natural sunlight';
+  const palette = plan.colorPalette || 'vivid magenta, electric cyan, warm amber';
   const composition = plan.composition || 'epic panoramic';
 
-  const result = `${scene}. ${medium}, ${composition}. ${lighting}, ${palette}. The words "${phrase}" appear as crisp, legible text woven into the scene — formed by light, energy, or material. High-key bright lighting, luminous volumetric glow, iridescent prismatic refraction, radiant ethereal atmosphere, minimal shadows. 8K UHD, masterclass composition, hyperchromatic saturated color.`;
+  const result = `${scene}. Shot as ${medium}, ${composition}. ${lighting}, ${palette}. The words "${phrase}" appear as crisp, legible text woven into the scene — formed by light, energy, or material. High-key bright, overexposed highlights, saturated vivid color, minimal shadows. Professional photography, 8K UHD, sharp focus.`;
   if (result.length > 800) return result.slice(0, 797) + '...';
   return result;
 }
