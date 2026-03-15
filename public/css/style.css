@@ -460,6 +460,39 @@ body {
   border-color: rgba(255, 165, 0, 0.2);
 }
 
+/* ─── Log Filter Bar ─────────────────────────────── */
+
+.log-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.log-filter-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.log-filter-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.log-filter-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
 /* ─── Activity Log ───────────────────────────────── */
 
 #activity-log {

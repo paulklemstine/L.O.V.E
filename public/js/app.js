@@ -922,57 +922,103 @@ function saveRespondedMsgIds() {
 }
 
 // ─── UI Updates ─────────────────────────────────────────────────────
+let activeLogFilter = 'all';
+const logEntries = []; // { text, detail, tags[], timestamp }
+
+function _autoTag(message) {
+  const tags = [];
+  if (message.includes('🎬') || message.includes('Video') || message.includes('video') || message.includes('Scene') || message.includes('Splice') || message.includes('Mux')) tags.push('video');
+  if (message.includes('🎵') || message.includes('Music') || message.includes('music')) tags.push('audio');
+  if (message.includes('🎙️') || message.includes('Voice') || message.includes('Voiceover') || message.includes('TTS')) tags.push('audio');
+  if (message.includes('🎛️') || message.includes('Mixing') || message.includes('Audio mixed')) tags.push('audio');
+  if (message.includes('📡') || message.includes('Transmission #')) tags.push('post');
+  if (message.includes('✅') || message.includes('broadcast')) tags.push('post');
+  if (message.includes('Seed:') || message.includes('dreaming') || message.includes('contemplating')) tags.push('gen');
+  if (message.includes('Writing') || message.includes('Designing') || message.includes('Generating image')) tags.push('gen');
+  if (message.includes('Vibe:')) tags.push('gen');
+  if (message.includes('ERROR') || message.includes('FAILED')) tags.push('error');
+  if (message.includes('Welcome') || message.includes('Replied') || message.includes('DM')) tags.push('social');
+  if (message.includes('pollen') || message.includes('Budget') || message.includes('Post cost')) tags.push('budget');
+  if (message.includes('Transmission #')) {
+    const m = message.match(/Transmission #(\d+)/);
+    if (m) tags.push(`#${m[1]}`);
+  }
+  if (tags.length === 0) tags.push('system');
+  return tags;
+}
+
 function log(message, fullText) {
   const timestamp = new Date().toLocaleTimeString();
-  const entry = `${timestamp} - ${message}`;
-  activityLog.unshift(entry);
-  if (activityLog.length > 200) activityLog.pop();
+  const tags = _autoTag(message);
+  const entry = { text: `${timestamp} - ${message}`, detail: fullText || null, tags, timestamp };
+  logEntries.unshift(entry);
+  if (logEntries.length > 200) logEntries.pop();
 
-  if (fullText) {
-    activityLogDetails.set(entry, fullText);
-  }
+  _renderLog();
+  console.log('[L.O.V.E.] ' + entry.text);
+}
 
+function _renderLog() {
   const logEl = document.getElementById('activity-log');
-  if (logEl) {
-    // Only show last 50 in DOM for performance
-    const fragment = document.createDocumentFragment();
+  if (!logEl) return;
 
-    activityLog.slice(0, 50).forEach(function(l) {
-      const detail = activityLogDetails.get(l);
-      let cls = '';
-      if (l.indexOf('ERROR') !== -1 || l.indexOf('FAILED') !== -1) cls = 'log-error';
-      else if (l.indexOf('CREATOR') !== -1) cls = 'log-creator';
-      else if (l.indexOf('DM') !== -1) cls = 'log-dm';
-      else if (l.indexOf('Transmission #') !== -1 || l.indexOf('Replied') !== -1 || l.indexOf('Welcome') !== -1) cls = 'log-success';
+  // Filter
+  const filtered = activeLogFilter === 'all'
+    ? logEntries
+    : logEntries.filter(e => e.tags.includes(activeLogFilter));
 
-      var div = document.createElement('div');
-      div.className = 'log-entry ' + cls;
+  const fragment = document.createDocumentFragment();
 
-      if (detail) {
-        div.className += ' log-expandable';
-        var summary = document.createElement('div');
-        summary.className = 'log-summary';
-        summary.textContent = l;
-        var detailDiv = document.createElement('div');
-        detailDiv.className = 'log-detail';
-        detailDiv.textContent = detail;
-        div.appendChild(summary);
-        div.appendChild(detailDiv);
-        div.addEventListener('click', function() {
-          this.classList.toggle('expanded');
-        });
-      } else {
-        div.textContent = l;
-      }
+  // Filter bar
+  const filterBar = document.createElement('div');
+  filterBar.className = 'log-filter-bar';
+  const filters = ['all', 'video', 'audio', 'post', 'gen', 'social', 'budget', 'error'];
+  filters.forEach(f => {
+    const btn = document.createElement('button');
+    btn.className = 'log-filter-btn' + (activeLogFilter === f ? ' active' : '');
+    const count = f === 'all' ? logEntries.length : logEntries.filter(e => e.tags.includes(f)).length;
+    btn.textContent = `${f} (${count})`;
+    btn.onclick = () => { activeLogFilter = f; _renderLog(); };
+    filterBar.appendChild(btn);
+  });
+  fragment.appendChild(filterBar);
 
-      fragment.appendChild(div);
-    });
+  // Entries
+  filtered.slice(0, 50).forEach(function(e) {
+    let cls = '';
+    if (e.tags.includes('error')) cls = 'log-error';
+    else if (e.tags.includes('social')) cls = 'log-success';
+    else if (e.tags.includes('post')) cls = 'log-success';
 
-    logEl.innerHTML = '';
-    logEl.appendChild(fragment);
-  }
+    const div = document.createElement('div');
+    div.className = 'log-entry ' + cls;
 
-  console.log('[L.O.V.E.] ' + entry);
+    // Tag badges
+    const tagHtml = e.tags.map(t => {
+      const colors = { video: '#ff6b00', audio: '#9b59ff', post: '#2ecc71', gen: '#3498db', social: '#e91e63', budget: '#f39c12', error: '#e74c3c', system: '#95a5a6' };
+      const color = colors[t] || (t.startsWith('#') ? '#2ecc71' : '#95a5a6');
+      return `<span style="background:${color};color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;margin-right:2px">${t}</span>`;
+    }).join('');
+
+    if (e.detail) {
+      div.className += ' log-expandable';
+      div.innerHTML = `<div class="log-summary">${tagHtml} ${_escapeLog(e.text)}</div><div class="log-detail">${_escapeLog(e.detail)}</div>`;
+      div.addEventListener('click', function() { this.classList.toggle('expanded'); });
+    } else {
+      div.innerHTML = `${tagHtml} ${_escapeLog(e.text)}`;
+    }
+
+    fragment.appendChild(div);
+  });
+
+  logEl.innerHTML = '';
+  logEl.appendChild(fragment);
+}
+
+function _escapeLog(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 function setStatus(text) {
