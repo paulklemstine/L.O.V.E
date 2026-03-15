@@ -859,15 +859,12 @@ async function buildVisualPrompt(plan, postText = '', mode, seed = {}) {
   }
 
   // LLM generates spatial scene layers
-  const textNouns = postText ? `The post says: "${postText.slice(0, 120)}". Use ONLY objects and imagery from this text.` : '';
   const prompt = `Describe a BRIGHT scene in THREE spatial layers. Each layer under 40 chars.
 ${loveLine}
-${textNouns}
 Creative direction: ${seedContext}
-Include the text "${phrase}" in one layer.
+The phrase "${phrase}" must appear NATURALLY as part of an object in the scene — carved into wood, etched into metal, written in sand, formed by clouds, spelled in neon tubing, embossed on leather, scratched into frost, printed on a label, stitched into fabric, chalked on a wall, pressed into clay, or growing as moss. The text is PART OF the world, as if it was always there. Describe exactly how and where the text physically exists.
 Aesthetic: ${aestheticVibe}.${modeDirective}
-Every noun must come from the post text or creative direction. Invent nothing new.
-Return ONLY valid JSON: { "foreground": "close detail", "midground": "main subject", "background": "environment" }`;
+Return ONLY valid JSON: { "foreground": "close detail", "midground": "main subject with ${phrase} naturally embedded", "background": "environment" }`;
 
   const temp = lfoTemperature(1.5 + mode.tempMod, 0.3);
   const raw = await callLLM(
@@ -910,7 +907,7 @@ Return ONLY valid JSON: { "foreground": "close detail", "midground": "main subje
     `${palette}, ${filmStock}`,
     composition,
     trippyEffect,
-    `"${phrase}" as legible text in the scene`,
+    `the words "${phrase}" naturally embedded as part of an object in the scene`,
     `shot on ${cameraBody}, ${lensSpec}${dof ? ', ' + dof : ''}, ${analogTexture}`,
   ].join('. ') + '.';
   if (result.length > 500) return result.slice(0, 497) + '...';
