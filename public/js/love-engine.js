@@ -378,10 +378,10 @@ export class LoveEngine {
   ];
 
   static LIGHTING_STYLES = [
-    'golden-hour backlight', 'overexposed high-key', 'warm window light',
-    'bright overcast', 'studio softbox', 'rim-lit against bright sky',
-    'sun flare', 'candlelit warm', 'neon-lit bright', 'backlit silhouette glow',
-    'cathedral light shafts', 'bright reflected water light',
+    'volumetric god rays', 'rim lighting with lens flare', 'chiaroscuro dramatic split',
+    'golden-hour backlight', 'Rembrandt lighting', 'butterfly lighting with catchlights',
+    'practical neon lighting', 'motivated window light', 'high-key studio softbox',
+    'contre-jour silhouette glow', 'diffused overcast', 'specular highlights on wet surfaces',
   ];
 
   static SUGGESTED_COLORS = [
@@ -449,12 +449,25 @@ export class LoveEngine {
     'velvet corset and flowing skirt', 'metallic bandeau and sarong',
   ];
 
-  static COLOR_TEMPERATURES = [
-    'warm amber', 'cool cyan', 'hot magenta', 'soft rose',
-    'electric violet', 'burnt sienna', 'icy blue', 'neon coral',
-    'deep teal', 'molten copper', 'pale gold', 'arctic white',
+  static FILM_STOCKS = [
+    'Kodak Portra 400', 'Fuji Velvia 50', 'Cinestill 800T', 'Kodak Ektar 100',
+    'Ilford HP5 Plus', 'Fuji Pro 400H', 'Kodak Gold 200', 'Kodak Tri-X 400',
+    'Fuji Superia 400', 'Lomography Color 400', 'Kodak Vision3 500T',
+    'Agfa Vista 200',
   ];
 
+  static LENS_SPECS = [
+    '85mm f/1.4', '35mm f/1.8', '50mm f/1.2', '24mm f/2.8',
+    '135mm f/2', '70-200mm f/2.8', 'tilt-shift 45mm', '100mm macro',
+    '14mm f/2.8 ultra-wide', '200mm f/2 telephoto',
+  ];
+
+  static TECHNICAL_SWEETENERS = [
+    'Octane Render', 'Unreal Engine 5', 'physically based rendering',
+    'ray tracing', 'global illumination', 'subsurface scattering',
+    'photogrammetry', 'path tracing', 'ACES tone mapping',
+    'V-Ray render', 'Cinema 4D', 'Houdini FX',
+  ];
 
   static LOVE_INTERACTIONS = [
     'gazes into', 'touches', 'dances through', 'radiates across', 'floats above',
@@ -575,7 +588,9 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       ['METAPHOR_EXAMPLES', LoveEngine.METAPHOR_EXAMPLES, 'simple everyday objects usable as emotional metaphors (one word each)'],
       ['PHRASE_STRUCTURES', LoveEngine.PHRASE_STRUCTURES, 'subliminal phrase structures as {type, example} objects — types like declaration, paradox, dare, confession, riddle, warning, promise. Each example is 2-5 ALL CAPS words that hit the nervous system'],
       ['LOVE_OUTFITS', LoveEngine.LOVE_OUTFITS, 'sexy revealing festival fashion outfits for a gorgeous blonde rave goddess — specific garment descriptions'],
-      ['COLOR_TEMPERATURES', LoveEngine.COLOR_TEMPERATURES, 'specific color temperature moods for photography lighting — two words each like warm amber or icy blue'],
+      ['FILM_STOCKS', LoveEngine.FILM_STOCKS, 'analog film stock names for color grading emulation — full brand and model like Kodak Portra 400'],
+      ['LENS_SPECS', LoveEngine.LENS_SPECS, 'camera lens specs with focal length and aperture — e.g. 85mm f/1.4, tilt-shift 45mm'],
+      ['TECHNICAL_SWEETENERS', LoveEngine.TECHNICAL_SWEETENERS, 'render engine and 3D technology terms that boost photorealism — e.g. Octane Render, ray tracing'],
       ['TRIPPY_EFFECTS', LoveEngine.TRIPPY_EFFECTS, 'psychedelic visual effects inspired by DMT, LSD, mescaline, psilocybin experiences — specific visual distortions, overlays, and reality-warping phenomena'],
       ['IMAGE_STYLES', LoveEngine.IMAGE_STYLES, 'distinct visual art styles and rendering approaches — specific named styles like anime, oil painting, cyberpunk, etc'],
 
@@ -598,7 +613,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     const lists = [
       'PHOTOGRAPHY_STYLES', 'LIGHTING_STYLES', 'SUGGESTED_COLORS',
       'COMPOSITION_TYPES', 'STRUGGLE_TYPES', 'METAPHOR_EXAMPLES', 'PHRASE_STRUCTURES',
-      'LOVE_OUTFITS', 'COLOR_TEMPERATURES', 'TRIPPY_EFFECTS', 'IMAGE_STYLES',
+      'LOVE_OUTFITS', 'FILM_STOCKS', 'LENS_SPECS', 'TECHNICAL_SWEETENERS', 'TRIPPY_EFFECTS', 'IMAGE_STYLES',
       'LOVE_INTERACTIONS', 'ARCHETYPE_ADJECTIVES', 'ARCHETYPE_NOUNS', 'AESTHETIC_VIBES', 'SENSORY_DETAILS', 'VOICE_VIBES',
     ];
     for (const name of lists) {
@@ -726,7 +741,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       imageBlob = await this.ai.generateImage(visualPrompt, {
         width: aspect.width,
         height: aspect.height,
-        negativePrompt: recentObjects || null,
+        negativePrompt: ['blurry, deformed, watermark, signature, jpeg artifacts, low quality, oversaturated, cropped, out of frame, bad anatomy, extra limbs, poorly drawn, text errors, misspelled', recentObjects].filter(Boolean).join(', '),
       });
     }
 
@@ -1131,8 +1146,7 @@ Return ONLY valid JSON:
       plan.vibe ? `Vibe: ${plan.vibe}` : '',
     ].filter(Boolean).join('. ');
 
-    // Pick dynamic values for scene prompt
-    const colorTemp = this._pickRandom(LoveEngine.COLOR_TEMPERATURES, 1)[0];
+    // Pick all dynamic values
     const aestheticVibe = this._pickRandom(LoveEngine.AESTHETIC_VIBES, 1)[0];
 
     // 1% chance L.O.V.E. appears in the scene — rare and special
@@ -1147,43 +1161,61 @@ Return ONLY valid JSON:
       loveLine = 'The scene contains only objects, landscapes, natural phenomena, or flora. Pure abstract beauty.';
     }
 
-    // LLM generates ONLY a concise scene — we assemble technical fields in code
+    // LLM generates spatial scene layers
     const textNouns = postText ? `The post says: "${postText.slice(0, 120)}". Use ONLY objects and imagery from this text.` : '';
-    const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject. The scene must be BRIGHT and FULLY LIT.
+    const prompt = `Describe a BRIGHT scene in THREE spatial layers. Each layer under 40 chars.
 ${loveLine}
 ${textNouns}
 Creative direction: ${seedContext}
-Include the text "${phrase}" physically integrated into the scene.
-Aesthetic: ${aestheticVibe}. Color temperature: ${colorTemp}.${modeDirective}${styleAvoidLine}
-Every noun in your scene must come from the post text or creative direction above. Invent nothing new.
-Return ONLY the scene description.`;
+Include the text "${phrase}" in one layer.
+Aesthetic: ${aestheticVibe}.${modeDirective}${styleAvoidLine}
+Every noun must come from the post text or creative direction. Invent nothing new.
+Return ONLY valid JSON: { "foreground": "close detail", "midground": "main subject", "background": "environment" }`;
 
     const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
     const raw = await this.ai.generateText(
-      'You write ultra-concise photograph descriptions. ONE clear subject, BRIGHT lighting, vivid color. Every scene looks like a masterclass photograph — sharp focus, stunning composition, flooded with natural or dramatic light.',
+      'You describe photograph scenes in spatial layers. Foreground, midground, background. Concise, visual, concrete.',
       prompt,
       { temperature: temp, label: 'Image Prompt' }
     );
 
-    let scene = (raw || '').trim();
-    if (scene.startsWith('"') && scene.endsWith('"')) scene = scene.slice(1, -1);
-    if (scene.startsWith('```')) scene = scene.replace(/```\w*\n?/g, '').trim();
-    if (!scene || scene.length < 10) {
-      scene = `"${phrase}" radiating in brilliant prismatic light through a luminous hyperchromatic dreamscape`;
+    // Parse spatial layers or fall back to raw text
+    const sceneData = this.ai.extractJSON(raw);
+    let scene;
+    if (sceneData?.foreground && sceneData?.midground && sceneData?.background) {
+      scene = `In the foreground, ${sceneData.foreground}. ${sceneData.midground}. In the background, ${sceneData.background}`;
+    } else {
+      scene = (raw || '').trim();
+      if (scene.startsWith('"') && scene.endsWith('"')) scene = scene.slice(1, -1);
+      if (scene.startsWith('```')) scene = scene.replace(/```\w*\n?/g, '').trim();
     }
-    if (scene.length > 250) scene = scene.slice(0, 247) + '...';
+    if (!scene || scene.length < 10) {
+      scene = `"${phrase}" radiating in brilliant light through a vivid dreamscape`;
+    }
+    if (scene.length > 300) scene = scene.slice(0, 297) + '...';
 
-    // Assemble: scene + plan fields + trippy effect + style + sweetener
-    // Override composition from code array to break macro lock
+    // Assemble: Subject → Style → Lighting+Lens → Color+Film → Composition → Trippy → Text → Sweetener
     const medium = plan.imageMedium || this._pickRandom(LoveEngine.PHOTOGRAPHY_STYLES, 1)[0];
     const lighting = plan.lighting || this._pickRandom(LoveEngine.LIGHTING_STYLES, 1)[0];
-    const palette = plan.colorPalette || `${this._pickRandom(LoveEngine.SUGGESTED_COLORS, 3).join(', ')}`;
+    const palette = plan.colorPalette || this._pickRandom(LoveEngine.SUGGESTED_COLORS, 3).join(', ');
     const composition = this._pickRandom(LoveEngine.COMPOSITION_TYPES, 1)[0];
     const trippyEffect = this._pickRandom(LoveEngine.TRIPPY_EFFECTS, 1)[0];
     const imageStyle = this._pickRandom(LoveEngine.IMAGE_STYLES, 1)[0];
-    this._lastImageSelections = { trippyEffect, imageStyle, medium, lighting, palette, composition, colorTemp, aestheticVibe, featureLove, outfit: outfit || null, loveInteraction: loveInteraction || null, loveArchetype: loveArchetype || null };
+    const filmStock = this._pickRandom(LoveEngine.FILM_STOCKS, 1)[0];
+    const lensSpec = this._pickRandom(LoveEngine.LENS_SPECS, 1)[0];
 
-    const result = `${scene}. ${imageStyle}, ${composition}. ${lighting}, ${palette}. ${trippyEffect}. The words "${phrase}" appear as crisp, legible text artfully integrated into the scene — formed naturally from whatever materials, surfaces, or phenomena are present. ${aestheticVibe}. 8K UHD, sharp focus.`;
+    this._lastImageSelections = { trippyEffect, imageStyle, medium, lighting, palette, composition, filmStock, lensSpec, aestheticVibe, featureLove, outfit: outfit || null, loveInteraction: loveInteraction || null, loveArchetype: loveArchetype || null };
+
+    const result = [
+      scene,
+      `${imageStyle}, ${medium}`,
+      `${lighting}, ${lensSpec}`,
+      `${palette}, ${filmStock} color grading`,
+      composition,
+      trippyEffect,
+      `"${phrase}" as legible text integrated into the scene`,
+      'sharp focus',
+    ].join('. ') + '.';
     if (result.length > 1200) return result.slice(0, 1197) + '...';
     return result;
   }

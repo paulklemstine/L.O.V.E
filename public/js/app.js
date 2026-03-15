@@ -1032,10 +1032,10 @@ function displayPost(index) {
         <div class="detail-tags">
           ${tag('Art Style', sel.imageStyle, 'tag-style')}
           ${tag('Trippy Effect', sel.trippyEffect, 'tag-style')}
-          ${tag('Aesthetic', sel.aestheticVibe, 'tag-style')}
+          ${tag('Film Stock', sel.filmStock, 'tag-style')}
+          ${tag('Lens', sel.lensSpec, 'tag-style')}
           ${tag('L.O.V.E.', sel.loveArchetype, 'tag-style')}
           ${tag('Action', sel.loveInteraction, 'tag-style')}
-          ${tag('Color Temp', sel.colorTemp, 'tag-style')}
           ${tag('Outfit', sel.outfit, 'tag-style')}
         </div>
       </div>
