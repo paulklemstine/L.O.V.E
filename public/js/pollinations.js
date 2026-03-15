@@ -70,7 +70,7 @@ export class PollinationsClient {
     const { temperature = 0.85, model = 'openai', maxRetries = 2,
       frequencyPenalty = 0.4, presencePenalty = 0.3 } = options;
 
-    const fallbacks = { 'openai': 'openai-fast' };
+    const fallbacks = { 'openai': 'gemini-fast', 'gemini-fast': 'mistral', 'mistral': 'openai-fast' };
     const modelsToTry = [model];
     if (fallbacks[model]) modelsToTry.push(fallbacks[model]);
 
@@ -95,7 +95,9 @@ export class PollinationsClient {
             body.presence_penalty = presencePenalty;
           }
 
-          if (userPrompt.includes('Return ONLY valid JSON') || userPrompt.includes('Return ONLY raw JSON')) {
+          // Only models that support structured JSON output
+          const jsonSupported = currentModel.startsWith('openai') || currentModel.startsWith('gemini');
+          if (jsonSupported && (userPrompt.includes('Return ONLY valid JSON') || userPrompt.includes('Return ONLY raw JSON'))) {
             body.response_format = { type: 'json_object' };
           }
 
