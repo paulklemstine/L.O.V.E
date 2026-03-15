@@ -75,7 +75,7 @@ export class PollinationsClient {
     if (fallbacks[model]) modelsToTry.push(fallbacks[model]);
 
     for (const currentModel of modelsToTry) {
-      const penaltiesSupported = currentModel.startsWith('claude') || currentModel.startsWith('openai');
+      const penaltiesSupported = currentModel.startsWith('claude');
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
