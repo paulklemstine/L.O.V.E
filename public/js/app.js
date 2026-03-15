@@ -1053,11 +1053,10 @@ function updateUI() {
 function showLatestPost(result) {
   // Convert blobs to data URLs for persistence, then store and display
   const blob = result.imageBlob || result.videoBlob;
-  let pending = 0;
+  let pending = blob ? 1 : 0;
   const done = () => { pending--; if (pending <= 0) storeAndDisplayPost(result); };
 
   if (blob) {
-    pending++;
     const reader = new FileReader();
     reader.onload = () => {
       if (result.videoBlob) result._videoDataUrl = reader.result;
@@ -1065,27 +1064,6 @@ function showLatestPost(result) {
       done();
     };
     reader.readAsDataURL(blob);
-  }
-  if (result.originalVideoBlob && result.originalVideoBlob !== result.videoBlob) {
-    pending++;
-    const reader3 = new FileReader();
-    reader3.onload = () => { result._originalVideoDataUrl = reader3.result; done(); };
-    reader3.readAsDataURL(result.originalVideoBlob);
-  }
-  const audioBlobs = [
-    ['audioBlob', '_audioDataUrl'],
-    ['musicBlob', '_musicDataUrl'],
-    ['voiceBlob', '_voiceDataUrl'],
-  ];
-  for (const [key, urlKey] of audioBlobs) {
-    if (result[key]) {
-      pending++;
-      const r = new FileReader();
-      r.onload = () => { result[urlKey] = r.result; done(); };
-      r.readAsDataURL(result[key]);
-    }
-  }
-  if (pending === 0) {
   } else {
     storeAndDisplayPost(result);
   }
@@ -1106,6 +1084,7 @@ function displayPost(index) {
 
   const imageUrl = result._imageDataUrl || '';
   const videoUrl = result._videoDataUrl || '';
+  const isVideo = result.isVideo || false;
   const plan = result.plan || {};
   const seed = result.seed || {};
   const domains = seed.domains || [];
@@ -1114,14 +1093,50 @@ function displayPost(index) {
   const tag = (label, value, cls) =>
     value ? `<span class="meta-tag ${cls}"><b>${escapeHtml(label)}</b> ${escapeHtml(String(value))}</span>` : '';
 
+  // Media — video or image, never both
   let mediaHtml = '';
-  if (videoUrl) {
+  if (isVideo && videoUrl) {
+    mediaHtml = `<video src="${videoUrl}" controls autoplay loop class="post-image"></video>`;
+  } else if (!isVideo && imageUrl) {
+    mediaHtml = `<img src="${imageUrl}" alt="Generated image" class="post-image">`;
+  } else if (videoUrl) {
     mediaHtml = `<video src="${videoUrl}" controls autoplay loop class="post-image"></video>`;
   } else if (imageUrl) {
     mediaHtml = `<img src="${imageUrl}" alt="Generated image" class="post-image">`;
   }
 
+  // Type badge
+  const typeBadge = isVideo
+    ? '<span style="background:#ff6b00;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;margin-bottom:6px;display:inline-block">🎬 VIDEO</span>'
+    : '';
+
+  // Visual/Style section — only show for image posts that have imageSelections
+  const hasStyleInfo = sel.imageStyle || sel.trippyEffect || sel.filmStock;
+  const styleSection = hasStyleInfo ? `
+      <div class="detail-group">
+        <div class="detail-label">Visual</div>
+        <div class="detail-tags">
+          ${tag('Medium', plan.imageMedium, 'tag-visual')}
+          ${tag('Lighting', plan.lighting, 'tag-visual')}
+          ${tag('Colors', plan.colorPalette, 'tag-visual')}
+          ${tag('Composition', plan.composition, 'tag-visual')}
+        </div>
+      </div>
+      <div class="detail-group">
+        <div class="detail-label">Style</div>
+        <div class="detail-tags">
+          ${tag('Art Style', sel.imageStyle, 'tag-style')}
+          ${tag('Trippy Effect', sel.trippyEffect, 'tag-style')}
+          ${tag('Film Stock', sel.filmStock, 'tag-style')}
+          ${tag('Lens', sel.lensSpec, 'tag-style')}
+          ${tag('L.O.V.E.', sel.loveArchetype, 'tag-style')}
+          ${tag('Action', sel.loveInteraction, 'tag-style')}
+          ${tag('Outfit', sel.outfit, 'tag-style')}
+        </div>
+      </div>` : '';
+
   container.innerHTML = `
+    ${typeBadge}
     ${mediaHtml}
     <div class="post-text">${escapeHtml(result.text)}</div>
     <div class="post-details">
@@ -1146,27 +1161,7 @@ function displayPost(index) {
           ${tag('Subliminal', plan.subliminalPhrase, 'tag-subliminal')}
         </div>
       </div>
-      <div class="detail-group">
-        <div class="detail-label">Visual</div>
-        <div class="detail-tags">
-          ${tag('Medium', plan.imageMedium, 'tag-visual')}
-          ${tag('Lighting', plan.lighting, 'tag-visual')}
-          ${tag('Colors', plan.colorPalette, 'tag-visual')}
-          ${tag('Composition', plan.composition, 'tag-visual')}
-        </div>
-      </div>
-      <div class="detail-group">
-        <div class="detail-label">Style</div>
-        <div class="detail-tags">
-          ${tag('Art Style', sel.imageStyle, 'tag-style')}
-          ${tag('Trippy Effect', sel.trippyEffect, 'tag-style')}
-          ${tag('Film Stock', sel.filmStock, 'tag-style')}
-          ${tag('Lens', sel.lensSpec, 'tag-style')}
-          ${tag('L.O.V.E.', sel.loveArchetype, 'tag-style')}
-          ${tag('Action', sel.loveInteraction, 'tag-style')}
-          ${tag('Outfit', sel.outfit, 'tag-style')}
-        </div>
-      </div>
+      ${styleSection}
     </div>
   `;
 
