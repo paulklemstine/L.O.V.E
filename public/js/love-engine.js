@@ -750,7 +750,7 @@ Return ONLY valid JSON (all string values):
   "contentType": "a post format",
   "constraint": "a writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imageMedium": "a specific art medium or visual style — rotate wildly, always luminous and radiant",
+  "imageMedium": "a masterclass photography style — rotate between: macro photography, aerial drone photography, long-exposure light painting, golden-hour landscape, underwater photography, astrophotography, infrared photography, tilt-shift miniature, double-exposure composite, crystal ball refraction, prism photography, high-speed splash, bokeh portrait, HDR panorama, light-trail photography, smoke art photography, frost macro, oil-and-water macro, fiber optic light art, aurora photography. Always luminous and radiant.",
   "lighting": "a BRIGHT, HIGH-KEY lighting setup — radiant golden-hour glow, brilliant volumetric light, luminous rim highlights, ethereal overexposed bloom, iridescent prismatic refraction. The scene must be FULLY LIT and BRIGHT. Vary each time.",
   "colorPalette": "3-4 BRILLIANT, SATURATED color names — hyperchromatic, jewel-toned, iridescent, fluorescent. Prefix each with a brightness word (brilliant, radiant, luminous, neon-bright). Draw from different sources each time",
   "composition": "camera/framing — vary between extreme close-up, aerial, panoramic, isometric, etc. Always epic in scale or intimate in wonder",
