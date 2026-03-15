@@ -618,6 +618,27 @@ export class LoveEngine {
     'Mamiya RZ67', 'Contax 645', 'Rolleiflex 2.8F', 'Linhof Technika',
   ];
 
+  static MUSIC_GENRES = [
+    'epic rave anthem', 'deep dubstep bass drop', 'drum and bass roller',
+    'psytrance hypnotic build', 'techno industrial pulse', 'house music groove',
+    'ambient downtempo chill', 'breakbeat jungle', 'hardstyle euphoric',
+    'garage UK bass', 'trance uplifting melody', 'electro funk bounce',
+    'lo-fi chill beats', 'synthwave retro drive', 'glitch hop wonky',
+    'neurofunk dark dnb', 'progressive house build', 'acid techno squelch',
+    'future bass emotional drop', 'dub reggae electronic', 'IDM experimental',
+    'happy hardcore rave', 'minimal tech groove', 'big room festival drop',
+    'liquid drum and bass', 'dark psytrance forest', 'chillstep ethereal',
+    'complextro glitch', 'melodic dubstep cinematic', 'detroit techno deep',
+  ];
+
+  static MUSIC_MOODS = [
+    'euphoric and uplifting', 'dark and driving', 'dreamy and floating',
+    'aggressive and powerful', 'warm and soulful', 'cosmic and vast',
+    'intimate and tender', 'wild and chaotic', 'meditative and hypnotic',
+    'triumphant and climactic', 'melancholic and beautiful', 'raw and gritty',
+    'playful and bouncy', 'cinematic and epic', 'underground and minimal',
+  ];
+
   static TEXT_SUBSTRATES = [
     'neon sign glowing on a brick wall', 'carved into a wooden signpost',
     'chiseled into stone monument', 'spray-painted graffiti on concrete',
@@ -863,6 +884,8 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       ['TECHNICAL_SWEETENERS', LoveEngine.TECHNICAL_SWEETENERS, 'render engine and 3D technology terms that boost photorealism — e.g. Octane Render, ray tracing'],
       ['CAMERA_BODIES', LoveEngine.CAMERA_BODIES, 'specific professional camera body models with brand and model — e.g. Sony α7R IV, Hasselblad X2D'],
       ['ANALOG_TEXTURES', LoveEngine.ANALOG_TEXTURES, 'subtle analog film imperfections that prevent digital plastic look — e.g. subtle film grain, halation, matte finish'],
+      ['MUSIC_GENRES', LoveEngine.MUSIC_GENRES, 'electronic dance music subgenres and styles — e.g. epic rave anthem, deep dubstep, psytrance, drum and bass'],
+      ['MUSIC_MOODS', LoveEngine.MUSIC_MOODS, 'emotional descriptors for music mood — two to three word mood phrases like euphoric and uplifting, dark and driving'],
       ['TEXT_SUBSTRATES', LoveEngine.TEXT_SUBSTRATES, 'simple real-world ways text physically appears on objects — e.g. neon sign on brick wall, carved into wooden signpost, spray-painted graffiti on concrete'],
       ['TRIPPY_EFFECTS', LoveEngine.TRIPPY_EFFECTS, 'psychedelic visual effects inspired by DMT, LSD, mescaline, psilocybin experiences — specific visual distortions, overlays, and reality-warping phenomena'],
       ['IMAGE_STYLES', LoveEngine.IMAGE_STYLES, 'distinct visual art styles and rendering approaches — specific named styles like anime, oil painting, cyberpunk, etc'],
@@ -886,7 +909,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     const lists = [
       'PHOTOGRAPHY_STYLES', 'LIGHTING_STYLES', 'SUGGESTED_COLORS',
       'COMPOSITION_TYPES', 'STRUGGLE_TYPES', 'METAPHOR_EXAMPLES', 'PHRASE_STRUCTURES',
-      'LOVE_OUTFITS', 'FILM_STOCKS', 'LENS_SPECS', 'TECHNICAL_SWEETENERS', 'CAMERA_BODIES', 'ANALOG_TEXTURES', 'TEXT_SUBSTRATES', 'TRIPPY_EFFECTS', 'IMAGE_STYLES',
+      'LOVE_OUTFITS', 'FILM_STOCKS', 'LENS_SPECS', 'TECHNICAL_SWEETENERS', 'CAMERA_BODIES', 'ANALOG_TEXTURES', 'TEXT_SUBSTRATES', 'MUSIC_GENRES', 'MUSIC_MOODS', 'TRIPPY_EFFECTS', 'IMAGE_STYLES',
       'LOVE_INTERACTIONS', 'ARCHETYPE_ADJECTIVES', 'ARCHETYPE_NOUNS', 'AESTHETIC_VIBES', 'SENSORY_DETAILS', 'VOICE_VIBES',
     ];
     for (const name of lists) {
@@ -1075,12 +1098,46 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     onStatus('Writing micro-story...');
     const story = await this._generateContent(plan, mode, seed);
 
-    // Video-specific prompt
+    // Video-specific prompt (uses same features as image prompt)
     onStatus('Designing cinematic scene...');
     const videoPrompt = await this._generateVideoPrompt(plan, story, mode, seed);
 
-    // Generate video
-    onStatus('Generating video (this may take a minute)...');
+    // Step A: Generate background music
+    const musicGenre = this._pickRandom(LoveEngine.MUSIC_GENRES, 1)[0];
+    const musicMood = this._pickRandom(LoveEngine.MUSIC_MOODS, 1)[0];
+    onStatus(`🎵 Generating ${musicGenre} music...`);
+    let musicBlob = null;
+    try {
+      musicBlob = await this.ai.generateMusic(`${musicGenre}, ${musicMood}, 15 seconds, instrumental`);
+    } catch (err) {
+      onStatus(`Music generation failed (continuing without): ${err.message}`);
+    }
+
+    // Step B: Generate TTS voice narration
+    onStatus('🎙️ Generating voice narration...');
+    let voiceBlob = null;
+    try {
+      voiceBlob = await this.ai.generateAudio(story);
+    } catch (err) {
+      onStatus(`TTS failed (continuing without voice): ${err.message}`);
+    }
+
+    // Step C: Layer voice over music
+    let combinedAudio = null;
+    if (musicBlob && voiceBlob) {
+      onStatus('🎛️ Mixing voice over music...');
+      try {
+        combinedAudio = await this._layerAudio(musicBlob, voiceBlob, 0.3, 1.0);
+      } catch (err) {
+        onStatus(`Audio layering failed: ${err.message}`);
+        combinedAudio = voiceBlob; // fall back to voice only
+      }
+    } else {
+      combinedAudio = voiceBlob || musicBlob; // whatever we have
+    }
+
+    // Step D: Generate video
+    onStatus('🎬 Generating video (this may take a minute)...');
     let videoBlob = null;
     try {
       videoBlob = await this.ai.generateVideo(videoPrompt);
@@ -1089,23 +1146,14 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       throw err;
     }
 
-    // Generate TTS narration and mux into video
-    onStatus('Generating voice narration...');
-    let audioBlob = null;
-    try {
-      audioBlob = await this.ai.generateAudio(story);
-    } catch (err) {
-      onStatus(`TTS failed (continuing without audio): ${err.message}`);
-    }
-
-    // Mux audio into video using browser MediaRecorder
-    if (audioBlob && videoBlob) {
-      onStatus('Mixing audio into video...');
+    // Step E: Mux combined audio into video
+    if (combinedAudio && videoBlob) {
+      onStatus('🎬 Mixing audio into video...');
       try {
-        videoBlob = await this._muxVideoAudio(videoBlob, audioBlob);
-        onStatus('Audio mixed successfully.');
+        videoBlob = await this._muxVideoAudio(videoBlob, combinedAudio);
+        onStatus('✅ Video + music + voice mixed successfully.');
       } catch (err) {
-        onStatus(`Audio mux failed (posting video without narration): ${err.message}`);
+        onStatus(`Audio mux failed (posting video without audio): ${err.message}`);
         console.error('[Mux]', err);
       }
     }
@@ -1136,6 +1184,13 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     const phrase = plan.subliminalPhrase || 'LOVE';
     const aestheticVibe = this._pickRandom(LoveEngine.AESTHETIC_VIBES, 1)[0];
     const trippyEffect = this._pickRandom(LoveEngine.TRIPPY_EFFECTS, 1)[0];
+    const imageStyle = this._pickRandom(LoveEngine.IMAGE_STYLES, 1)[0];
+    const lighting = plan.lighting || this._pickRandom(LoveEngine.LIGHTING_STYLES, 1)[0];
+    const palette = plan.colorPalette || this._pickRandom(LoveEngine.SUGGESTED_COLORS, 2).join(' and ');
+    const filmStock = this._pickRandom(LoveEngine.FILM_STOCKS, 1)[0];
+    const lensSpec = this._pickRandom(LoveEngine.LENS_SPECS, 1)[0];
+    const composition = this._pickRandom(LoveEngine.COMPOSITION_TYPES, 1)[0];
+    const substrateExamples = this._pickRandom(LoveEngine.TEXT_SUBSTRATES, 3).join('; ');
 
     const seedContext = [
       seed.concept ? `Concept: ${seed.concept.slice(0, 80)}` : '',
@@ -1144,15 +1199,15 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       plan.vibe ? `Vibe: ${plan.vibe}` : '',
     ].filter(Boolean).join('. ');
 
-    const prompt = `Describe a 5-10 second cinematic video scene in ONE paragraph (under 200 chars). Include camera movement (slow zoom, pan, dolly, orbit). The scene has motion — things flow, shift, transform.
-No people, no hands, no human figures. Objects and nature only.
+    const prompt = `Describe a 5-10 second cinematic video scene in ONE paragraph (under 250 chars). Include camera movement (slow zoom, pan, dolly, orbit, crane). The scene has MOTION — things flow, shift, transform, pulse.
+Scenes are observed, never touched. Objects frozen mid-action then coming alive. No people, no hands.
 Creative direction: ${seedContext}
-The phrase "${phrase}" appears naturally in the scene — carved, glowing, or formed by the environment.
-Aesthetic: ${aestheticVibe}. Visual effect: ${trippyEffect}.
+The phrase "${phrase}" appears naturally — e.g. ${substrateExamples}.
+Style: ${imageStyle}. Lighting: ${lighting}. Colors: ${palette}. Composition: ${composition}. Aesthetic: ${aestheticVibe}. Visual effect: ${trippyEffect}.
 Return ONLY the scene description.`;
 
     const raw = await this.ai.generateText(
-      'You write cinematic video scene descriptions. Short, vivid, with camera movement and transformation. Every scene is bright, epic, and mesmerizing.',
+      'You write cinematic video scene descriptions. Short, vivid, camera movement, transformation. Bright, epic, mesmerizing, psychedelic.',
       prompt,
       { temperature: 1.2, label: 'Video Prompt' }
     );
@@ -1161,11 +1216,104 @@ Return ONLY the scene description.`;
     if (scene.startsWith('"') && scene.endsWith('"')) scene = scene.slice(1, -1);
     if (scene.startsWith('```')) scene = scene.replace(/```\w*\n?/g, '').trim();
     if (!scene || scene.length < 10) {
-      scene = `Slow cinematic orbit around "${phrase}" carved into ancient stone, golden light pouring through, particles drifting`;
+      scene = `Slow cinematic orbit around "${phrase}" carved into ancient stone, ${lighting}, ${palette}, ${trippyEffect}`;
     }
-    if (scene.length > 300) scene = scene.slice(0, 297) + '...';
+    if (scene.length > 350) scene = scene.slice(0, 347) + '...';
 
-    return scene;
+    // Append technical specs like image prompt
+    return `${scene}. ${imageStyle}. ${lighting}, ${palette}, ${filmStock}. ${lensSpec}. ${trippyEffect}.`;
+  }
+
+  // ─── Audio Layering (voice over music with volume control) ────────
+
+  async _layerAudio(musicBlob, voiceBlob, musicVolume = 0.3, voiceVolume = 1.0) {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Decode both audio blobs
+    const [musicBuf, voiceBuf] = await Promise.all([
+      musicBlob.arrayBuffer().then(buf => audioCtx.decodeAudioData(buf)),
+      voiceBlob.arrayBuffer().then(buf => audioCtx.decodeAudioData(buf)),
+    ]);
+
+    // Use voice duration as target length (music loops/trims to fit)
+    const duration = Math.max(voiceBuf.duration, 5);
+    const sampleRate = audioCtx.sampleRate;
+    const length = Math.ceil(duration * sampleRate);
+
+    // Create offline context for rendering
+    const offlineCtx = new OfflineAudioContext(2, length, sampleRate);
+
+    // Music track (lower volume, starts at 0)
+    const musicSource = offlineCtx.createBufferSource();
+    musicSource.buffer = musicBuf;
+    musicSource.loop = true; // loop music if shorter than voice
+    const musicGain = offlineCtx.createGain();
+    musicGain.gain.value = musicVolume;
+    musicSource.connect(musicGain);
+    musicGain.connect(offlineCtx.destination);
+
+    // Voice track (full volume, starts at 0.5s for a music intro)
+    const voiceSource = offlineCtx.createBufferSource();
+    voiceSource.buffer = voiceBuf;
+    const voiceGain = offlineCtx.createGain();
+    voiceGain.gain.value = voiceVolume;
+    voiceSource.connect(voiceGain);
+    voiceGain.connect(offlineCtx.destination);
+
+    // Start both
+    musicSource.start(0);
+    voiceSource.start(0.5); // slight delay for music intro
+
+    // Render to buffer
+    const renderedBuffer = await offlineCtx.startRendering();
+
+    // Convert to WAV blob
+    const wavBlob = this._audioBufferToWav(renderedBuffer);
+    audioCtx.close();
+    return wavBlob;
+  }
+
+  _audioBufferToWav(buffer) {
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const format = 1; // PCM
+    const bitDepth = 16;
+    const bytesPerSample = bitDepth / 8;
+    const blockAlign = numChannels * bytesPerSample;
+    const dataLength = buffer.length * blockAlign;
+    const headerLength = 44;
+    const totalLength = headerLength + dataLength;
+
+    const arrayBuffer = new ArrayBuffer(totalLength);
+    const view = new DataView(arrayBuffer);
+
+    // WAV header
+    const writeString = (offset, str) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
+    writeString(0, 'RIFF');
+    view.setUint32(4, totalLength - 8, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(36, 'data');
+    view.setUint32(40, dataLength, true);
+
+    // Interleave channels and write samples
+    let offset = 44;
+    for (let i = 0; i < buffer.length; i++) {
+      for (let ch = 0; ch < numChannels; ch++) {
+        const sample = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+        offset += 2;
+      }
+    }
+
+    return new Blob([arrayBuffer], { type: 'audio/wav' });
   }
 
   // ─── Video + Audio Muxing (browser-native MediaRecorder) ───────────

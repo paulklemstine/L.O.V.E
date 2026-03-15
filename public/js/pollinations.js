@@ -234,6 +234,29 @@ export class PollinationsClient {
   }
 
   /**
+   * Generate music and return it as a Blob.
+   * Model: elevenmusic (ElevenLabs Music, 3 req/pollen)
+   */
+  async generateMusic(prompt, options = {}) {
+    const { model = 'elevenmusic' } = options;
+
+    const response = await fetch(`${BASE_URL}/v1/audio/speech`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`
+      },
+      body: JSON.stringify({ model, input: prompt })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Pollinations music ${response.status}`);
+    }
+
+    return await response.blob();
+  }
+
+  /**
    * Generate text and parse JSON from the response.
    */
   async generateJSON(systemPrompt, userPrompt, options = {}) {
