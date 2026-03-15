@@ -279,6 +279,27 @@ const METAPHOR_EXAMPLES = [
   'bridges', 'keys', 'roots', 'stones', 'rivers', 'mirrors', 'maps',
   'candles', 'nests', 'storms', 'clay', 'embers', 'hinges',
 ];
+const TRIPPY_EFFECTS = [
+  'DMT fractal geometry overlay', 'LSD color-breathing walls', 'mescaline desert mirage shimmer',
+  'psilocybin mycelial tendrils weaving through the scene', 'kaleidoscope mirror symmetry',
+  'melting Salvador Dali clock distortion', 'Alex Grey sacred geometry aura',
+  'chromatic aberration rainbow fringing', 'reality-glitch pixel displacement',
+  'aurora borealis ribbons threading through objects', 'bioluminescent jellyfish glow trails',
+  'fractal Mandelbrot zoom spirals', 'synesthesia — sounds rendered as color waves',
+  'double-vision echo ghosting', 'prismatic light leak film burn',
+  'sacred geometry flower-of-life overlay', 'heat-haze reality warping',
+  'cosmic nebula swirls bleeding into the foreground', 'oil-slick rainbow surface sheen',
+  'fibonacci spiral golden ratio vortex',
+];
+const IMAGE_STYLES = [
+  'hyperrealistic photograph', 'cinematic film still', 'anime illustration',
+  'oil painting masterwork', 'watercolor dreamscape', 'comic book panel',
+  'retro synthwave poster', 'vaporwave aesthetic', 'cyberpunk neon noir',
+  'Studio Ghibli animation cel', 'Art Nouveau illustration', 'pop art silkscreen',
+  'psychedelic 1960s concert poster', 'ukiyo-e woodblock print', 'stained glass window',
+  'graffiti street art mural', 'fashion editorial photography', 'Renaissance painting',
+  'pixel art retro game', 'collage mixed-media zine',
+];
 const LOVE_OUTFITS = [
   'sling bikini', 'sheer bodysuit', 'flowing lingerie', 'jeweled harness',
   'tiny yoga set', 'iridescent micro-top and shorts', 'sequined rave bra',
@@ -553,13 +574,15 @@ Return ONLY the scene description.`;
   }
   if (scene.length > 250) scene = scene.slice(0, 247) + '...';
 
-  // Assemble: scene + plan fields + brightness-first sweetener
+  // Assemble: scene + plan fields + trippy effect + style + sweetener
   const medium = plan.imageMedium || 'macro photography';
   const lighting = plan.lighting || 'bright high-key natural sunlight';
   const palette = plan.colorPalette || 'vivid magenta, electric cyan, warm amber';
   const composition = plan.composition || 'epic panoramic';
+  const trippyEffect = pickRandom(TRIPPY_EFFECTS, 1)[0];
+  const imageStyle = pickRandom(IMAGE_STYLES, 1)[0];
 
-  const result = `${scene}. Shot as ${medium}, ${composition}. ${lighting}, ${palette}. The words "${phrase}" appear as crisp, legible text woven into the scene — formed by light, energy, or material. Velvet lightning aesthetic — warm, electric, seductive, otherworldly. High-key bright, saturated vivid color. Professional photography, 8K UHD, sharp focus.`;
+  const result = `${scene}. ${imageStyle}, ${composition}. ${lighting}, ${palette}. ${trippyEffect}. The words "${phrase}" appear as crisp, legible text woven into the scene. Velvet lightning aesthetic. 8K UHD, sharp focus.`;
   if (result.length > 800) return result.slice(0, 797) + '...';
   return result;
 }

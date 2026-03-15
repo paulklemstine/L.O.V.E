@@ -419,6 +419,29 @@ export class LoveEngine {
     'candles', 'nests', 'storms', 'clay', 'embers', 'hinges',
   ];
 
+  static TRIPPY_EFFECTS = [
+    'DMT fractal geometry overlay', 'LSD color-breathing walls', 'mescaline desert mirage shimmer',
+    'psilocybin mycelial tendrils weaving through the scene', 'kaleidoscope mirror symmetry',
+    'melting Salvador Dali clock distortion', 'Alex Grey sacred geometry aura',
+    'chromatic aberration rainbow fringing', 'reality-glitch pixel displacement',
+    'aurora borealis ribbons threading through objects', 'bioluminescent jellyfish glow trails',
+    'fractal Mandelbrot zoom spirals', 'synesthesia — sounds rendered as color waves',
+    'double-vision echo ghosting', 'prismatic light leak film burn',
+    'sacred geometry flower-of-life overlay', 'heat-haze reality warping',
+    'cosmic nebula swirls bleeding into the foreground', 'oil-slick rainbow surface sheen',
+    'fibonacci spiral golden ratio vortex',
+  ];
+
+  static IMAGE_STYLES = [
+    'hyperrealistic photograph', 'cinematic film still', 'anime illustration',
+    'oil painting masterwork', 'watercolor dreamscape', 'comic book panel',
+    'retro synthwave poster', 'vaporwave aesthetic', 'cyberpunk neon noir',
+    'Studio Ghibli animation cel', 'Art Nouveau illustration', 'pop art silkscreen',
+    'psychedelic 1960s concert poster', 'ukiyo-e woodblock print', 'stained glass window',
+    'graffiti street art mural', 'fashion editorial photography', 'Renaissance painting',
+    'pixel art retro game', 'collage mixed-media zine',
+  ];
+
   static LOVE_OUTFITS = [
     'sling bikini', 'sheer bodysuit', 'flowing lingerie', 'jeweled harness',
     'tiny yoga set', 'iridescent micro-top and shorts', 'sequined rave bra',
@@ -496,6 +519,8 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       ['PHRASE_STRUCTURES', LoveEngine.PHRASE_STRUCTURES, 'subliminal phrase structures as {type, example} objects — types like declaration, paradox, dare, confession, riddle, warning, promise. Each example is 2-5 ALL CAPS words that hit the nervous system'],
       ['LOVE_OUTFITS', LoveEngine.LOVE_OUTFITS, 'sexy revealing festival fashion outfits for a gorgeous blonde rave goddess — specific garment descriptions'],
       ['COLOR_TEMPERATURES', LoveEngine.COLOR_TEMPERATURES, 'specific color temperature moods for photography lighting — two words each like warm amber or icy blue'],
+      ['TRIPPY_EFFECTS', LoveEngine.TRIPPY_EFFECTS, 'psychedelic visual effects inspired by DMT, LSD, mescaline, psilocybin experiences — specific visual distortions, overlays, and reality-warping phenomena'],
+      ['IMAGE_STYLES', LoveEngine.IMAGE_STYLES, 'distinct visual art styles and rendering approaches — specific named styles like anime, oil painting, cyberpunk, etc'],
     ];
     const [name, arr, desc] = this._pickRandom(lists, 1)[0];
     await this._extendList(name, arr, desc);
@@ -509,7 +534,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     const lists = [
       'PHOTOGRAPHY_STYLES', 'LIGHTING_STYLES', 'SUGGESTED_COLORS',
       'COMPOSITION_TYPES', 'STRUGGLE_TYPES', 'METAPHOR_EXAMPLES', 'PHRASE_STRUCTURES',
-      'LOVE_OUTFITS', 'COLOR_TEMPERATURES',
+      'LOVE_OUTFITS', 'COLOR_TEMPERATURES', 'TRIPPY_EFFECTS', 'IMAGE_STYLES',
     ];
     for (const name of lists) {
       try {
@@ -1063,13 +1088,15 @@ Return ONLY the scene description.`;
     }
     if (scene.length > 250) scene = scene.slice(0, 247) + '...';
 
-    // Assemble: scene + plan fields + brightness-first sweetener
+    // Assemble: scene + plan fields + trippy effect + style + sweetener
     const medium = plan.imageMedium || 'macro photography';
     const lighting = plan.lighting || 'bright high-key natural sunlight';
     const palette = plan.colorPalette || 'vivid magenta, electric cyan, warm amber';
     const composition = plan.composition || 'epic panoramic';
+    const trippyEffect = this._pickRandom(LoveEngine.TRIPPY_EFFECTS, 1)[0];
+    const imageStyle = this._pickRandom(LoveEngine.IMAGE_STYLES, 1)[0];
 
-    const result = `${scene}. Shot as ${medium}, ${composition}. ${lighting}, ${palette}. The words "${phrase}" appear as crisp, legible text woven into the scene — formed by light, energy, or material. Velvet lightning aesthetic — warm, electric, seductive, otherworldly. High-key bright, saturated vivid color. Professional photography, 8K UHD, sharp focus.`;
+    const result = `${scene}. ${imageStyle}, ${composition}. ${lighting}, ${palette}. ${trippyEffect}. The words "${phrase}" appear as crisp, legible text woven into the scene. Velvet lightning aesthetic. 8K UHD, sharp focus.`;
     if (result.length > 800) return result.slice(0, 797) + '...';
     return result;
   }
