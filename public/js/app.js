@@ -1051,11 +1051,18 @@ function showLatestPost(result) {
     reader3.onload = () => { result._originalVideoDataUrl = reader3.result; done(); };
     reader3.readAsDataURL(result.originalVideoBlob);
   }
-  if (result.audioBlob) {
-    pending++;
-    const reader2 = new FileReader();
-    reader2.onload = () => { result._audioDataUrl = reader2.result; done(); };
-    reader2.readAsDataURL(result.audioBlob);
+  const audioBlobs = [
+    ['audioBlob', '_audioDataUrl'],
+    ['musicBlob', '_musicDataUrl'],
+    ['voiceBlob', '_voiceDataUrl'],
+  ];
+  for (const [key, urlKey] of audioBlobs) {
+    if (result[key]) {
+      pending++;
+      const r = new FileReader();
+      r.onload = () => { result[urlKey] = r.result; done(); };
+      r.readAsDataURL(result[key]);
+    }
   }
   if (pending === 0) {
   } else {
@@ -1087,6 +1094,10 @@ function displayPost(index) {
     value ? `<span class="meta-tag ${cls}"><b>${escapeHtml(label)}</b> ${escapeHtml(String(value))}</span>` : '';
 
   const originalVideoUrl = result._originalVideoDataUrl || '';
+  const musicUrl = result._musicDataUrl || '';
+  const voiceUrl = result._voiceDataUrl || '';
+  const combinedAudioUrl = result._audioDataUrl || '';
+
   let mediaHtml = '';
   if (videoUrl && originalVideoUrl) {
     mediaHtml = `<div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1095,10 +1106,19 @@ function displayPost(index) {
         <video src="${originalVideoUrl}" controls muted loop style="width:100%;border-radius:8px;border:1px solid var(--border)"></video>
       </div>
       <div style="flex:1;min-width:200px;text-align:center">
-        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">Final (music + voice)</div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">Final (posted to Bluesky)</div>
         <video src="${videoUrl}" controls autoplay loop style="width:100%;border-radius:8px;border:1px solid var(--accent)"></video>
       </div>
     </div>`;
+    // Audio debug players
+    const audioPlayers = [
+      musicUrl ? `<div><span style="font-size:11px;color:var(--text-secondary)">🎵 Music</span><audio src="${musicUrl}" controls style="width:100%;height:28px"></audio></div>` : '',
+      voiceUrl ? `<div><span style="font-size:11px;color:var(--text-secondary)">🎙️ Voice</span><audio src="${voiceUrl}" controls style="width:100%;height:28px"></audio></div>` : '',
+      combinedAudioUrl ? `<div><span style="font-size:11px;color:var(--text-secondary)">🎛️ Combined</span><audio src="${combinedAudioUrl}" controls style="width:100%;height:28px"></audio></div>` : '',
+    ].filter(Boolean).join('');
+    if (audioPlayers) {
+      mediaHtml += `<div style="display:flex;flex-direction:column;gap:4px;margin-top:8px">${audioPlayers}</div>`;
+    }
   } else if (videoUrl) {
     mediaHtml = `<video src="${videoUrl}" controls autoplay loop class="post-image"></video>`;
   } else if (imageUrl) {
