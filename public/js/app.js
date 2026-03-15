@@ -1030,6 +1030,12 @@ function showLatestPost(result) {
     };
     reader.readAsDataURL(blob);
   }
+  if (result.originalVideoBlob && result.originalVideoBlob !== result.videoBlob) {
+    pending++;
+    const reader3 = new FileReader();
+    reader3.onload = () => { result._originalVideoDataUrl = reader3.result; done(); };
+    reader3.readAsDataURL(result.originalVideoBlob);
+  }
   if (result.audioBlob) {
     pending++;
     const reader2 = new FileReader();
@@ -1065,8 +1071,20 @@ function displayPost(index) {
   const tag = (label, value, cls) =>
     value ? `<span class="meta-tag ${cls}"><b>${escapeHtml(label)}</b> ${escapeHtml(String(value))}</span>` : '';
 
+  const originalVideoUrl = result._originalVideoDataUrl || '';
   let mediaHtml = '';
-  if (videoUrl) {
+  if (videoUrl && originalVideoUrl) {
+    mediaHtml = `<div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px;text-align:center">
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">Original</div>
+        <video src="${originalVideoUrl}" controls muted loop style="width:100%;border-radius:8px;border:1px solid var(--border)"></video>
+      </div>
+      <div style="flex:1;min-width:200px;text-align:center">
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">Final (music + voice)</div>
+        <video src="${videoUrl}" controls autoplay loop style="width:100%;border-radius:8px;border:1px solid var(--accent)"></video>
+      </div>
+    </div>`;
+  } else if (videoUrl) {
     mediaHtml = `<video src="${videoUrl}" controls autoplay loop class="post-image"></video>`;
   } else if (imageUrl) {
     mediaHtml = `<img src="${imageUrl}" alt="Generated image" class="post-image">`;

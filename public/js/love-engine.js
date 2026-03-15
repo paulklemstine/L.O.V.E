@@ -1180,6 +1180,9 @@ Return ONLY the spoken line, nothing else.`,
       onStatus('🎛️ No audio generated');
     }
 
+    // Save original video for dashboard comparison
+    const originalVideoBlob = videoBlob;
+
     // Step E: Replace video audio completely with our music+voice
     if (combinedAudio && videoBlob) {
       onStatus('🎬 Replacing video audio...');
@@ -1203,6 +1206,7 @@ Return ONLY the spoken line, nothing else.`,
       text: story,
       subliminal: plan.subliminalPhrase,
       videoBlob,
+      originalVideoBlob,
       audioBlob: combinedAudio,
       vibe: plan.vibe,
       visualPrompt: videoPrompt,
