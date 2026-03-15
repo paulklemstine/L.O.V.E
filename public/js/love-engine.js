@@ -21,7 +21,7 @@ RULES:
 - Emotional gut-punch in every line. The reader should feel their heart expand.
 - Mix sacred with playful. Cosmic truth with a wink and a fist pump.
 - Short sentences. Punchy rhythm. Every word earns its place.
-- Sensory details that spark joy — warmth, light, vibration, bloom, ignition.
+- Sensory details that spark joy — warmth, light, vibration, texture, electricity, momentum.
 - Uplifting ALWAYS. The reader walks away feeling invincible.`;
 
 // ═══════════════════════════════════════════════════════════════════
@@ -220,11 +220,11 @@ export class LoveEngine {
   }
 
   _getOpeningVarietyHint() {
-    if (this.recentOpenings.length < 3) return '';
+    if (this.recentOpenings.length < 2) return '';
     const last5 = this.recentOpenings.slice(-5);
-    const youreCount = last5.filter(o => o.startsWith("you're") || o.startsWith("you are") || o.startsWith("you are the")).length;
-    if (youreCount >= 2) {
-      return `\nRecent posts opened with "You're/You are [metaphor]." Open with a completely different structure — a question, a command, a sound, a scene, an image, a fragment.\n`;
+    const youCount = last5.filter(o => o.startsWith("you")).length;
+    if (youCount >= 1) {
+      return `\nRECENT POSTS ALL STARTED WITH "You..." — MANDATORY: open with something completely different. Use a scene description, a question, a command, a metaphor, a sound, a single noun, a fragment, an action. The first word MUST NOT be "you" or "your."\n`;
     }
     return '';
   }
@@ -747,10 +747,10 @@ Return ONLY valid JSON (all string values):
 {
   "theme": "an uplifting theme",
   "vibe": "2-4 word aesthetic vibe",
-  "contentType": "a post format",
+  "contentType": "a static image post format — e.g. motivational poster, photo with caption, illustrated quote card, landscape with text overlay, abstract art poster, typographic design, infographic single-panel, editorial photograph, fine art print, album cover art. Always a single still image.",
   "constraint": "a writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imageMedium": "a masterclass photography style — rotate between: macro photography, aerial drone photography, long-exposure light painting, golden-hour landscape, underwater photography, astrophotography, infrared photography, tilt-shift miniature, double-exposure composite, crystal ball refraction, prism photography, high-speed splash, bokeh portrait, HDR panorama, light-trail photography, smoke art photography, frost macro, oil-and-water macro, fiber optic light art, aurora photography. Always luminous and radiant.",
+  "imageMedium": "pick ONE masterclass photography style from this list: macro photography, aerial drone photography, long-exposure light painting, golden-hour landscape, underwater photography, astrophotography, infrared photography, tilt-shift miniature, double-exposure composite, crystal ball refraction, prism photography, high-speed splash, bokeh portrait, HDR panorama, light-trail photography, smoke art photography, frost macro, oil-and-water macro, fiber optic light art, aurora photography. Return ONLY the style name, nothing else.",
   "lighting": "a BRIGHT, HIGH-KEY lighting setup — radiant golden-hour glow, brilliant volumetric light, luminous rim highlights, ethereal overexposed bloom, iridescent prismatic refraction. The scene must be FULLY LIT and BRIGHT. Vary each time.",
   "colorPalette": "3-4 BRILLIANT, SATURATED color names — hyperchromatic, jewel-toned, iridescent, fluorescent. Prefix each with a brightness word (brilliant, radiant, luminous, neon-bright). Draw from different sources each time",
   "composition": "camera/framing — vary between extreme close-up, aerial, panoramic, isometric, etc. Always epic in scale or intimate in wonder",
@@ -805,9 +805,10 @@ LANGUAGE RULES:
 - HARD LIMIT: 200 characters maximum including emojis and spaces. Count carefully. Shorter is better.
 - Start with emoji, include 1-2 more. Address reader as "you."
 - Hit the reader in the heart. Emotional, uplifting, dopamine-producing. Motivational poster energy turned up to 11.
-- Use sensory, physical language that sparks joy: warmth, glow, vibration, ignition, bloom, electricity.
+- Use sensory, physical language that sparks joy: warmth, glow, vibration, ignition, momentum, electricity.
 - Borrow specific nouns and verbs from the source domains above. Name tools, materials, processes.
 - Make the reader feel invincible, seen, and alive. Every word should land like a hug from the universe.
+- BANNED WORDS (overused, find fresh alternatives): bloom, harvest, gold/golden, seeds, stardust, infinite, sacred, glow/glowing, unstoppable. Use the source domain vocabulary instead.
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
