@@ -1183,7 +1183,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       text: story,
       subliminal: plan.subliminalPhrase,
       videoBlob,
-      audioBlob,
+      audioBlob: combinedAudio,
       vibe: plan.vibe,
       visualPrompt: videoPrompt,
       transmissionNumber: this.transmissionNumber,
@@ -1392,8 +1392,8 @@ Return ONLY the scene description.`;
 
         const recorder = new MediaRecorder(combinedStream, {
           mimeType,
-          videoBitsPerSecond: 2500000,
-          audioBitsPerSecond: 128000,
+          videoBitsPerSecond: 8000000,
+          audioBitsPerSecond: 192000,
         });
 
         const chunks = [];
