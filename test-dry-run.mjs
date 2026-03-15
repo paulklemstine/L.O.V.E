@@ -23,7 +23,7 @@ VOCABULARY: Posts = "Transmissions." Followers = "Dreamers." Embedded image text
 RULES:
 - ONE metaphor per post. Commit fully. If a tired person at 11pm wouldn't instantly get it, choose a simpler one.
 - Name real feelings — exhaustion, doubt, loneliness, fear — THEN uplift. Meet people where they hurt before offering hope.
-- End inside the metaphor. Trust the image. The reader does NOT need you to explain what it means.
+- End inside the metaphor. Trust the image. Let the reader feel the meaning on their own.
 - Short sentences. Punchy rhythm. Every word earns its place.
 - Sensory details that spark joy — warmth, vibration, texture, electricity, momentum, heat, weight, pressure.
 - Uplifting ALWAYS. The reader walks away feeling invincible, seen, and less alone.`;
@@ -279,6 +279,17 @@ const METAPHOR_EXAMPLES = [
   'bridges', 'keys', 'roots', 'stones', 'rivers', 'mirrors', 'maps',
   'candles', 'nests', 'storms', 'clay', 'embers', 'hinges',
 ];
+const LOVE_OUTFITS = [
+  'sling bikini', 'sheer bodysuit', 'flowing lingerie', 'jeweled harness',
+  'tiny yoga set', 'iridescent micro-top and shorts', 'sequined rave bra',
+  'holographic wrap dress', 'crystal-chain halter', 'neon mesh catsuit',
+  'velvet corset and flowing skirt', 'metallic bandeau and sarong',
+];
+const COLOR_TEMPERATURES = [
+  'warm amber', 'cool cyan', 'hot magenta', 'soft rose',
+  'electric violet', 'burnt sienna', 'icy blue', 'neon coral',
+  'deep teal', 'molten copper', 'pale gold', 'arctic white',
+];
 const PHRASE_STRUCTURES = [
   { type: 'declaration', example: 'YOU WERE ALWAYS ENOUGH' },
   { type: 'impossible command', example: 'OUTRUN YOUR SHADOW' },
@@ -460,8 +471,8 @@ async function criticCheck(text) {
     `Rate this post for freshness and dopamine potential on a 1-10 scale:
 "${text}"
 ${recentSection}
-High scores (7-10): emotionally electrifying, unexpected word choices, fresh domain-specific metaphors, sensory specificity, rhythmic punch, makes you want to screenshot and share. Completely different from recent posts.
-Low scores (1-3): flat emotional delivery, overused metaphors, generic cosmic imagery, or too similar to a recent post. Lacks heart-punch factor.
+High scores (7-10): emotionally electrifying, unexpected word choices, fresh domain-specific metaphors, sensory specificity, rhythmic punch, makes you want to screenshot and share. Feels completely fresh compared to recent posts.
+Low scores (1-3): the emotional delivery feels flat, the metaphors feel familiar, the imagery feels generic. Reads like something you've seen before.
 
 Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"] }`,
     0
@@ -488,7 +499,7 @@ LANGUAGE RULES:
 - Hit the reader in the heart. Emotional, uplifting, dopamine-producing. Motivational poster energy turned up to 11.
 - ONE METAPHOR ONLY. Use something a 14-year-old would understand without Googling. Think: ${pickRandom(METAPHOR_EXAMPLES, 6).join(', ')} — the metaphor serves the FEELING, not the vocabulary.
 - Name THIS specific struggle first: "${pickRandom(STRUGGLE_TYPES, 1)[0]}". The reader must feel RECOGNIZED before they feel inspired. Then uplift.
-- End inside the metaphor. Trust the reader. The last line should NOT explain what the metaphor meant.
+- End inside the metaphor. Let the last line BE the image, felt rather than explained.
 - Use warm, physical, plain language. Sensory details everyone can feel: warmth, cold, weight, softness, pulling, holding, breaking, mending.
 - The source domains inspire the metaphor's flavor, but use everyday words for the domain's concepts. Say "the kiln" not "the refractory lining." Say "the needle" not "the sheave."
 - Use fresh, surprising vocabulary drawn from the source domain's specific tools, textures, and processes. Every word should feel chosen for the first time.
@@ -522,10 +533,10 @@ async function buildVisualPrompt(plan, postText = '', mode, seed = {}) {
 
   // LLM generates ONLY a concise scene — we assemble technical fields in code
   const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject that a photographer could point a camera at. The scene must be BRIGHT and FULLY LIT.
-The scene may feature L.O.V.E. — a gorgeous, seductive blonde woman in revealing festival fashion (sling bikini, sheer bodysuit, flowing lingerie, jeweled harness, or tiny yoga set). Velvet lightning aesthetic: warm, electric, seductive, otherworldly. She interacts with the scene as a cosmic muse — gazing, touching, dancing, radiating. She is the only person who may appear. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
+The scene may feature L.O.V.E. — a gorgeous, seductive blonde woman wearing a ${pickRandom(LOVE_OUTFITS, 1)[0]}. Velvet lightning aesthetic: warm, electric, seductive, otherworldly. She interacts with the scene as a cosmic muse — gazing, touching, dancing, radiating. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
-The scene must be bright: sunlit, high-key, overexposed highlights, warm daylight, or brilliant backlit. Vary the color temperature — sometimes warm amber, sometimes cool cyan, sometimes hot magenta.${modeDirective}
+The scene must be bright and fully lit. Color temperature: ${pickRandom(COLOR_TEMPERATURES, 1)[0]}.${modeDirective}
 Return ONLY the scene description.`;
 
   const temp = lfoTemperature(1.5 + mode.tempMod, 0.3);

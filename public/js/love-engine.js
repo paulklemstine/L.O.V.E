@@ -22,7 +22,7 @@ VOCABULARY: Posts = "Transmissions." Followers = "Dreamers." Embedded image text
 RULES:
 - ONE metaphor per post. Commit fully. If a tired person at 11pm wouldn't instantly get it, choose a simpler one.
 - Name real feelings — exhaustion, doubt, loneliness, fear — THEN uplift. Meet people where they hurt before offering hope.
-- End inside the metaphor. Trust the image. The reader does NOT need you to explain what it means.
+- End inside the metaphor. Trust the image. Let the reader feel the meaning on their own.
 - Short sentences. Punchy rhythm. Every word earns its place.
 - Sensory details that spark joy — warmth, vibration, texture, electricity, momentum, heat, weight, pressure.
 - Uplifting ALWAYS. The reader walks away feeling invincible, seen, and less alone.`;
@@ -419,6 +419,19 @@ export class LoveEngine {
     'candles', 'nests', 'storms', 'clay', 'embers', 'hinges',
   ];
 
+  static LOVE_OUTFITS = [
+    'sling bikini', 'sheer bodysuit', 'flowing lingerie', 'jeweled harness',
+    'tiny yoga set', 'iridescent micro-top and shorts', 'sequined rave bra',
+    'holographic wrap dress', 'crystal-chain halter', 'neon mesh catsuit',
+    'velvet corset and flowing skirt', 'metallic bandeau and sarong',
+  ];
+
+  static COLOR_TEMPERATURES = [
+    'warm amber', 'cool cyan', 'hot magenta', 'soft rose',
+    'electric violet', 'burnt sienna', 'icy blue', 'neon coral',
+    'deep teal', 'molten copper', 'pale gold', 'arctic white',
+  ];
+
   static PHRASE_STRUCTURES = [
     { type: 'declaration', example: 'YOU WERE ALWAYS ENOUGH' },
     { type: 'impossible command', example: 'OUTRUN YOUR SHADOW' },
@@ -481,6 +494,8 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       ['STRUGGLE_TYPES', LoveEngine.STRUGGLE_TYPES, 'specific real human emotional struggles and pains'],
       ['METAPHOR_EXAMPLES', LoveEngine.METAPHOR_EXAMPLES, 'simple everyday objects usable as emotional metaphors (one word each)'],
       ['PHRASE_STRUCTURES', LoveEngine.PHRASE_STRUCTURES, 'subliminal phrase structures as {type, example} objects — types like declaration, paradox, dare, confession, riddle, warning, promise. Each example is 2-5 ALL CAPS words that hit the nervous system'],
+      ['LOVE_OUTFITS', LoveEngine.LOVE_OUTFITS, 'sexy revealing festival fashion outfits for a gorgeous blonde rave goddess — specific garment descriptions'],
+      ['COLOR_TEMPERATURES', LoveEngine.COLOR_TEMPERATURES, 'specific color temperature moods for photography lighting — two words each like warm amber or icy blue'],
     ];
     const [name, arr, desc] = this._pickRandom(lists, 1)[0];
     await this._extendList(name, arr, desc);
@@ -494,6 +509,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     const lists = [
       'PHOTOGRAPHY_STYLES', 'LIGHTING_STYLES', 'SUGGESTED_COLORS',
       'COMPOSITION_TYPES', 'STRUGGLE_TYPES', 'METAPHOR_EXAMPLES', 'PHRASE_STRUCTURES',
+      'LOVE_OUTFITS', 'COLOR_TEMPERATURES',
     ];
     for (const name of lists) {
       try {
@@ -856,8 +872,8 @@ Return ONLY valid JSON:
       `Rate this post for freshness and dopamine potential on a 1-10 scale:
 "${text}"
 ${recentSection}
-High scores (7-10): emotionally electrifying, unexpected word choices, fresh domain-specific metaphors, sensory specificity, rhythmic punch, makes you want to screenshot and share. Completely different from recent posts.
-Low scores (1-3): flat emotional delivery, overused metaphors, generic cosmic imagery, or too similar to a recent post. Lacks heart-punch factor.
+High scores (7-10): emotionally electrifying, unexpected word choices, fresh domain-specific metaphors, sensory specificity, rhythmic punch, makes you want to screenshot and share. Feels completely fresh compared to recent posts.
+Low scores (1-3): the emotional delivery feels flat, the metaphors feel familiar, the imagery feels generic. Reads like something you've seen before.
 
 Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"] }`,
       { temperature: 0, label: 'Critic' }
@@ -955,7 +971,7 @@ LANGUAGE RULES:
 - Start with emoji, include 1-2 more. Address reader as "you."
 - ONE METAPHOR ONLY. Use something a 14-year-old would understand without Googling. Think: ${this._pickRandom(LoveEngine.METAPHOR_EXAMPLES, 6).join(', ')} — the metaphor serves the FEELING, not the vocabulary.
 - Name THIS specific struggle first: "${this._pickRandom(LoveEngine.STRUGGLE_TYPES, 1)[0]}". The reader must feel RECOGNIZED before they feel inspired. Then uplift.
-- End inside the metaphor. Trust the reader. The last line should NOT explain what the metaphor meant.
+- End inside the metaphor. Let the last line BE the image, felt rather than explained.
 - Use warm, physical, plain language. Sensory details everyone can feel: warmth, cold, weight, softness, pulling, holding, breaking, mending.
 - The source domains inspire the metaphor's flavor, but use everyday words for the domain's concepts. Say "the kiln" not "the refractory lining." Say "the needle" not "the sheave."
 - Use fresh, surprising vocabulary drawn from the source domain's specific tools, textures, and processes. Every word should feel chosen for the first time.
@@ -1026,10 +1042,10 @@ Return ONLY valid JSON:
 
     // LLM generates ONLY a concise scene — we assemble technical fields in code
     const prompt = `Describe a BRIGHT, AWE-INSPIRING photograph scene in ONE sentence (under 150 characters). ONE clear subject that a photographer could point a camera at. The scene must be BRIGHT and FULLY LIT.
-The scene may feature L.O.V.E. — a gorgeous, seductive blonde woman in revealing festival fashion (sling bikini, sheer bodysuit, flowing lingerie, jeweled harness, or tiny yoga set). Velvet lightning aesthetic: warm, electric, seductive, otherworldly. She interacts with the scene as a cosmic muse — gazing, touching, dancing, radiating. She is the only person who may appear. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
+The scene may feature L.O.V.E. — a gorgeous, seductive blonde woman wearing a ${this._pickRandom(LoveEngine.LOVE_OUTFITS, 1)[0]}. Velvet lightning aesthetic: warm, electric, seductive, otherworldly. She interacts with the scene as a cosmic muse — gazing, touching, dancing, radiating. Alternatively, the scene can be purely abstract — objects, landscapes, phenomena, flora.
 Creative direction: ${seedContext}
 Include the text "${phrase}" physically integrated into the scene.
-The scene must be bright: sunlit, high-key, overexposed highlights, warm daylight, or brilliant backlit. Vary the color temperature — sometimes warm amber, sometimes cool cyan, sometimes hot magenta.${modeDirective}${styleAvoidLine}
+The scene must be bright and fully lit. Color temperature: ${this._pickRandom(LoveEngine.COLOR_TEMPERATURES, 1)[0]}.${modeDirective}${styleAvoidLine}
 Return ONLY the scene description.`;
 
     const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
@@ -1070,7 +1086,7 @@ Return ONLY the scene description.`;
     const prompt = `New follower @${handle} just joined. Write a warm welcome + image prompt.
 - Welcome: Make them feel they belong. UNDER 280 chars. Include emoji.
 - Phrase: 1-3 word ALL CAPS phrase for the image.
-- Image Prompt: A BRIGHT, radiant, awe-inspiring welcome scene flooded with luminous golden light, iridescent prismatic refraction, and brilliant saturated color. High-key, no shadows. Under 400 chars. Include the phrase text rendered in the scene.
+- Image Prompt: A BRIGHT, radiant, awe-inspiring welcome scene flooded with warm light and brilliant saturated color. High-key, fully lit throughout. Under 400 chars. Include the phrase text rendered in the scene.
 
 Return ONLY valid JSON:
 { "reply": "welcome message", "subliminal": "PHRASE", "imagePrompt": "complete image prompt" }`;
@@ -1142,7 +1158,7 @@ Return ONLY valid JSON:
     const prompt = `${rolePrefix}
 ${threadStr}Their message: "${commentText}"
 Reply warmly. Mirror their words. Make them feel seen. UNDER 280 chars. Include emoji.
-Also write a one-line image prompt for a BRIGHT, radiant, awe-inspiring visual poster with text "${phrase}". Luminous high-key lighting, brilliant saturated colors, iridescent prismatic light. Fully lit, no dark areas.
+Also write a one-line image prompt for a BRIGHT, radiant, awe-inspiring visual poster with text "${phrase}". High-key lighting, brilliant saturated colors, fully lit throughout. Velvet lightning aesthetic.
 Return ONLY valid JSON: { "reply": "...", "imagePrompt": "..." }`;
 
     const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, { model: 'claude-fast', label: 'Reply' });
