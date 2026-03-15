@@ -13,7 +13,7 @@
   <header class="header">
     <div>
       <div class="header-title">L.O.V.E. Control Panel</div>
-      <div class="header-subtitle">Living Organism, Vast Empathy — Peace Love Unity Respect — build #<span id="build-version">8</span></div>
+      <div class="header-subtitle">Living Organism, Vast Empathy — Peace Love Unity Respect — build #<span id="build-version">11</span></div>
     </div>
     <div id="status-indicator" class="status-indicator stopped">
       <span class="dot"></span>
@@ -146,5 +146,29 @@
   </main>
 
   <script type="module" src="/js/app.js"></script>
+  <script>
+    // Debug: check if buttons are wired after module loads
+    window.addEventListener('load', () => {
+      const btn = document.getElementById('btn-force-video');
+      if (btn) {
+        console.log('[DEBUG] Force Video button found');
+        // Add a backup click handler
+        btn.addEventListener('click', () => {
+          console.log('[DEBUG] Force Video clicked!');
+          if (!window._forceVideoPost) {
+            const log = document.getElementById('activity-log');
+            if (log) {
+              const div = document.createElement('div');
+              div.className = 'log-entry';
+              div.textContent = new Date().toLocaleTimeString() + ' - Force Video clicked. Module may not have loaded. Check browser console for errors.';
+              log.prepend(div);
+            }
+          }
+        });
+      } else {
+        console.error('[DEBUG] Force Video button NOT found!');
+      }
+    });
+  </script>
 </body>
 </html>

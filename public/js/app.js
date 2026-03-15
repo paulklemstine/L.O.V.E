@@ -455,6 +455,7 @@ async function forcePost() {
   }
 }
 
+window._forceVideoPost = forceVideoPost;
 async function forceVideoPost() {
   const pollinationsKey = document.getElementById('pollinations-key').value.trim();
   if (!pollinationsKey) {
