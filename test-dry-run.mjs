@@ -313,10 +313,10 @@ const COLOR_TEMPERATURES = [
 ];
 
 const LOVE_INTERACTIONS = [
-  'gazing', 'touching', 'dancing', 'radiating', 'floating',
-  'leaning', 'whispering', 'summoning', 'dissolving into', 'emerging from',
-  'conducting', 'breathing life into', 'pouring herself into', 'orbiting',
-  'melting through', 'igniting', 'cradling', 'unraveling', 'becoming',
+  'gazes into', 'touches', 'dances through', 'radiates across', 'floats above',
+  'leans into', 'whispers to', 'summons', 'dissolves into', 'emerges from',
+  'conducts', 'breathes life into', 'pours herself into', 'orbits',
+  'melts through', 'ignites', 'cradles', 'unravels', 'becomes',
 ];
 const ARCHETYPE_ADJECTIVES = [
   'cosmic', 'rave', 'dream', 'storm', 'silk', 'fire', 'frequency',
