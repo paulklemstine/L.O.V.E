@@ -217,7 +217,7 @@ export class PollinationsClient {
    * Model: qwen3-tts (cheapest) or elevenlabs (better quality)
    */
   async generateAudio(text, options = {}) {
-    const { model = 'elevenlabs', voice = 'nova' } = options;
+    const { model = 'elevenlabs', voice = 'shimmer' } = options;
 
     const response = await fetch(`${BASE_URL}/v1/audio/speech`, {
       method: 'POST',

@@ -1134,7 +1134,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     try {
       const voiceScript = await this.ai.generateText(
         'You write ultra-short spoken voiceover scripts for 6-second motivational videos. Warm, intimate, powerful.',
-        `Write ONE short spoken line (under 10 words, MAX 10 words) for a 6-second video voiceover.
+        `Write ONE short spoken line (under 12 words, MAX 12 words) for a 6-second video voiceover.
 Subliminal phrase: "${plan.subliminalPhrase}"
 Post: "${story.slice(0, 80)}"
 Capture the emotional core in one quick breath. Warm, direct, punchy.
