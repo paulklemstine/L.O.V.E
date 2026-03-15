@@ -858,36 +858,44 @@ async function buildVisualPrompt(plan, postText = '', mode, seed = {}) {
     loveLine = 'The scene contains only objects, landscapes, natural phenomena, or flora. Pure abstract beauty.';
   }
 
-  // LLM generates spatial scene layers
-  const prompt = `Describe a BRIGHT scene in THREE spatial layers. Each layer under 40 chars.
+  // LLM generates spatial scene layers with text substrate baked in
+  const prompt = `Describe a BRIGHT scene in THREE spatial layers plus how text physically exists. Each layer under 40 chars.
 ${loveLine}
+Scenes are observed, never touched. Objects mid-action as if frozen in time. Tools mid-cut, materials mid-fall. No person holding or operating anything.
 Creative direction: ${seedContext}
-The phrase "${phrase}" must appear NATURALLY as part of an object in the scene — carved into wood, etched into metal, written in sand, formed by clouds, spelled in neon tubing, embossed on leather, scratched into frost, printed on a label, stitched into fabric, chalked on a wall, pressed into clay, or growing as moss. The text is PART OF the world, as if it was always there. Describe exactly how and where the text physically exists.
 Aesthetic: ${aestheticVibe}.${modeDirective}
-Return ONLY valid JSON: { "foreground": "close detail", "midground": "main subject with ${phrase} naturally embedded", "background": "environment" }`;
+Return ONLY valid JSON:
+{
+  "foreground": "close physical detail, frozen mid-action",
+  "midground": "main subject",
+  "background": "environment or atmosphere",
+  "textSubstrate": "exactly how the words '${phrase}' are physically formed — the material, technique, and surface (e.g. carved into weathered oak, etched into brass plate, spelled by bioluminescent plankton, formed by morning frost on glass, pressed into wet clay)"
+}`;
 
   const temp = lfoTemperature(1.5 + mode.tempMod, 0.3);
   const raw = await callLLM(
-    'You describe photograph scenes in spatial layers. Foreground, midground, background. Concise, visual, concrete.',
+    'You describe photograph scenes in spatial layers. Concise, visual, concrete. Objects only — no people, no hands, no fingers.',
     prompt, temp
   );
 
-  // Parse spatial layers or fall back to raw text
+  // Parse spatial layers with text substrate baked into scene
   const sceneData = extractJSON(raw);
   let scene;
-  if (sceneData?.foreground && sceneData?.midground && sceneData?.background) {
-    scene = `In the foreground, ${sceneData.foreground}. ${sceneData.midground}. In the background, ${sceneData.background}`;
+  if (sceneData?.foreground && sceneData?.midground) {
+    const bg = sceneData.background ? `. In the background, ${sceneData.background}` : '';
+    const substrate = sceneData.textSubstrate ? `, ${sceneData.textSubstrate}` : `, "${phrase}" carved into the surface`;
+    scene = `In the foreground, ${sceneData.foreground}. ${sceneData.midground}${substrate}${bg}`;
   } else {
     scene = (raw || '').trim();
     if (scene.startsWith('"') && scene.endsWith('"')) scene = scene.slice(1, -1);
     if (scene.startsWith('```')) scene = scene.replace(/```\w*\n?/g, '').trim();
   }
   if (!scene || scene.length < 10) {
-    scene = `"${phrase}" radiating in brilliant light through a vivid dreamscape`;
+    scene = `"${phrase}" carved into weathered stone in a vivid dreamscape`;
   }
-  if (scene.length > 300) scene = scene.slice(0, 297) + '...';
+  if (scene.length > 350) scene = scene.slice(0, 347) + '...';
 
-  // Assemble: Subject → Lighting → Style → Color → Composition → Effects → Text → Technical
+  // Assemble: Subject+TextSubstrate → Technical → Lighting → Style → Color → Composition → Trippy → Texture
   const medium = plan.imageMedium || pickRandom(PHOTOGRAPHY_STYLES, 1)[0];
   const lighting = plan.lighting || pickRandom(LIGHTING_STYLES, 1)[0];
   const palette = plan.colorPalette || pickRandom(SUGGESTED_COLORS, 2).join(' and ');
@@ -902,15 +910,15 @@ Return ONLY valid JSON: { "foreground": "close detail", "midground": "main subje
 
   const result = [
     scene,
+    `shot on ${cameraBody}, ${lensSpec}${dof ? ', ' + dof : ''}`,
     lighting,
     `${imageStyle}, ${medium}`,
     `${palette}, ${filmStock}`,
     composition,
     trippyEffect,
-    `the words "${phrase}" naturally embedded as part of an object in the scene`,
-    `shot on ${cameraBody}, ${lensSpec}${dof ? ', ' + dof : ''}, ${analogTexture}`,
+    analogTexture,
   ].join('. ') + '.';
-  if (result.length > 500) return result.slice(0, 497) + '...';
+  if (result.length > 600) return result.slice(0, 597) + '...';
   return result;
 }
 
