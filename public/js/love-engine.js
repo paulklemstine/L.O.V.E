@@ -1193,18 +1193,18 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     let voiceText = plan.subliminalPhrase || 'LOVE';
     try {
       const voiceScript = await this.ai.generateText(
-        'You write spoken voiceover scripts for 30-second motivational video ads. Warm, intimate, powerful, paced for dramatic delivery.',
-        `Write a voiceover script (30-50 words) for a 30-second motivational video ad.
+        'You write spoken voiceover scripts for 30-second motivational video ads. You pace naturally — not rushed, not slow. Warm, intimate, powerful.',
+        `Write a voiceover script that takes exactly 30 seconds to speak aloud at a natural, dramatic pace.
 Subliminal phrase: "${plan.subliminalPhrase}"
 Post: "${story.slice(0, 150)}"
 
-Structure it like a 30-second ad:
-- Open with a hook (address the pain directly)
-- Build with the metaphor (sensory, physical)
-- Land on the transformation (empowering)
-- Close with the subliminal phrase as a whispered tagline
+Structure for a 30-second spoken delivery:
+- Seconds 1-5: Hook — address the pain directly, grab attention
+- Seconds 6-15: Build — the metaphor unfolds, sensory and physical
+- Seconds 16-25: Transformation — the shift happens, empowering
+- Seconds 26-30: Land — the subliminal phrase as a final whispered tagline
 
-Pace it for dramatic spoken delivery with pauses. Warm, direct, building to powerful.
+Include natural pauses (use "..." for beats). Read it aloud in your head — it should take 30 seconds.
 Return ONLY the spoken words, nothing else.`,
         { temperature: 0.9, label: 'Voiceover Script' }
       );
