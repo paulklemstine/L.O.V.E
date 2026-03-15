@@ -1127,9 +1127,28 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       console.error('[Music]', err);
     }
 
-    // Step C: Generate SHORT TTS — just the subliminal phrase (fits 6-second video)
-    const voiceText = plan.subliminalPhrase || 'LOVE';
-    onStatus(`🎙️ Generating voice: "${voiceText}"...`);
+    // Step C: Generate voiceover script — LLM writes a 6-second spoken line
+    // that bridges the subliminal phrase and the post text
+    onStatus('🎙️ Writing voiceover script...');
+    let voiceText = plan.subliminalPhrase || 'LOVE';
+    try {
+      const voiceScript = await this.ai.generateText(
+        'You write ultra-short spoken voiceover scripts for 6-second motivational videos. Warm, intimate, powerful.',
+        `Write a single spoken line (under 15 words) that a narrator reads aloud over a 6-second video.
+The subliminal phrase is: "${plan.subliminalPhrase}"
+The post text is: "${story.slice(0, 120)}"
+Bridge both — capture the emotional core in one breath. Spoken aloud, warm and direct.
+Return ONLY the spoken line, nothing else.`,
+        { temperature: 0.9, label: 'Voiceover Script' }
+      );
+      const script = (voiceScript || '').trim().replace(/^["']|["']$/g, '');
+      if (script.length > 5 && script.length < 100) voiceText = script;
+      onStatus(`🎙️ Voiceover: "${voiceText}"`);
+    } catch (err) {
+      onStatus(`🎙️ Script failed, using phrase: "${voiceText}"`);
+    }
+
+    // Generate TTS from the voiceover script
     let voiceBlob = null;
     try {
       voiceBlob = await this.ai.generateAudio(voiceText);
