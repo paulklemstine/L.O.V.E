@@ -7,6 +7,43 @@
  * Inspired by SuperAcid's text warp system.
  */
 
+// SuperAcid font registry — each caption picks a random font
+const TRIPPY_FONTS = [
+  // Futuristic
+  { family: "'Orbitron', sans-serif", weight: '900' },
+  { family: "'Audiowide', sans-serif", weight: '400' },
+  { family: "'Exo 2', sans-serif", weight: '700' },
+  { family: "'Black Ops One', sans-serif", weight: '400' },
+  // Display / Impact
+  { family: "'Bungee', sans-serif", weight: '400' },
+  { family: "'Bungee Shade', sans-serif", weight: '400' },
+  { family: "'Monoton', sans-serif", weight: '400' },
+  { family: "'Bangers', sans-serif", weight: '400' },
+  { family: "'Righteous', sans-serif", weight: '400' },
+  { family: "'Faster One', sans-serif", weight: '400' },
+  { family: "'Luckiest Guy', sans-serif", weight: '400' },
+  { family: "'Modak', sans-serif", weight: '400' },
+  // Decorative
+  { family: "'Rubik Glitch', sans-serif", weight: '400' },
+  { family: "'Rubik Wet Paint', sans-serif", weight: '400' },
+  { family: "'Creepster', sans-serif", weight: '400' },
+  { family: "'Metal Mania', sans-serif", weight: '400' },
+  // Handwritten
+  { family: "'Permanent Marker', cursive", weight: '400' },
+  { family: "'Rock Salt', cursive", weight: '400' },
+  { family: "'Pacifico', cursive", weight: '400' },
+  { family: "'Satisfy', cursive", weight: '400' },
+  { family: "'Dancing Script', cursive", weight: '700' },
+  // Retro
+  { family: "'Press Start 2P', monospace", weight: '400' },
+  { family: "'VT323', monospace", weight: '400' },
+  // Monospace
+  { family: "'Space Mono', monospace", weight: '700' },
+  // Fallbacks
+  { family: "Impact, sans-serif", weight: '900' },
+  { family: "'Arial Black', sans-serif", weight: '900' },
+];
+
 export class TrippyTextRenderer {
   constructor(width = 512, height = 512) {
     this.width = width;
@@ -710,13 +747,17 @@ export class TrippyTextRenderer {
     const h = this.height;
     const fontSize = Math.max(26, Math.round(w * 0.1));
 
+    // Pick a random font per effect index (deterministic per caption)
+    const fontDef = TRIPPY_FONTS[effectIndex % TRIPPY_FONTS.length];
+    const fontStr = `${fontDef.weight || '900'} ${fontSize}px ${fontDef.family}`;
+
     // Step 1: Render text as white-on-black mask
     const mc = this.maskCtx;
     mc.clearRect(0, 0, w, h);
     mc.fillStyle = '#000';
     mc.fillRect(0, 0, w, h);
     mc.fillStyle = '#fff';
-    mc.font = `900 ${fontSize}px Impact, system-ui, sans-serif`;
+    mc.font = fontStr;
     mc.textAlign = 'center';
     mc.textBaseline = 'middle';
     mc.fillText(text, w / 2, h * 0.15);
@@ -728,7 +769,7 @@ export class TrippyTextRenderer {
       targetCtx.shadowColor = 'rgba(255,100,255,0.8)';
       targetCtx.shadowBlur = 15;
       targetCtx.fillStyle = '#fff';
-      targetCtx.font = `900 ${fontSize}px Impact, system-ui, sans-serif`;
+      targetCtx.font = fontStr;
       targetCtx.textAlign = 'center';
       targetCtx.textBaseline = 'middle';
       targetCtx.fillText(text, w / 2, h * 0.15);
