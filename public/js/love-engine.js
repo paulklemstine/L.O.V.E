@@ -1200,13 +1200,54 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       onStatus(`🎵 Music FAILED: ${err.message}`);
     }
 
-    // ── STEP D: Generate voiceover (cap at 50 words) ──
+    // ── STEP D: Rewrite voiceover as hypnotic therapeutic script ──
     let voiceText = production.voiceover || plan.subliminalPhrase || 'LOVE';
-    // Trim to 50 words max to fit the video
+    onStatus('🎙️ Rewriting voiceover as therapeutic script...');
+    try {
+      const rewritten = await this.ai.generateText(
+        'You are a master hypnotherapist, NLP practitioner, and motivational speaker who writes 30-second spoken scripts that produce involuntary emotional responses — goosebumps, tears, chest-opening warmth. You use embedded commands, therapeutic pacing, pattern interrupts, and dopamine-triggering rhythm.',
+        `Rewrite this draft voiceover into a HYPNOTIC, THERAPEUTIC, DOPAMINE-PRODUCING 30-second spoken script.
+
+DRAFT VOICEOVER: "${voiceText}"
+SUBLIMINAL PHRASE: "${plan.subliminalPhrase}"
+POST TEXT: "${story.slice(0, 120)}"
+EMOTIONAL CORE: ${seed.emotion || 'hope'}
+THEME: ${plan.theme || ''}
+VIBE: ${plan.vibe || ''}
+
+TECHNIQUES TO USE:
+- Embedded commands (italic emphasis on action words the subconscious obeys)
+- Therapeutic pacing: match the listener's current state (pain) then lead to desired state (power)
+- Pattern interrupts: unexpected pauses "..." and rhythm breaks
+- Sensory language: warmth, pressure, breath, heartbeat, skin, weight
+- Second person "you" — direct, intimate, like whispering in their ear
+- Build from whisper-quiet to full-voiced crescendo
+- End with "${plan.subliminalPhrase}" as a hypnotic anchor phrase
+
+RULES:
+- MAX 50 words (must fit 30 seconds spoken slowly with pauses)
+- Include "..." for dramatic pauses
+- Every sentence should produce a physical sensation in the listener
+- The listener should feel their chest open and eyes sting by the end
+- Write it to be SPOKEN ALOUD — rhythm matters more than meaning
+
+Return ONLY the spoken script, nothing else.`,
+        { temperature: 0.95, label: 'Therapeutic Voiceover' }
+      );
+      const script = (rewritten || '').trim().replace(/^["']|["']$/g, '');
+      if (script.length > 10 && script.length < 400) {
+        voiceText = script;
+        onStatus(`🎙️ Therapeutic script: "${voiceText.slice(0, 60)}..."`);
+      }
+    } catch (err) {
+      onStatus(`🎙️ Rewrite failed, using draft: ${err.message}`);
+    }
+
+    // Trim to 50 words max
     const words = voiceText.split(/\s+/);
     if (words.length > 50) voiceText = words.slice(0, 50).join(' ') + '... ' + (plan.subliminalPhrase || '');
     const ttsVoice = this._pickRandom(LoveEngine.TTS_VOICES, 1)[0];
-    onStatus(`🎙️ Recording voiceover (${voiceText.split(/\s+/).length} words, voice: ${ttsVoice})...`);
+    onStatus(`🎙️ Recording (${voiceText.split(/\s+/).length} words, voice: ${ttsVoice})...`);
     let voiceBlob = null;
     try {
       voiceBlob = await this.ai.generateAudio(voiceText, { voice: ttsVoice });
