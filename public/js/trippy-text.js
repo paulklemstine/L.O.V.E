@@ -1295,10 +1295,19 @@ export class TrippyTextRenderer {
   render(targetCtx, text, effectIndex = 0, alpha = 1, animIndex = -1, progress = 0) {
     const w = this.width;
     const h = this.height;
-    const fontSize = Math.max(26, Math.round(w * 0.12));
+    let fontSize = Math.max(26, Math.round(w * 0.12));
 
     // Pick a random font per effect index (deterministic per caption)
     const fontDef = TRIPPY_FONTS[effectIndex % TRIPPY_FONTS.length];
+
+    // Auto-shrink font so the full string fits within 90% of canvas width
+    const mc = this.maskCtx;
+    const maxW = w * 0.9;
+    mc.font = `${fontDef.weight || '900'} ${fontSize}px ${fontDef.family}`;
+    const measured = mc.measureText(text).width;
+    if (measured > maxW) {
+      fontSize = Math.max(16, Math.floor(fontSize * maxW / measured));
+    }
     const fontStr = `${fontDef.weight || '900'} ${fontSize}px ${fontDef.family}`;
 
     // Compute animation transforms
