@@ -50,7 +50,7 @@ export class TrippyTextRenderer {
     attribute vec2 aPos;
     varying vec2 vUv;
     void main() {
-      vUv = aPos * 0.5 + 0.5;
+      vUv = vec2(aPos.x * 0.5 + 0.5, 1.0 - (aPos.y * 0.5 + 0.5));
       gl_Position = vec4(aPos, 0.0, 1.0);
     }
   `;
@@ -332,7 +332,7 @@ export class TrippyTextRenderer {
   render(targetCtx, text, effectIndex = 0, alpha = 1) {
     const w = this.width;
     const h = this.height;
-    const fontSize = Math.max(20, Math.round(w * 0.06));
+    const fontSize = Math.max(24, Math.round(w * 0.09));
 
     // Step 1: Render text as white-on-black mask
     const mc = this.maskCtx;
@@ -343,7 +343,7 @@ export class TrippyTextRenderer {
     mc.font = `900 ${fontSize}px Impact, system-ui, sans-serif`;
     mc.textAlign = 'center';
     mc.textBaseline = 'middle';
-    mc.fillText(text, w / 2, h / 2);
+    mc.fillText(text, w / 2, h * 0.15);
 
     if (!this.gl || !this.programs.length) {
       // Fallback: just draw white text with glow
@@ -355,7 +355,7 @@ export class TrippyTextRenderer {
       targetCtx.font = `900 ${fontSize}px Impact, system-ui, sans-serif`;
       targetCtx.textAlign = 'center';
       targetCtx.textBaseline = 'middle';
-      targetCtx.fillText(text, w / 2, h / 2);
+      targetCtx.fillText(text, w / 2, h * 0.15);
       targetCtx.restore();
       return;
     }
