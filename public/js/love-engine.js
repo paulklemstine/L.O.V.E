@@ -8,6 +8,8 @@
  * boredom critic, variable reward schedule, mutation injection.
  */
 
+import { TrippyTextRenderer } from './trippy-text.js';
+
 const CREATOR_HANDLE = 'evildrgemini.bsky.social';
 const ETH_ADDRESS = '0x419CA6f5b6F795604938054c951c94d8629AE5Ed';
 
@@ -1455,115 +1457,12 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
       const chunks = [];
       let sceneIndex = 0;
 
-      // ── Trippy Subliminal Caption System (inspired by SuperAcid) ──
+      // ── Trippy Subliminal Caption System (WebGL SuperAcid shaders) ──
       const allCaptions = this._pickRandom(LoveEngine.SUBLIMINAL_CAPTIONS, 15);
       const captionDuration = 2200;
       let captionStartTime = Date.now();
       let captionIndex = 0;
-
-      // Trippy text effects — cycle through different styles per caption
-      const trippyEffects = [
-        // 0: Neon glow pulse
-        (ctx, text, x, y, fs, progress, alpha, now) => {
-          const glow = 8 + Math.sin(now / 150) * 6;
-          const hue = (now / 20) % 360;
-          ctx.shadowColor = `hsla(${hue}, 100%, 60%, ${alpha})`;
-          ctx.shadowBlur = glow;
-          ctx.fillStyle = `hsla(${hue}, 100%, 90%, ${alpha})`;
-          ctx.font = `bold ${fs}px system-ui`;
-          ctx.fillText(text, x, y);
-          ctx.shadowBlur = glow * 2;
-          ctx.fillText(text, x, y);
-        },
-        // 1: Rainbow wave — each char different hue with sine offset
-        (ctx, text, x, y, fs, progress, alpha, now) => {
-          ctx.font = `bold ${fs}px system-ui`;
-          const totalW = ctx.measureText(text).width;
-          let cx = x - totalW / 2;
-          for (let i = 0; i < text.length; i++) {
-            const hue = (i * 30 + now / 10) % 360;
-            const yOff = Math.sin(now / 200 + i * 0.5) * fs * 0.15;
-            ctx.fillStyle = `hsla(${hue}, 100%, 70%, ${alpha})`;
-            ctx.shadowColor = `hsla(${hue}, 100%, 50%, 0.6)`;
-            ctx.shadowBlur = 6;
-            ctx.textAlign = 'left';
-            ctx.fillText(text[i], cx, y + yOff);
-            cx += ctx.measureText(text[i]).width;
-          }
-          ctx.textAlign = 'center';
-        },
-        // 2: Glitch — RGB channel split + random jitter
-        (ctx, text, x, y, fs, progress, alpha, now) => {
-          ctx.font = `bold ${fs}px monospace`;
-          const jitter = Math.random() < 0.15 ? (Math.random() - 0.5) * fs * 0.3 : 0;
-          const split = 2 + Math.sin(now / 100) * 1.5;
-          ctx.globalCompositeOperation = 'lighter';
-          ctx.fillStyle = `rgba(255,0,50,${alpha * 0.7})`;
-          ctx.fillText(text, x - split + jitter, y);
-          ctx.fillStyle = `rgba(0,255,100,${alpha * 0.7})`;
-          ctx.fillText(text, x + split, y + jitter);
-          ctx.fillStyle = `rgba(80,80,255,${alpha * 0.7})`;
-          ctx.fillText(text, x, y - split);
-          ctx.globalCompositeOperation = 'source-over';
-        },
-        // 3: Breathing scale — pulses in and out
-        (ctx, text, x, y, fs, progress, alpha, now) => {
-          const scale = 1 + Math.sin(now / 300) * 0.12;
-          ctx.save();
-          ctx.translate(x, y);
-          ctx.scale(scale, scale);
-          ctx.shadowColor = `rgba(255,255,255,${alpha * 0.5})`;
-          ctx.shadowBlur = 12;
-          ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-          ctx.font = `bold ${fs}px system-ui`;
-          ctx.fillText(text, 0, 0);
-          ctx.restore();
-        },
-        // 4: Fire text — orange-red gradient with upward particle flicker
-        (ctx, text, x, y, fs, progress, alpha, now) => {
-          ctx.font = `bold ${fs}px system-ui`;
-          const grad = ctx.createLinearGradient(x, y + fs/2, x, y - fs);
-          grad.addColorStop(0, `rgba(255,60,0,${alpha})`);
-          grad.addColorStop(0.5, `rgba(255,180,0,${alpha})`);
-          grad.addColorStop(1, `rgba(255,255,100,${alpha})`);
-          ctx.fillStyle = grad;
-          ctx.shadowColor = `rgba(255,100,0,${alpha * 0.8})`;
-          ctx.shadowBlur = 15 + Math.sin(now / 80) * 5;
-          ctx.fillText(text, x, y + Math.sin(now / 120) * 2);
-        },
-        // 5: Hologram scanlines
-        (ctx, text, x, y, fs, progress, alpha, now) => {
-          ctx.font = `bold ${fs}px system-ui`;
-          ctx.fillStyle = `rgba(0,255,255,${alpha * 0.9})`;
-          ctx.shadowColor = `rgba(0,200,255,${alpha * 0.6})`;
-          ctx.shadowBlur = 8;
-          ctx.fillText(text, x, y);
-          // Scanline
-          const scanY = (now / 5) % (fs * 2);
-          ctx.fillStyle = `rgba(255,255,255,${alpha * 0.15})`;
-          ctx.fillRect(0, y - fs + scanY, ctx.canvas.width, 2);
-        },
-        // 6: Electric arc — jagged underline spark
-        (ctx, text, x, y, fs, progress, alpha, now) => {
-          ctx.font = `bold ${fs}px system-ui`;
-          ctx.fillStyle = `rgba(200,180,255,${alpha})`;
-          ctx.shadowColor = `rgba(150,100,255,${alpha * 0.7})`;
-          ctx.shadowBlur = 10;
-          ctx.fillText(text, x, y);
-          // Electric arc beneath text
-          const tw = ctx.measureText(text).width;
-          ctx.beginPath();
-          ctx.strokeStyle = `hsla(${(now/5)%360}, 100%, 70%, ${alpha * 0.8})`;
-          ctx.lineWidth = 2;
-          let ax = x - tw/2;
-          ctx.moveTo(ax, y + fs * 0.3);
-          for (let i = 0; i < 20; i++) {
-            ax += tw / 20;
-            ctx.lineTo(ax, y + fs * 0.3 + (Math.random() - 0.5) * fs * 0.3);
-          }
-          ctx.stroke();
-        },
-      ];
+      let trippyRenderer = null;
 
       const drawCaption = () => {
         const now = Date.now();
@@ -1582,25 +1481,26 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
         const revealRatio = Math.min(1, progress / 0.5);
         const charsToShow = Math.ceil(phrase.length * revealRatio);
         const visibleText = phrase.slice(0, charsToShow);
+        if (!visibleText) return;
 
         // Fade in/out
         let alpha = 1;
         if (progress < 0.08) alpha = progress / 0.08;
         else if (progress > 0.85) alpha = 1 - (progress - 0.85) / 0.15;
 
-        const w = canvas.width;
-        const h = canvas.height;
-        const fontSize = Math.max(18, Math.round(w * 0.05));
+        // Lazy-init WebGL renderer at canvas size
+        if (!trippyRenderer) {
+          try {
+            trippyRenderer = new TrippyTextRenderer(canvas.width, canvas.height);
+          } catch (e) {
+            console.warn('[TrippyText] Init failed:', e);
+            trippyRenderer = { render: () => {} }; // no-op fallback
+          }
+        }
 
-        ctx.save();
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        // Pick effect based on caption index (cycles through all effects)
-        const effectFn = trippyEffects[captionIndex % trippyEffects.length];
-        effectFn(ctx, visibleText, w / 2, h / 2, fontSize, progress, alpha, now);
-
-        ctx.restore();
+        // Each caption gets a different shader effect (cycles through 10)
+        const effectIdx = captionIndex % 10;
+        trippyRenderer.render(ctx, visibleText, effectIdx, alpha);
       };
 
       let stopped = false;
