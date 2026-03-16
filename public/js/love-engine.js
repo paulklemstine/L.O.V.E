@@ -1439,12 +1439,15 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
         }
       }
 
-      // Use WebM — Chrome's ACTUAL native format (MP4 claims support but produces garbage)
-      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
-        ? 'video/webm;codecs=vp9,opus'
-        : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
-        ? 'video/webm;codecs=vp8,opus'
-        : 'video/webm';
+      // Try MP4 first (Chrome 128+ supports real MP4 MediaRecorder)
+      // Fall back to WebM only if MP4 not available
+      // Bluesky's standard uploadBlob only transcodes MP4 properly — WebM shows as broken
+      const mp4Types = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4'];
+      const webmTypes = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+      let mimeType = 'video/webm';
+      for (const t of [...mp4Types, ...webmTypes]) {
+        if (MediaRecorder.isTypeSupported(t)) { mimeType = t; break; }
+      }
 
       console.log(`[Splice] Using codec: ${mimeType}`);
 
