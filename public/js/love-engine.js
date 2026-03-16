@@ -1499,7 +1499,7 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
         }
 
         // Each caption gets a different shader effect (cycles through 10)
-        const effectIdx = captionIndex % 10;
+        const effectIdx = captionIndex % 30;
         trippyRenderer.render(ctx, visibleText, effectIdx, alpha);
       };
 

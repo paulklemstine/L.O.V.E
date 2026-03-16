@@ -256,6 +256,382 @@ export class TrippyTextRenderer {
       col = mix(col, vec3(1.0), 0.3) * (0.8 + thin * 0.4);
       gl_FragColor = vec4(col * mask, mask * 0.9);
     }`,
+
+    // ─── SuperAcid Mega-Vault Ports (10-29) ────────────────────────
+
+    // 10: Supernova Burst (cosmic) — expanding ring explosion from text
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      vec2 c = vUv - 0.5;
+      float dist = length(c);
+      float ring = fract(uTime * 0.4) * 1.5;
+      float ringMask = smoothstep(0.1, 0.0, abs(dist - ring));
+      float glow = mask * 0.8 + ringMask * 0.6;
+      vec3 col = mix(vec3(1.0, 0.4, 0.1), vec3(1.0, 1.0, 0.8), ringMask);
+      col *= glow;
+      gl_FragColor = vec4(col, min(glow, 1.0) * 0.9);
+    }`,
+
+    // 11: Nebula Swirl (cosmic) — rotating gas clouds through text
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      vec2 c = vUv - 0.5;
+      float angle = atan(c.y, c.x) + uTime * 0.5;
+      float dist = length(c);
+      float swirl = sin(angle * 3.0 + dist * 10.0 - uTime * 2.0) * 0.5 + 0.5;
+      vec3 col = mix(vec3(0.5, 0.0, 1.0), vec3(0.0, 0.8, 1.0), swirl);
+      col = mix(col, vec3(1.0, 0.5, 0.8), sin(angle * 5.0 + uTime) * 0.3 + 0.3);
+      gl_FragColor = vec4(col * mask * 1.2, mask * 0.9);
+    }`,
+
+    // 12: Pulsar Sweep (cosmic) — rotating beam sweeps across text
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      vec2 c = vUv - 0.5;
+      float angle = atan(c.y, c.x);
+      float beam = smoothstep(0.15, 0.0, abs(mod(angle + uTime * 3.0, 6.28) - 3.14));
+      vec3 col = mix(vec3(0.2, 0.5, 1.0), vec3(1.0, 1.0, 1.0), beam);
+      gl_FragColor = vec4(col * mask * (0.6 + beam * 0.8), mask * 0.9);
+    }`,
+
+    // 13: Bioluminescent Bloom (biological) — organic pulsing glow
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float pulse = sin(uTime * 2.0 + vUv.x * 8.0) * sin(uTime * 1.5 + vUv.y * 6.0);
+      float spots = hash(floor(vUv * 20.0) + floor(uTime * 2.0)) * 0.5;
+      vec3 bio = vec3(0.0, 0.8, 0.6) + vec3(0.2, 0.4, 0.0) * pulse + vec3(0.5, 0.2, 1.0) * spots;
+      gl_FragColor = vec4(bio * mask * 1.1, mask * 0.9);
+    }`,
+
+    // 14: Neural Synapse (biological) — firing synapses along text edges
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      float edge = 0.0;
+      for (int i = 0; i < 4; i++) {
+        float a = float(i) * 1.57;
+        edge += abs(mask - texture2D(uMask, vUv + vec2(cos(a), sin(a)) * 0.008).r);
+      }
+      float fire = step(0.95, hash(floor(vUv * 30.0) + floor(uTime * 8.0))) * edge * 5.0;
+      vec3 col = vec3(0.3, 0.6, 1.0) * mask + vec3(1.0, 0.8, 0.3) * fire;
+      gl_FragColor = vec4(col, max(mask, fire) * 0.9);
+    }`,
+
+    // 15: Liquid Mercury (liquid-fluid) — rippling metallic pool
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float ripple = sin(vUv.x * 25.0 + uTime * 3.0) * sin(vUv.y * 20.0 + uTime * 2.5);
+      float env = sin(ripple * 5.0 + uTime) * 0.3 + 0.7;
+      vec3 mercury = vec3(0.85, 0.88, 0.92) * env;
+      mercury += vec3(0.4, 0.6, 1.0) * pow(max(0.0, ripple), 3.0) * 0.5;
+      gl_FragColor = vec4(mercury * mask, mask * 0.95);
+    }`,
+
+    // 16: Lava Flow (liquid-fluid) — molten text with cooling edges
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float flow = sin(vUv.x * 8.0 + uTime * 1.5 + sin(vUv.y * 5.0 + uTime)) * 0.5 + 0.5;
+      vec3 lava = mix(vec3(0.8, 0.1, 0.0), vec3(1.0, 0.8, 0.0), flow);
+      lava = mix(lava, vec3(1.0, 1.0, 0.8), pow(flow, 3.0));
+      float edge = 0.0;
+      for (int i = 0; i < 4; i++) {
+        float a = float(i) * 1.57;
+        edge += abs(mask - texture2D(uMask, vUv + vec2(cos(a), sin(a)) * 0.006).r);
+      }
+      lava = mix(lava, vec3(0.15, 0.05, 0.05), edge * 2.0);
+      gl_FragColor = vec4(lava * mask, mask * 0.95);
+    }`,
+
+    // 17: CRT Phosphor (retro-cyberpunk) — scanlines + RGB subpixels
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float scanline = sin(vUv.y * 400.0) * 0.15 + 0.85;
+      float subpixel = mod(floor(vUv.x * 600.0), 3.0);
+      vec3 rgb = vec3(
+        subpixel < 1.0 ? 1.0 : 0.2,
+        subpixel < 2.0 && subpixel >= 1.0 ? 1.0 : 0.2,
+        subpixel >= 2.0 ? 1.0 : 0.2
+      );
+      float flicker = 0.95 + sin(uTime * 30.0) * 0.05;
+      vec3 col = vec3(0.2, 1.0, 0.3) * rgb * scanline * flicker;
+      gl_FragColor = vec4(col * mask, mask * 0.9);
+    }`,
+
+    // 18: Synthwave Grid (retro-cyberpunk) — neon lines through text
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float gridX = smoothstep(0.02, 0.0, abs(fract(vUv.x * 10.0 + uTime * 0.5) - 0.5));
+      float gridY = smoothstep(0.02, 0.0, abs(fract(vUv.y * 8.0 - uTime * 0.3) - 0.5));
+      float grid = max(gridX, gridY);
+      vec3 col = mix(vec3(0.1, 0.0, 0.3), vec3(1.0, 0.2, 0.8), grid);
+      col += vec3(0.0, 0.5, 1.0) * grid * 0.5;
+      gl_FragColor = vec4(col * mask * 1.2, mask * 0.9);
+    }`,
+
+    // 19: Holographic Foil (material-texture) — shifting rainbow angles
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float angle = atan(vUv.y - 0.5, vUv.x - 0.5);
+      float holo = sin(angle * 6.0 + vUv.x * 30.0 + vUv.y * 20.0 + uTime * 4.0);
+      float hue = holo * 0.5 + 0.5 + uTime * 0.15;
+      vec3 col = vec3(
+        sin(hue * 6.28) * 0.5 + 0.5,
+        sin(hue * 6.28 + 2.09) * 0.5 + 0.5,
+        sin(hue * 6.28 + 4.19) * 0.5 + 0.5
+      );
+      col = mix(col, vec3(1.0), 0.25) * (0.9 + holo * 0.3);
+      gl_FragColor = vec4(col * mask, mask * 0.95);
+    }`,
+
+    // 20: Diamond Refraction (material-texture) — prismatic light through crystal
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      vec2 c = vUv - 0.5;
+      float facet = abs(sin(c.x * 20.0 + uTime) * cos(c.y * 15.0 + uTime * 0.7));
+      float sparkle = pow(facet, 8.0) * 2.0;
+      float hue = facet + uTime * 0.2;
+      vec3 col = vec3(
+        sin(hue * 6.28) * 0.4 + 0.6,
+        sin(hue * 6.28 + 2.09) * 0.4 + 0.6,
+        sin(hue * 6.28 + 4.19) * 0.4 + 0.6
+      );
+      col += vec3(1.0) * sparkle;
+      gl_FragColor = vec4(col * mask, mask * 0.95);
+    }`,
+
+    // 21: Quantum Tunnel (quantum) — particle probability wave through text
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float wave = sin(vUv.x * 40.0 - uTime * 5.0) * exp(-pow((vUv.y - 0.5) * 4.0, 2.0));
+      float prob = wave * wave;
+      vec3 col = mix(vec3(0.0, 0.3, 0.8), vec3(0.5, 0.0, 1.0), prob * 3.0);
+      col += vec3(0.0, 1.0, 0.8) * prob * 2.0;
+      col += vec3(1.0) * pow(prob, 4.0) * 3.0;
+      gl_FragColor = vec4(col * mask, mask * 0.9);
+    }`,
+
+    // 22: Moiré Interference (optical-illusions) — overlapping wave patterns
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float p1 = sin(vUv.x * 50.0 + uTime * 2.0);
+      float p2 = sin((vUv.x * 0.866 + vUv.y * 0.5) * 48.0 + uTime * 1.7);
+      float p3 = sin((vUv.x * 0.5 + vUv.y * 0.866) * 52.0 - uTime * 1.3);
+      float moire = (p1 + p2 + p3) / 3.0;
+      float hue = moire * 0.5 + 0.5 + uTime * 0.08;
+      vec3 col = vec3(
+        sin(hue * 6.28) * 0.5 + 0.5,
+        sin(hue * 6.28 + 2.09) * 0.5 + 0.5,
+        sin(hue * 6.28 + 4.19) * 0.5 + 0.5
+      );
+      gl_FragColor = vec4(col * mask * 1.1, mask * 0.9);
+    }`,
+
+    // 23: Synesthesia Colors (synesthetic) — sound→color mapping simulation
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float freq = sin(uTime * 3.0) * 0.5 + 0.5;
+      float amp = sin(uTime * 1.7 + 1.0) * 0.5 + 0.5;
+      float phase = vUv.x * 12.0 + vUv.y * 8.0 + uTime * 2.0;
+      vec3 col = vec3(
+        sin(phase) * freq,
+        sin(phase * 1.3 + 2.0) * amp,
+        sin(phase * 0.7 + 4.0) * (1.0 - freq)
+      ) * 0.5 + 0.5;
+      col *= 1.0 + sin(uTime * 5.0 + vUv.x * 20.0) * 0.15;
+      gl_FragColor = vec4(col * mask * 1.2, mask * 0.9);
+    }`,
+
+    // 24: Acid Dissolve (destructive-horror) — text melting/dissolving
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      float noise = hash(vUv * 50.0 + uTime * 0.5);
+      float dissolve = smoothstep(noise - 0.1, noise + 0.1, sin(uTime * 0.8) * 0.5 + 0.5);
+      float edge = smoothstep(0.0, 0.05, abs(mask - dissolve));
+      float result = mask * dissolve;
+      vec3 col = mix(vec3(0.0, 1.0, 0.3), vec3(1.0, 0.8, 0.0), 1.0 - edge);
+      col += vec3(1.0, 0.2, 0.0) * (1.0 - edge) * 2.0;
+      gl_FragColor = vec4(col * result, result * 0.9);
+    }`,
+
+    // 25: Glitch Datamosh (retro-cyberpunk) — corrupted block displacement
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      vec2 block = floor(vUv * 15.0);
+      float glitchTrigger = step(0.92, hash(block + floor(uTime * 4.0)));
+      vec2 offset = (hash(block + 1.0) - 0.5) * 0.08 * glitchTrigger;
+      float mask = texture2D(uMask, vUv + offset).r;
+      float r = texture2D(uMask, vUv + offset + vec2(0.005, 0.0)).r;
+      float b = texture2D(uMask, vUv + offset - vec2(0.005, 0.0)).r;
+      vec3 col = vec3(r * 1.2, mask, b * 1.4) + vec3(0.3) * glitchTrigger * mask;
+      gl_FragColor = vec4(col, max(max(r, mask), b) * 0.9);
+    }`,
+
+    // 26: Fractal Spiral (quantum) — infinite zoom spiral through text
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      vec2 c = (vUv - 0.5) * 4.0;
+      float r = length(c);
+      float a = atan(c.y, c.x);
+      float spiral = sin(a * 5.0 + log(r + 0.01) * 8.0 - uTime * 3.0);
+      float hue = spiral * 0.3 + a / 6.28 + uTime * 0.1;
+      vec3 col = vec3(
+        sin(hue * 6.28) * 0.5 + 0.5,
+        sin(hue * 6.28 + 2.09) * 0.5 + 0.5,
+        sin(hue * 6.28 + 4.19) * 0.5 + 0.5
+      );
+      col *= 0.7 + spiral * 0.3;
+      gl_FragColor = vec4(col * mask, mask * 0.9);
+    }`,
+
+    // 27: Aurora Borealis (cosmic) — northern lights shimmer through text
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float curtain = sin(vUv.x * 6.0 + uTime * 0.8 + sin(vUv.y * 3.0 + uTime * 0.5) * 2.0);
+      float shimmer = sin(vUv.y * 30.0 + uTime * 4.0 + curtain * 5.0) * 0.3 + 0.7;
+      vec3 col = mix(
+        vec3(0.0, 0.8, 0.4),
+        vec3(0.3, 0.0, 1.0),
+        curtain * 0.5 + 0.5
+      );
+      col = mix(col, vec3(1.0, 0.3, 0.5), pow(max(0.0, curtain), 3.0) * 0.4);
+      col *= shimmer;
+      gl_FragColor = vec4(col * mask * 1.2, mask * 0.85);
+    }`,
+
+    // 28: Sacred Geometry (optical-illusions) — flower of life pattern
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      vec2 c = (vUv - 0.5) * 6.0;
+      float pattern = 0.0;
+      for (int i = 0; i < 6; i++) {
+        float a = float(i) * 1.047 + uTime * 0.3;
+        vec2 center = vec2(cos(a), sin(a)) * 1.0;
+        pattern += smoothstep(1.02, 0.98, length(c - center));
+      }
+      pattern += smoothstep(1.02, 0.98, length(c));
+      float hue = pattern * 0.15 + uTime * 0.1;
+      vec3 col = vec3(
+        sin(hue * 6.28) * 0.4 + 0.6,
+        sin(hue * 6.28 + 2.09) * 0.3 + 0.5,
+        sin(hue * 6.28 + 4.19) * 0.5 + 0.7
+      );
+      col *= 0.5 + pattern * 0.2;
+      gl_FragColor = vec4(col * mask, mask * 0.9);
+    }`,
+
+    // 29: Vaporwave Sunset (retro-cyberpunk) — pink/purple gradient with grid
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      vec3 top = vec3(0.2, 0.0, 0.5);
+      vec3 bot = vec3(1.0, 0.3, 0.5);
+      vec3 grad = mix(bot, top, vUv.y);
+      float sun = smoothstep(0.15, 0.0, length(vUv - vec2(0.5, 0.6)));
+      grad += vec3(1.0, 0.6, 0.0) * sun;
+      float gridLine = max(
+        smoothstep(0.03, 0.0, abs(fract(vUv.x * 8.0 + uTime * 0.2) - 0.5)),
+        smoothstep(0.03, 0.0, abs(fract(vUv.y * 6.0 - uTime * 0.3) - 0.5))
+      );
+      grad += vec3(0.8, 0.2, 1.0) * gridLine * 0.4;
+      gl_FragColor = vec4(grad * mask * 1.1, mask * 0.9);
+    }`,
   ];
 
   // ─── WebGL Init ──────────────────────────────────────────────────
