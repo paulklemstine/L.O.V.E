@@ -708,7 +708,7 @@ export class TrippyTextRenderer {
   render(targetCtx, text, effectIndex = 0, alpha = 1) {
     const w = this.width;
     const h = this.height;
-    const fontSize = Math.max(24, Math.round(w * 0.09));
+    const fontSize = Math.max(26, Math.round(w * 0.1));
 
     // Step 1: Render text as white-on-black mask
     const mc = this.maskCtx;
