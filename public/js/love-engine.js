@@ -618,6 +618,23 @@ export class LoveEngine {
     'Mamiya RZ67', 'Contax 645', 'Rolleiflex 2.8F', 'Linhof Technika',
   ];
 
+  static SUBLIMINAL_CAPTIONS = [
+    'you are enough', 'trust yourself', 'let go', 'breathe deeper',
+    'you belong here', 'keep going', 'feel this', 'you are safe',
+    'this is yours', 'open your heart', 'surrender to it', 'you are whole',
+    'release the weight', 'come alive', 'stay present', 'you matter',
+    'feel the shift', 'allow joy', 'you are ready', 'embrace change',
+    'soften into this', 'let it flow', 'you are powerful', 'choose peace',
+    'receive this', 'it gets better', 'you are becoming', 'forgive yourself',
+    'lean into hope', 'hold on gently', 'you are free', 'exhale everything',
+    'notice the warmth', 'the door is open', 'step through', 'you are light',
+    'remember who you are', 'unclench your jaw', 'drop your shoulders',
+    'you deserve rest', 'the hard part is over', 'begin again',
+    'something is shifting', 'you are not alone', 'stay curious',
+    'feel your feet', 'the universe sees you', 'one more step',
+    'this moment is enough', 'you are healing',
+  ];
+
   static TTS_VOICES = [
     'alloy', 'echo', 'fable', 'onyx', 'nova',
     'shimmer', 'coral', 'verse', 'ballad', 'ash', 'sage',
@@ -934,6 +951,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       ['MUSIC_GENRES', LoveEngine.MUSIC_GENRES, 'electronic dance music subgenres and styles — e.g. epic rave anthem, deep dubstep, psytrance, drum and bass'],
       ['MUSIC_MOODS', LoveEngine.MUSIC_MOODS, 'emotional descriptors for music mood — two to three word mood phrases like euphoric and uplifting, dark and driving'],
       ['CAMERA_MOVEMENTS', LoveEngine.CAMERA_MOVEMENTS, 'cinematic camera movements for video — e.g. slow push-in, crane rising, dolly back, whip pan'],
+      ['SUBLIMINAL_CAPTIONS', LoveEngine.SUBLIMINAL_CAPTIONS, 'short subliminal uplifting phrases for closed captioning overlay — 2-5 words, hypnotic, dopamine-producing, e.g. you are enough, feel the shift, surrender to it'],
       ['AD_BEATS', LoveEngine.AD_BEATS, 'advertising and filmmaking scene beats — e.g. hook pattern interrupt, empathy beat, transformation, wide reveal, crescendo'],
       ['DIRECTORS', LoveEngine.DIRECTORS, 'director style references with technique description — e.g. Kubrick one-point symmetry, Malick golden-hour poetry'],
       ['TEXT_SUBSTRATES', LoveEngine.TEXT_SUBSTRATES, 'simple real-world ways text physically appears on objects — e.g. neon sign on brick wall, carved into wooden signpost, spray-painted graffiti on concrete'],
@@ -959,7 +977,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     const lists = [
       'PHOTOGRAPHY_STYLES', 'LIGHTING_STYLES', 'SUGGESTED_COLORS',
       'COMPOSITION_TYPES', 'STRUGGLE_TYPES', 'METAPHOR_EXAMPLES', 'PHRASE_STRUCTURES',
-      'LOVE_OUTFITS', 'FILM_STOCKS', 'LENS_SPECS', 'TECHNICAL_SWEETENERS', 'CAMERA_BODIES', 'ANALOG_TEXTURES', 'TEXT_SUBSTRATES', 'MUSIC_GENRES', 'MUSIC_MOODS', 'CAMERA_MOVEMENTS', 'AD_BEATS', 'DIRECTORS', 'TRIPPY_EFFECTS', 'IMAGE_STYLES',
+      'LOVE_OUTFITS', 'FILM_STOCKS', 'LENS_SPECS', 'TECHNICAL_SWEETENERS', 'CAMERA_BODIES', 'ANALOG_TEXTURES', 'TEXT_SUBSTRATES', 'MUSIC_GENRES', 'MUSIC_MOODS', 'CAMERA_MOVEMENTS', 'AD_BEATS', 'DIRECTORS', 'SUBLIMINAL_CAPTIONS', 'TRIPPY_EFFECTS', 'IMAGE_STYLES',
       'LOVE_INTERACTIONS', 'ARCHETYPE_ADJECTIVES', 'ARCHETYPE_NOUNS', 'AESTHETIC_VIBES', 'SENSORY_DETAILS', 'VOICE_VIBES',
     ];
     for (const name of lists) {
@@ -1434,6 +1452,69 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
       const chunks = [];
       let sceneIndex = 0;
 
+      // ── Subliminal Caption System ──
+      // Pick 10-15 random captions, each shown for ~2-3 seconds with typewriter animation
+      const allCaptions = this._pickRandom(LoveEngine.SUBLIMINAL_CAPTIONS, 15);
+      const captionDuration = 2500; // ms per caption
+      let captionStartTime = Date.now();
+      let captionIndex = 0;
+
+      const drawCaption = () => {
+        const now = Date.now();
+        const elapsed = now - captionStartTime;
+
+        // Advance to next caption every captionDuration ms
+        if (elapsed > captionDuration) {
+          captionIndex = (captionIndex + 1) % allCaptions.length;
+          captionStartTime = now;
+          return;
+        }
+
+        const phrase = allCaptions[captionIndex];
+        const progress = elapsed / captionDuration;
+
+        // Typewriter: reveal characters over first 60% of duration
+        const revealRatio = Math.min(1, progress / 0.6);
+        const charsToShow = Math.ceil(phrase.length * revealRatio);
+        const visibleText = phrase.slice(0, charsToShow);
+
+        // Fade: fully visible at 20%, start fading at 80%
+        let alpha = 1;
+        if (progress < 0.1) alpha = progress / 0.1;
+        else if (progress > 0.8) alpha = 1 - (progress - 0.8) / 0.2;
+
+        const w = canvas.width;
+        const h = canvas.height;
+        const fontSize = Math.max(16, Math.round(w * 0.04));
+
+        // Black semi-transparent bar at bottom (like real closed captions)
+        ctx.save();
+        ctx.globalAlpha = alpha * 0.7;
+        const barHeight = fontSize + 20;
+        const barY = h - barHeight - 20;
+        ctx.fillStyle = '#000';
+        const textWidth = ctx.measureText(visibleText).width || w * 0.5;
+        const barWidth = Math.min(w - 40, textWidth + 40);
+        const barX = (w - barWidth) / 2;
+        ctx.fillRect(barX, barY, barWidth, barHeight);
+
+        // White text centered
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(visibleText, w / 2, barY + barHeight / 2);
+
+        // Blinking cursor during typewriter
+        if (revealRatio < 1 && Math.floor(now / 400) % 2 === 0) {
+          const cursorX = w / 2 + ctx.measureText(visibleText).width / 2 + 3;
+          ctx.fillRect(cursorX, barY + 6, 2, barHeight - 12);
+        }
+
+        ctx.restore();
+      };
+
       let stopped = false;
       const finish = () => {
         if (stopped) return;
@@ -1495,12 +1576,13 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
               return;
             }
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            drawCaption(); // Overlay subliminal caption on every frame
           }, 33); // ~30fps
 
           video.onended = () => {
             clearInterval(drawInterval);
-            // Draw final frame
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            drawCaption();
             URL.revokeObjectURL(video.src);
             video.remove();
             sceneIndex++;
