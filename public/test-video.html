@@ -31,6 +31,7 @@
   <div class="controls">
     <button id="btn-splice">Splice 5 Scenes (no audio)</button>
     <button id="btn-splice-audio">Splice + Music + Voice</button>
+    <button id="btn-download">Download Result</button>
     <button id="btn-upload">Upload to Bluesky</button>
   </div>
 
@@ -158,19 +159,46 @@
       showResult(result);
     });
 
-    // Upload to Bluesky (requires login)
-    document.getElementById('btn-upload').addEventListener('click', async () => {
-      const resultVideo = document.getElementById('result-video');
-      if (!resultVideo.src) {
-        log('ERROR: No result video to upload. Splice first.');
-        return;
-      }
-      log('Fetching result blob...');
-      const resp = await fetch(resultVideo.src);
-      const blob = await resp.blob();
-      log(`Got blob: ${(blob.size/1024).toFixed(0)}KB, type=${blob.type}`);
-      log('Upload not wired yet — copy the blob URL and test manually.');
+    // Download result
+    let lastResultBlob = null;
+    document.getElementById('btn-download').addEventListener('click', () => {
+      if (!lastResultBlob) { log('ERROR: No result. Splice first.'); return; }
+      const ext = lastResultBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(lastResultBlob);
+      a.download = `love-test-video.${ext}`;
+      a.click();
+      log(`Downloaded as love-test-video.${ext}`);
     });
+
+    // Upload to Bluesky
+    document.getElementById('btn-upload').addEventListener('click', async () => {
+      if (!lastResultBlob) { log('ERROR: No result. Splice first.'); return; }
+      const handle = prompt('Bluesky handle:', 'e-v-l-o-v-e.bsky.social');
+      const password = prompt('App password:');
+      if (!handle || !password) { log('Cancelled.'); return; }
+
+      log('Logging in to Bluesky...');
+      const { BlueskyClient } = await import('/js/bluesky.js');
+      const bsky = new BlueskyClient();
+      try {
+        await bsky.login(handle, password);
+        log(`Logged in as @${handle}`);
+        log(`Uploading video (${(lastResultBlob.size/1024).toFixed(0)}KB, type=${lastResultBlob.type})...`);
+        const postResult = await bsky.createVideoPost(
+          'Test video from L.O.V.E. test rig',
+          lastResultBlob,
+          'Test video splice'
+        );
+        log(`Posted: ${postResult.uri}`);
+      } catch (e) {
+        log(`FAILED: ${e.message}`);
+      }
+    });
+
+    // Store result blob for download/upload
+    const origShowResult = showResult;
+    showResult = (blob) => { lastResultBlob = blob; origShowResult(blob); };
 
     log('Test rig loaded. Assets at /test-video-assets/');
   </script>
