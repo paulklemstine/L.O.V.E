@@ -1434,25 +1434,37 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
       const chunks = [];
       let sceneIndex = 0;
 
+      let stopped = false;
+      const finish = () => {
+        if (stopped) return;
+        stopped = true;
+        if (audioSource) try { audioSource.stop(); } catch {}
+        if (recorder && recorder.state === 'recording') recorder.stop();
+        try { audioCtx.close(); } catch {}
+      };
+
       const playNextScene = () => {
         if (sceneIndex >= blobs.length) {
-          if (audioSource) try { audioSource.stop(); } catch {}
-          if (recorder && recorder.state === 'recording') recorder.stop();
-          if (audioCtx) audioCtx.close();
+          finish();
           return;
         }
 
         const video = document.createElement('video');
         video.muted = true;
         video.playsInline = true;
+        // Prevent browser from throttling video in background tabs
+        video.style.position = 'fixed';
+        video.style.top = '-9999px';
+        video.style.opacity = '0.01';
+        video.style.width = '1px';
+        video.style.height = '1px';
+        document.body.appendChild(video);
         video.src = URL.createObjectURL(blobs[sceneIndex]);
 
         video.onloadedmetadata = () => {
-          // First scene: size canvas, create recorder
           if (sceneIndex === 0) {
             canvas.width = video.videoWidth || 1024;
             canvas.height = video.videoHeight || 1024;
-            // Draw first frame immediately so captureStream has content
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
             const canvasStream = canvas.captureStream(30);
@@ -1467,7 +1479,6 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
             });
             recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
             recorder.onstop = () => {
-              // Label as video/mp4 for Bluesky upload compatibility
               const blob = new Blob(chunks, { type: 'video/mp4' });
               console.log(`[Splice] Done: ${(blob.size / 1024).toFixed(0)}KB, ${blobs.length} scenes, ${canvas.width}x${canvas.height}, ${mimeType}`);
               resolve(blob);
@@ -1477,28 +1488,31 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
             if (audioSource) audioSource.start(0);
           }
 
-          const draw = () => {
-            if (!video.paused && !video.ended) {
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              requestAnimationFrame(draw);
+          // Use setInterval for drawing — requestAnimationFrame throttles in background tabs
+          const drawInterval = setInterval(() => {
+            if (video.paused || video.ended) {
+              clearInterval(drawInterval);
+              return;
             }
-          };
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          }, 33); // ~30fps
 
           video.onended = () => {
+            clearInterval(drawInterval);
+            // Draw final frame
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             URL.revokeObjectURL(video.src);
+            video.remove();
             sceneIndex++;
             console.log(`[Splice] Scene ${sceneIndex}/${blobs.length} complete`);
             playNextScene();
           };
 
-          // Wait for first frame to be ready before playing
-          video.onseeked = () => draw();
-          video.currentTime = 0;
-          video.play().then(() => {
-            draw();
-          }).catch(err => {
+          video.play().catch(err => {
+            clearInterval(drawInterval);
             console.error(`[Splice] Scene ${sceneIndex + 1} play failed:`, err);
             URL.revokeObjectURL(video.src);
+            video.remove();
             sceneIndex++;
             playNextScene();
           });
@@ -1506,6 +1520,7 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
 
         video.onerror = () => {
           URL.revokeObjectURL(video.src);
+          video.remove();
           sceneIndex++;
           playNextScene();
         };
@@ -1513,14 +1528,13 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
 
       playNextScene();
 
-      // Safety timeout
+      // Safety timeout — 3 minutes for background tab throttling
       setTimeout(() => {
-        if (recorder && recorder.state === 'recording') {
-          if (audioSource) try { audioSource.stop(); } catch {}
-          recorder.stop();
-          if (audioCtx) audioCtx.close();
+        if (!stopped) {
+          console.warn('[Splice] Safety timeout hit (180s)');
+          finish();
         }
-      }, 90000);
+      }, 180000);
     });
   }
 
