@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>L.O.V.E. Video Splice Test Rig</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui; background: #1a1a2e; color: #eee; padding: 20px; }
+    h1 { margin-bottom: 10px; }
+    .controls { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+    button { background: #6c5ce7; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    button:hover { background: #5a4bd1; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .status { background: #16213e; padding: 12px; border-radius: 6px; margin: 10px 0; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto; }
+    .scenes { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+    .scene { text-align: center; }
+    .scene video { width: 150px; height: 150px; border-radius: 6px; border: 2px solid #333; }
+    .scene .label { font-size: 11px; color: #aaa; margin-top: 4px; }
+    .result { margin: 16px 0; }
+    .result video { max-width: 100%; max-height: 400px; border-radius: 8px; border: 2px solid #6c5ce7; }
+    .audio-row { margin: 8px 0; }
+    .audio-row audio { width: 100%; height: 32px; }
+    .audio-row .label { font-size: 11px; color: #aaa; }
+  </style>
+</head>
+<body>
+  <h1>Video Splice Test Rig</h1>
+  <p>Uses pre-generated test assets. No API credits needed.</p>
+
+  <div class="controls">
+    <button id="btn-splice">Splice 5 Scenes (no audio)</button>
+    <button id="btn-splice-audio">Splice + Music + Voice</button>
+    <button id="btn-upload">Upload to Bluesky</button>
+  </div>
+
+  <div class="status" id="log">Ready. Click a button to test.</div>
+
+  <h3>Source Scenes</h3>
+  <div class="scenes" id="scenes"></div>
+
+  <h3>Audio</h3>
+  <div class="audio-row">
+    <div class="label">Music</div>
+    <audio id="audio-music" controls src="/test-video-assets/music.mp3"></audio>
+  </div>
+  <div class="audio-row">
+    <div class="label">Voiceover</div>
+    <audio id="audio-voice" controls src="/test-video-assets/voiceover.mp3"></audio>
+  </div>
+
+  <h3>Result</h3>
+  <div class="result">
+    <video id="result-video" controls autoplay loop></video>
+    <div id="result-info" style="font-size:12px;color:#aaa;margin-top:4px"></div>
+  </div>
+
+  <script type="module">
+    import { LoveEngine } from '/js/love-engine.js';
+    import { PollinationsClient } from '/js/pollinations.js';
+
+    const log = (msg) => {
+      const el = document.getElementById('log');
+      el.textContent += '\n' + new Date().toLocaleTimeString() + ' ' + msg;
+      el.scrollTop = el.scrollHeight;
+      console.log('[TestRig]', msg);
+    };
+
+    // Load scene videos
+    const sceneUrls = [1,2,3,4,5].map(i => `/test-video-assets/scene_${i}.mp4`);
+    const scenesEl = document.getElementById('scenes');
+    sceneUrls.forEach((url, i) => {
+      const div = document.createElement('div');
+      div.className = 'scene';
+      div.innerHTML = `<video src="${url}" muted loop></video><div class="label">Scene ${i+1}</div>`;
+      div.querySelector('video').addEventListener('click', function() { this.paused ? this.play() : this.pause(); });
+      scenesEl.appendChild(div);
+    });
+
+    // Create a minimal engine instance for splicing
+    const ai = new PollinationsClient('test');
+    const engine = new LoveEngine(ai);
+
+    async function loadBlobs(urls) {
+      const blobs = [];
+      for (const url of urls) {
+        try {
+          const resp = await fetch(url);
+          if (resp.ok) blobs.push(await resp.blob());
+          else log(`Failed to load ${url}: ${resp.status}`);
+        } catch (e) {
+          log(`Error loading ${url}: ${e.message}`);
+        }
+      }
+      return blobs;
+    }
+
+    async function loadAudioBlob(url) {
+      try {
+        const resp = await fetch(url);
+        return resp.ok ? await resp.blob() : null;
+      } catch { return null; }
+    }
+
+    function showResult(blob) {
+      const video = document.getElementById('result-video');
+      video.src = URL.createObjectURL(blob);
+      const info = document.getElementById('result-info');
+
+      // Check actual format
+      blob.arrayBuffer().then(buf => {
+        const bytes = new Uint8Array(buf.slice(0, 20));
+        let format = 'unknown';
+        if (bytes[0] === 0x1a && bytes[1] === 0x45) format = 'WebM/Matroska';
+        else if (String.fromCharCode(...bytes.slice(4, 8)) === 'ftyp') format = 'MP4';
+        info.textContent = `${(blob.size/1024).toFixed(0)}KB | type: ${blob.type} | actual format: ${format}`;
+        log(`Result: ${(blob.size/1024).toFixed(0)}KB, type=${blob.type}, format=${format}`);
+      });
+    }
+
+    // Splice without audio
+    document.getElementById('btn-splice').addEventListener('click', async () => {
+      log('Loading scenes...');
+      const blobs = await loadBlobs(sceneUrls);
+      log(`Loaded ${blobs.length} scenes`);
+
+      log('Splicing (no audio)...');
+      const start = Date.now();
+      const result = await engine._spliceVideosWithAudio(blobs, null);
+      log(`Splice done in ${((Date.now()-start)/1000).toFixed(1)}s`);
+      showResult(result);
+    });
+
+    // Splice with audio
+    document.getElementById('btn-splice-audio').addEventListener('click', async () => {
+      log('Loading scenes + audio...');
+      const [blobs, music, voice] = await Promise.all([
+        loadBlobs(sceneUrls),
+        loadAudioBlob('/test-video-assets/music.mp3'),
+        loadAudioBlob('/test-video-assets/voiceover.mp3'),
+      ]);
+      log(`Loaded ${blobs.length} scenes, music: ${music ? (music.size/1024).toFixed(0)+'KB' : 'MISSING'}, voice: ${voice ? (voice.size/1024).toFixed(0)+'KB' : 'MISSING'}`);
+
+      // Mix voice over music
+      let combinedAudio = null;
+      if (music && voice) {
+        log('Mixing voice over music...');
+        combinedAudio = await engine._layerAudio(music, voice, 0.7, 1.0, 35);
+        log(`Audio mixed: ${(combinedAudio.size/1024).toFixed(0)}KB`);
+      } else {
+        combinedAudio = music || voice;
+      }
+
+      log('Splicing with audio...');
+      const start = Date.now();
+      const result = await engine._spliceVideosWithAudio(blobs, combinedAudio);
+      log(`Splice done in ${((Date.now()-start)/1000).toFixed(1)}s`);
+      showResult(result);
+    });
+
+    // Upload to Bluesky (requires login)
+    document.getElementById('btn-upload').addEventListener('click', async () => {
+      const resultVideo = document.getElementById('result-video');
+      if (!resultVideo.src) {
+        log('ERROR: No result video to upload. Splice first.');
+        return;
+      }
+      log('Fetching result blob...');
+      const resp = await fetch(resultVideo.src);
+      const blob = await resp.blob();
+      log(`Got blob: ${(blob.size/1024).toFixed(0)}KB, type=${blob.type}`);
+      log('Upload not wired yet — copy the blob URL and test manually.');
+    });
+
+    log('Test rig loaded. Assets at /test-video-assets/');
+  </script>
+</body>
+</html>
