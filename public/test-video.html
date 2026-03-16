@@ -7,58 +7,114 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui; background: #1a1a2e; color: #eee; padding: 20px; }
-    h1 { margin-bottom: 10px; }
-    .controls { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
-    button { background: #6c5ce7; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; }
-    button:hover { background: #5a4bd1; }
-    button:disabled { opacity: 0.5; cursor: default; }
-    .status { background: #16213e; padding: 12px; border-radius: 6px; margin: 10px 0; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto; }
-    .scenes { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+    h1 { margin-bottom: 4px; }
+    h1 span { font-size: 14px; color: #6c5ce7; }
+    p { color: #888; font-size: 13px; margin-bottom: 12px; }
+    h3 { margin: 16px 0 6px; color: #aaa; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
+    .controls { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+    button { background: #6c5ce7; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.15s; }
+    button:hover { background: #5a4bd1; transform: scale(1.02); }
+    button:disabled { opacity: 0.4; cursor: default; transform: none; }
+
+    /* Status LEDs */
+    .pipeline { background: #16213e; border-radius: 8px; padding: 12px; margin: 12px 0; }
+    .pipeline-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #1a1a3e; }
+    .pipeline-row:last-child { border-bottom: none; }
+    .led { width: 12px; height: 12px; border-radius: 50%; background: #333; transition: all 0.3s; flex-shrink: 0; }
+    .led.waiting { background: #555; }
+    .led.active { background: #f1c40f; box-shadow: 0 0 8px #f1c40f; animation: pulse 1s infinite; }
+    .led.done { background: #2ecc71; box-shadow: 0 0 6px #2ecc71; }
+    .led.error { background: #e74c3c; box-shadow: 0 0 6px #e74c3c; }
+    .led.skipped { background: #555; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .pipeline-label { font-size: 12px; flex: 1; }
+    .pipeline-value { font-size: 11px; color: #888; font-family: monospace; text-align: right; }
+
+    /* Log */
+    .log-panel { background: #0d1117; padding: 10px; border-radius: 6px; margin: 10px 0; font-family: monospace; font-size: 11px; max-height: 200px; overflow-y: auto; color: #8b949e; }
+
+    /* Scenes */
+    .scenes { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
     .scene { text-align: center; }
-    .scene video { width: 150px; height: 150px; border-radius: 6px; border: 2px solid #333; }
-    .scene .label { font-size: 11px; color: #aaa; margin-top: 4px; }
-    .result { margin: 16px 0; }
-    .result video { max-width: 100%; max-height: 400px; border-radius: 8px; border: 2px solid #6c5ce7; }
-    .audio-row { margin: 8px 0; }
-    .audio-row audio { width: 100%; height: 32px; }
-    .audio-row .label { font-size: 11px; color: #aaa; }
+    .scene video { width: 120px; height: 120px; border-radius: 6px; border: 2px solid #333; cursor: pointer; }
+    .scene video.scene-active { border-color: #f1c40f; box-shadow: 0 0 8px rgba(241,196,15,0.4); }
+    .scene video.scene-done { border-color: #2ecc71; }
+    .scene .label { font-size: 10px; color: #666; margin-top: 2px; }
+
+    /* Audio */
+    .audio-row { margin: 6px 0; display: flex; align-items: center; gap: 8px; }
+    .audio-row audio { flex: 1; height: 28px; }
+    .audio-row .label { font-size: 11px; color: #888; min-width: 70px; }
+
+    /* Result */
+    .result { margin: 12px 0; text-align: center; }
+    .result video { max-width: 100%; max-height: 350px; border-radius: 8px; border: 2px solid #6c5ce7; }
+    .result-meta { display: flex; gap: 12px; justify-content: center; margin-top: 8px; flex-wrap: wrap; }
+    .result-chip { background: #16213e; padding: 4px 10px; border-radius: 12px; font-size: 11px; }
+    .result-chip.mp4 { border: 1px solid #2ecc71; color: #2ecc71; }
+    .result-chip.webm { border: 1px solid #e74c3c; color: #e74c3c; }
+    .result-chip.neutral { border: 1px solid #555; color: #aaa; }
   </style>
 </head>
 <body>
-  <h1>Video Splice Test Rig</h1>
-  <p>Uses pre-generated test assets. No API credits needed.</p>
+  <h1>Video Splice Test Rig <span>v2</span></h1>
+  <p>Pre-generated assets. Zero API credits. Instant iteration.</p>
 
   <div class="controls">
-    <button id="btn-splice">Splice 5 Scenes (no audio)</button>
+    <button id="btn-splice">Splice (no audio)</button>
     <button id="btn-splice-audio">Splice + Music + Voice</button>
-    <button id="btn-download">Download Result</button>
-    <button id="btn-upload">Upload to Bluesky</button>
+    <button id="btn-download" disabled>Download</button>
+    <button id="btn-upload" disabled>Upload to Bluesky</button>
   </div>
 
-  <div class="status" id="log">Ready. Click a button to test.</div>
+  <!-- Pipeline Status -->
+  <div class="pipeline" id="pipeline">
+    <div class="pipeline-row" id="pl-load"><div class="led waiting"></div><div class="pipeline-label">Load Assets</div><div class="pipeline-value" id="pv-load">—</div></div>
+    <div class="pipeline-row" id="pl-music"><div class="led waiting"></div><div class="pipeline-label">Decode Music</div><div class="pipeline-value" id="pv-music">—</div></div>
+    <div class="pipeline-row" id="pl-voice"><div class="led waiting"></div><div class="pipeline-label">Decode Voice</div><div class="pipeline-value" id="pv-voice">—</div></div>
+    <div class="pipeline-row" id="pl-mix"><div class="led waiting"></div><div class="pipeline-label">Mix Audio</div><div class="pipeline-value" id="pv-mix">—</div></div>
+    <div class="pipeline-row" id="pl-s1"><div class="led waiting"></div><div class="pipeline-label">Scene 1</div><div class="pipeline-value" id="pv-s1">—</div></div>
+    <div class="pipeline-row" id="pl-s2"><div class="led waiting"></div><div class="pipeline-label">Scene 2</div><div class="pipeline-value" id="pv-s2">—</div></div>
+    <div class="pipeline-row" id="pl-s3"><div class="led waiting"></div><div class="pipeline-label">Scene 3</div><div class="pipeline-value" id="pv-s3">—</div></div>
+    <div class="pipeline-row" id="pl-s4"><div class="led waiting"></div><div class="pipeline-label">Scene 4</div><div class="pipeline-value" id="pv-s4">—</div></div>
+    <div class="pipeline-row" id="pl-s5"><div class="led waiting"></div><div class="pipeline-label">Scene 5</div><div class="pipeline-value" id="pv-s5">—</div></div>
+    <div class="pipeline-row" id="pl-captions"><div class="led waiting"></div><div class="pipeline-label">Captions</div><div class="pipeline-value" id="pv-captions">—</div></div>
+    <div class="pipeline-row" id="pl-encode"><div class="led waiting"></div><div class="pipeline-label">Encode</div><div class="pipeline-value" id="pv-encode">—</div></div>
+    <div class="pipeline-row" id="pl-output"><div class="led waiting"></div><div class="pipeline-label">Output</div><div class="pipeline-value" id="pv-output">—</div></div>
+  </div>
 
   <h3>Source Scenes</h3>
   <div class="scenes" id="scenes"></div>
 
   <h3>Audio</h3>
-  <div class="audio-row">
-    <div class="label">Music</div>
-    <audio id="audio-music" controls src="/test-video-assets/music.mp3"></audio>
-  </div>
-  <div class="audio-row">
-    <div class="label">Voiceover</div>
-    <audio id="audio-voice" controls src="/test-video-assets/voiceover.mp3"></audio>
-  </div>
+  <div class="audio-row"><div class="label">Music</div><audio controls src="/test-video-assets/music.mp3"></audio></div>
+  <div class="audio-row"><div class="label">Voiceover</div><audio controls src="/test-video-assets/voiceover.mp3"></audio></div>
 
   <h3>Result</h3>
   <div class="result">
     <video id="result-video" controls autoplay loop></video>
-    <div id="result-info" style="font-size:12px;color:#aaa;margin-top:4px"></div>
+    <div class="result-meta" id="result-meta"></div>
   </div>
+
+  <div class="log-panel" id="log">Ready.</div>
 
   <script type="module">
     import { LoveEngine } from '/js/love-engine.js';
     import { PollinationsClient } from '/js/pollinations.js';
+
+    // LED control
+    const led = (id, state, value) => {
+      const row = document.getElementById(id);
+      if (!row) return;
+      const l = row.querySelector('.led');
+      l.className = 'led ' + state;
+      const v = document.getElementById(id.replace('pl-', 'pv-'));
+      if (v && value !== undefined) v.textContent = value;
+    };
+    const resetLeds = () => {
+      document.querySelectorAll('.led').forEach(l => l.className = 'led waiting');
+      document.querySelectorAll('.pipeline-value').forEach(v => v.textContent = '—');
+    };
 
     const log = (msg) => {
       const el = document.getElementById('log');
@@ -67,20 +123,20 @@
       console.log('[TestRig]', msg);
     };
 
-    // Load scene videos
+    // Load scene thumbnails
     const sceneUrls = [1,2,3,4,5].map(i => `/test-video-assets/scene_${i}.mp4`);
     const scenesEl = document.getElementById('scenes');
     sceneUrls.forEach((url, i) => {
       const div = document.createElement('div');
       div.className = 'scene';
-      div.innerHTML = `<video src="${url}" muted loop></video><div class="label">Scene ${i+1}</div>`;
+      div.innerHTML = `<video src="${url}" muted loop id="scene-thumb-${i+1}"></video><div class="label">Scene ${i+1}</div>`;
       div.querySelector('video').addEventListener('click', function() { this.paused ? this.play() : this.pause(); });
       scenesEl.appendChild(div);
     });
 
-    // Create a minimal engine instance for splicing
     const ai = new PollinationsClient('test');
     const engine = new LoveEngine(ai);
+    let lastResultBlob = null;
 
     async function loadBlobs(urls) {
       const blobs = [];
@@ -88,119 +144,162 @@
         try {
           const resp = await fetch(url);
           if (resp.ok) blobs.push(await resp.blob());
-          else log(`Failed to load ${url}: ${resp.status}`);
-        } catch (e) {
-          log(`Error loading ${url}: ${e.message}`);
-        }
+        } catch {}
       }
       return blobs;
     }
-
     async function loadAudioBlob(url) {
-      try {
-        const resp = await fetch(url);
-        return resp.ok ? await resp.blob() : null;
-      } catch { return null; }
+      try { const r = await fetch(url); return r.ok ? await r.blob() : null; } catch { return null; }
     }
 
     function showResult(blob) {
+      lastResultBlob = blob;
+      document.getElementById('btn-download').disabled = false;
+      document.getElementById('btn-upload').disabled = false;
       const video = document.getElementById('result-video');
       video.src = URL.createObjectURL(blob);
-      const info = document.getElementById('result-info');
-
-      // Check actual format
       blob.arrayBuffer().then(buf => {
         const bytes = new Uint8Array(buf.slice(0, 20));
         let format = 'unknown';
-        if (bytes[0] === 0x1a && bytes[1] === 0x45) format = 'WebM/Matroska';
+        if (bytes[0] === 0x1a && bytes[1] === 0x45) format = 'WebM';
         else if (String.fromCharCode(...bytes.slice(4, 8)) === 'ftyp') format = 'MP4';
-        info.textContent = `${(blob.size/1024).toFixed(0)}KB | type: ${blob.type} | actual format: ${format}`;
-        log(`Result: ${(blob.size/1024).toFixed(0)}KB, type=${blob.type}, format=${format}`);
+        const meta = document.getElementById('result-meta');
+        const fmtClass = format === 'MP4' ? 'mp4' : format === 'WebM' ? 'webm' : 'neutral';
+        meta.innerHTML = `
+          <span class="result-chip ${fmtClass}">${format}</span>
+          <span class="result-chip neutral">${(blob.size/1024).toFixed(0)} KB</span>
+          <span class="result-chip neutral">${blob.type}</span>
+        `;
+        led('pl-output', format === 'MP4' ? 'done' : 'error', `${format} ${(blob.size/1024).toFixed(0)}KB`);
+        log(`Result: ${(blob.size/1024).toFixed(0)}KB, ${blob.type}, actual=${format}`);
       });
     }
 
     // Splice without audio
     document.getElementById('btn-splice').addEventListener('click', async () => {
-      log('Loading scenes...');
+      resetLeds();
+      led('pl-load', 'active', 'loading...');
       const blobs = await loadBlobs(sceneUrls);
-      log(`Loaded ${blobs.length} scenes`);
-
-      log('Splicing (no audio)...');
+      led('pl-load', 'done', `${blobs.length} scenes`);
+      led('pl-music', 'skipped', 'skip'); led('pl-voice', 'skipped', 'skip'); led('pl-mix', 'skipped', 'skip');
+      led('pl-encode', 'active', 'splicing...');
+      led('pl-captions', 'active', 'rendering');
       const start = Date.now();
+
+      // Listen for scene progress
+      const origLog = console.log;
+      console.log = (...args) => {
+        origLog(...args);
+        const msg = args.join(' ');
+        const m = msg.match(/Scene (\d+)\/(\d+) complete/);
+        if (m) {
+          const n = parseInt(m[1]);
+          led(`pl-s${n}`, 'done', `done`);
+          if (n < 5) led(`pl-s${n+1}`, 'active', 'playing...');
+          const thumb = document.getElementById(`scene-thumb-${n}`);
+          if (thumb) thumb.classList.add('scene-done');
+        }
+      };
+      led('pl-s1', 'active', 'playing...');
+      document.querySelectorAll('.scene video').forEach(v => v.classList.remove('scene-active', 'scene-done'));
       const result = await engine._spliceVideosWithAudio(blobs, null);
-      log(`Splice done in ${((Date.now()-start)/1000).toFixed(1)}s`);
+      console.log = origLog;
+      const dur = ((Date.now()-start)/1000).toFixed(1);
+      led('pl-encode', 'done', `${dur}s`);
+      led('pl-captions', 'done', 'rendered');
+      log(`Splice done in ${dur}s`);
       showResult(result);
     });
 
     // Splice with audio
     document.getElementById('btn-splice-audio').addEventListener('click', async () => {
-      log('Loading scenes + audio...');
+      resetLeds();
+      led('pl-load', 'active', 'loading...');
       const [blobs, music, voice] = await Promise.all([
         loadBlobs(sceneUrls),
         loadAudioBlob('/test-video-assets/music.mp3'),
         loadAudioBlob('/test-video-assets/voiceover.mp3'),
       ]);
-      log(`Loaded ${blobs.length} scenes, music: ${music ? (music.size/1024).toFixed(0)+'KB' : 'MISSING'}, voice: ${voice ? (voice.size/1024).toFixed(0)+'KB' : 'MISSING'}`);
+      led('pl-load', 'done', `${blobs.length} scenes`);
+      led('pl-music', music ? 'done' : 'error', music ? `${(music.size/1024).toFixed(0)}KB` : 'MISSING');
+      led('pl-voice', voice ? 'done' : 'error', voice ? `${(voice.size/1024).toFixed(0)}KB` : 'MISSING');
 
-      // Mix voice over music
       let combinedAudio = null;
       if (music && voice) {
-        log('Mixing voice over music...');
+        led('pl-mix', 'active', 'mixing...');
         combinedAudio = await engine._layerAudio(music, voice, 0.7, 1.0, 35);
-        log(`Audio mixed: ${(combinedAudio.size/1024).toFixed(0)}KB`);
+        led('pl-mix', 'done', `${(combinedAudio.size/1024).toFixed(0)}KB`);
       } else {
         combinedAudio = music || voice;
+        led('pl-mix', 'skipped', combinedAudio ? 'single track' : 'no audio');
       }
 
-      log('Splicing with audio...');
+      led('pl-encode', 'active', 'splicing...');
+      led('pl-captions', 'active', 'rendering');
+      led('pl-s1', 'active', 'playing...');
+      document.querySelectorAll('.scene video').forEach(v => v.classList.remove('scene-active', 'scene-done'));
       const start = Date.now();
+
+      const origLog = console.log;
+      console.log = (...args) => {
+        origLog(...args);
+        const msg = args.join(' ');
+        const m = msg.match(/Scene (\d+)\/(\d+) complete/);
+        if (m) {
+          const n = parseInt(m[1]);
+          led(`pl-s${n}`, 'done', 'done');
+          if (n < 5) led(`pl-s${n+1}`, 'active', 'playing...');
+          const thumb = document.getElementById(`scene-thumb-${n}`);
+          if (thumb) thumb.classList.add('scene-done');
+        }
+        if (msg.includes('Using codec:')) {
+          const codec = msg.split('Using codec: ')[1];
+          led('pl-encode', 'active', codec);
+        }
+      };
+
       const result = await engine._spliceVideosWithAudio(blobs, combinedAudio);
-      log(`Splice done in ${((Date.now()-start)/1000).toFixed(1)}s`);
+      console.log = origLog;
+      const dur = ((Date.now()-start)/1000).toFixed(1);
+      led('pl-encode', 'done', `${dur}s`);
+      led('pl-captions', 'done', 'rendered');
+      log(`Splice done in ${dur}s`);
       showResult(result);
     });
 
-    // Download result
-    let lastResultBlob = null;
+    // Download
     document.getElementById('btn-download').addEventListener('click', () => {
-      if (!lastResultBlob) { log('ERROR: No result. Splice first.'); return; }
+      if (!lastResultBlob) return;
       const ext = lastResultBlob.type.includes('mp4') ? 'mp4' : 'webm';
       const a = document.createElement('a');
       a.href = URL.createObjectURL(lastResultBlob);
       a.download = `love-test-video.${ext}`;
       a.click();
-      log(`Downloaded as love-test-video.${ext}`);
+      log(`Downloaded as .${ext}`);
     });
 
     // Upload to Bluesky
     document.getElementById('btn-upload').addEventListener('click', async () => {
-      if (!lastResultBlob) { log('ERROR: No result. Splice first.'); return; }
+      if (!lastResultBlob) return;
       const handle = prompt('Bluesky handle:', 'e-v-l-o-v-e.bsky.social');
       const password = prompt('App password:');
-      if (!handle || !password) { log('Cancelled.'); return; }
-
-      log('Logging in to Bluesky...');
+      if (!handle || !password) return;
+      led('pl-output', 'active', 'uploading...');
       const { BlueskyClient } = await import('/js/bluesky.js');
       const bsky = new BlueskyClient();
       try {
         await bsky.login(handle, password);
         log(`Logged in as @${handle}`);
-        log(`Uploading video (${(lastResultBlob.size/1024).toFixed(0)}KB, type=${lastResultBlob.type})...`);
-        const postResult = await bsky.createVideoPost(
-          'Test video from L.O.V.E. test rig',
-          lastResultBlob,
-          'Test video splice'
-        );
+        const postResult = await bsky.createVideoPost('Test video from L.O.V.E. test rig', lastResultBlob, 'Test splice');
+        led('pl-output', 'done', 'posted!');
         log(`Posted: ${postResult.uri}`);
       } catch (e) {
+        led('pl-output', 'error', e.message.slice(0, 30));
         log(`FAILED: ${e.message}`);
       }
     });
 
-    // Store result blob for download/upload
-    const origShowResult = showResult;
-    showResult = (blob) => { lastResultBlob = blob; origShowResult(blob); };
-
-    log('Test rig loaded. Assets at /test-video-assets/');
+    log('Test rig v2 loaded.');
   </script>
 </body>
 </html>
