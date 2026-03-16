@@ -90,6 +90,15 @@
   <div class="audio-row"><div class="label">Music</div><audio controls src="/test-video-assets/music.mp3"></audio></div>
   <div class="audio-row"><div class="label">Voiceover</div><audio controls src="/test-video-assets/voiceover.mp3"></audio></div>
 
+  <h3>Live Frame Preview</h3>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin:8px 0">
+    <div style="text-align:center">
+      <div style="font-size:10px;color:#666;margin-bottom:4px">Canvas (what MediaRecorder sees)</div>
+      <canvas id="live-canvas" width="464" height="464" style="border:2px solid #333;border-radius:6px;background:#000;max-width:100%;image-rendering:pixelated"></canvas>
+      <div id="frame-info" style="font-size:10px;color:#555;margin-top:2px">waiting...</div>
+    </div>
+  </div>
+
   <h3>Result</h3>
   <div class="result">
     <video id="result-video" controls autoplay loop></video>
@@ -137,6 +146,52 @@
     const ai = new PollinationsClient('test');
     const engine = new LoveEngine(ai);
     let lastResultBlob = null;
+
+    // Live frame preview — mirrors the splice canvas in real time
+    const liveCanvas = document.getElementById('live-canvas');
+    const liveCtx = liveCanvas.getContext('2d');
+    const frameInfo = document.getElementById('frame-info');
+    let frameCount = 0;
+    let previewActive = false;
+
+    // Monkey-patch: wrap _spliceVideosWithAudio to expose internal canvas
+    const origSplice = engine._spliceVideosWithAudio.bind(engine);
+    engine._spliceVideosWithAudio = async function(blobs, audioBlob) {
+      frameCount = 0;
+      previewActive = true;
+
+      // Hook into the internal canvas by intercepting CanvasRenderingContext2D.drawImage
+      const origDrawImage = CanvasRenderingContext2D.prototype.drawImage;
+      const lc = liveCanvas;
+      const lctx = liveCtx;
+      const fi = frameInfo;
+      let lastMirror = 0;
+
+      CanvasRenderingContext2D.prototype.drawImage = function(...args) {
+        origDrawImage.apply(this, args);
+        // Mirror to preview if this is the splice canvas (not our own live canvas)
+        if (previewActive && this.canvas !== lc && this.canvas.width > 100) {
+          const now = Date.now();
+          if (now - lastMirror > 50) { // throttle to ~20fps for preview
+            lastMirror = now;
+            frameCount++;
+            lc.width = this.canvas.width;
+            lc.height = this.canvas.height;
+            lctx.drawImage(this.canvas, 0, 0);
+            fi.textContent = `frame ${frameCount} | ${this.canvas.width}x${this.canvas.height}`;
+          }
+        }
+      };
+
+      try {
+        const result = await origSplice(blobs, audioBlob);
+        return result;
+      } finally {
+        previewActive = false;
+        CanvasRenderingContext2D.prototype.drawImage = origDrawImage;
+        fi.textContent = `done — ${frameCount} frames captured`;
+      }
+    };
 
     async function loadBlobs(urls) {
       const blobs = [];
