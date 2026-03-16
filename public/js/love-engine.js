@@ -1313,7 +1313,7 @@ DESIGN ALL THREE PARTS AS ONE UNIFIED EXPERIENCE:
 
 1. SCENES: What the camera sees. Each scene description matches the voiceover line spoken during that scene. Under 200 chars each. Bright, vivid, no people/hands.
 
-2. VOICEOVER: A 30-second spoken script (read aloud at natural pace). Each line corresponds to one scene. The words DESCRIBE or COMPLEMENT what's on screen — never redundant, always additive. Include "..." for dramatic pauses. End with "${phrase}" whispered. Enhance with hypnosis techniques: embedded commands, therapeutic pacing (match pain then lead to power), sensory language (warmth, breath, heartbeat, skin), second person "you", and build from quiet to crescendo. MAX 50 words.
+2. VOICEOVER: A 30-second spoken script that ENHANCES the video emotionally — it does NOT describe what's on screen. Instead, it adds a layer of meaning, feeling, and transformation that elevates the visuals. Each line is timed to play over its corresponding scene, so match the emotional arc of each scene without narrating it. Use hypnosis techniques: embedded commands, therapeutic pacing (match pain then lead to power), sensory language (warmth, breath, heartbeat, skin), second person "you", build from quiet to crescendo. Include "..." for dramatic pauses. End with "${phrase}" whispered. MAX 50 words.
 
 3. MUSIC: A single music direction prompt (under 80 chars) that sets the emotional arc — building from the opening mood to the climactic transformation.
 
