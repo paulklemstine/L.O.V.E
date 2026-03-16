@@ -1392,49 +1392,53 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
     });
   }
 
-  // ─── Splice Videos WITH Audio (one canvas pass — no quality loss from double-encode) ──
+  // ─── Splice Videos WITH Audio ──────────────────────────────────────
+  // Canvas + MediaRecorder approach. Plays each scene on canvas, captures
+  // with audio. Uses WebM codec (Chrome's native) and labels as video/mp4.
+  // Previous working builds used this exact approach at 1024px/8Mbps.
 
   async _spliceVideosWithAudio(blobs, audioBlob) {
+    if (blobs.length === 1 && !audioBlob) return blobs[0];
+
     return new Promise(async (resolve, reject) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-      // Decode audio if provided
-      let audioSource = null;
-      let dest = null;
+      // Set up audio if provided
+      let audioCtx, audioSource, dest;
       if (audioBlob) {
         try {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
           const buf = await audioCtx.decodeAudioData(await audioBlob.arrayBuffer());
           dest = audioCtx.createMediaStreamDestination();
           audioSource = audioCtx.createBufferSource();
           audioSource.buffer = buf;
-          audioSource.loop = true; // loop music to fill entire video
-          const gain = audioCtx.createGain();
-          gain.gain.value = 1.0;
-          audioSource.connect(gain);
-          gain.connect(dest);
+          audioSource.loop = true;
+          audioSource.connect(dest);
         } catch (e) {
-          console.error('[SpliceAudio] Audio decode failed:', e);
+          console.error('[Splice] Audio decode failed:', e);
+          audioCtx = null;
         }
       }
 
-      const mimeType = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a.40.2')
-        ? 'video/mp4;codecs=avc1,mp4a.40.2'
-        : MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+      // Use WebM — Chrome's ACTUAL native format (MP4 claims support but produces garbage)
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
         ? 'video/webm;codecs=vp9,opus'
+        : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
+        ? 'video/webm;codecs=vp8,opus'
         : 'video/webm';
+
+      console.log(`[Splice] Using codec: ${mimeType}`);
 
       let recorder = null;
       const chunks = [];
       let sceneIndex = 0;
-      let started = false;
 
       const playNextScene = () => {
         if (sceneIndex >= blobs.length) {
           if (audioSource) try { audioSource.stop(); } catch {}
           if (recorder && recorder.state === 'recording') recorder.stop();
-          audioCtx.close();
+          if (audioCtx) audioCtx.close();
           return;
         }
 
@@ -1444,29 +1448,33 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
         video.src = URL.createObjectURL(blobs[sceneIndex]);
 
         video.onloadedmetadata = () => {
-          if (!started) {
-            // First scene: set canvas size, create recorder with audio
-            canvas.width = Math.min(video.videoWidth || 1024, 1024);
-            canvas.height = Math.min(video.videoHeight || 1024, 1024);
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+          // First scene: size canvas, create recorder
+          if (sceneIndex === 0) {
+            canvas.width = video.videoWidth || 1024;
+            canvas.height = video.videoHeight || 1024;
+            // Draw first frame immediately so captureStream has content
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
             const canvasStream = canvas.captureStream(30);
             const tracks = [...canvasStream.getVideoTracks()];
             if (dest) tracks.push(...dest.stream.getAudioTracks());
 
             const combined = new MediaStream(tracks);
-            recorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 8000000, audioBitsPerSecond: 192000 });
+            recorder = new MediaRecorder(combined, {
+              mimeType,
+              videoBitsPerSecond: 8000000,
+              audioBitsPerSecond: 192000,
+            });
             recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
             recorder.onstop = () => {
+              // Label as video/mp4 for Bluesky upload compatibility
               const blob = new Blob(chunks, { type: 'video/mp4' });
-              console.log(`[SpliceAudio] Done: ${(blob.size / 1024).toFixed(0)}KB, ${blobs.length} scenes, ${canvas.width}x${canvas.height}`);
+              console.log(`[Splice] Done: ${(blob.size / 1024).toFixed(0)}KB, ${blobs.length} scenes, ${canvas.width}x${canvas.height}, ${mimeType}`);
               resolve(blob);
             };
-            recorder.onerror = e => reject(new Error(`SpliceAudio: ${e.error}`));
+            recorder.onerror = e => reject(new Error(`Splice: ${e.error}`));
             recorder.start(100);
             if (audioSource) audioSource.start(0);
-            started = true;
           }
 
           const draw = () => {
@@ -1479,12 +1487,17 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
           video.onended = () => {
             URL.revokeObjectURL(video.src);
             sceneIndex++;
-            console.log(`[SpliceAudio] Scene ${sceneIndex}/${blobs.length} complete`);
+            console.log(`[Splice] Scene ${sceneIndex}/${blobs.length} complete`);
             playNextScene();
           };
 
-          video.play().then(draw).catch(err => {
-            console.error(`[SpliceAudio] Scene ${sceneIndex + 1} play failed:`, err);
+          // Wait for first frame to be ready before playing
+          video.onseeked = () => draw();
+          video.currentTime = 0;
+          video.play().then(() => {
+            draw();
+          }).catch(err => {
+            console.error(`[Splice] Scene ${sceneIndex + 1} play failed:`, err);
             URL.revokeObjectURL(video.src);
             sceneIndex++;
             playNextScene();
@@ -1499,13 +1512,15 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
       };
 
       playNextScene();
+
+      // Safety timeout
       setTimeout(() => {
         if (recorder && recorder.state === 'recording') {
           if (audioSource) try { audioSource.stop(); } catch {}
           recorder.stop();
-          audioCtx.close();
+          if (audioCtx) audioCtx.close();
         }
-      }, 90000); // 90s safety timeout for 5 scenes
+      }, 90000);
     });
   }
 
