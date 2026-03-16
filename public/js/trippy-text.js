@@ -1319,7 +1319,7 @@ export class TrippyTextRenderer {
     }
 
     const textX = w / 2 + (anim.x || 0) * w;
-    const textY = h / 6 + (anim.y || 0) * h;
+    const textY = h / 3 + (anim.y || 0) * h;
 
     // Step 1: Render text as white-on-black mask (with animation transforms)
     mc.clearRect(0, 0, w, h);
