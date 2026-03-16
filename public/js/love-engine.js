@@ -1560,7 +1560,7 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
             });
             recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
             recorder.onstop = () => {
-              const blob = new Blob(chunks, { type: 'video/mp4' });
+              const blob = new Blob(chunks, { type: mimeType });
               console.log(`[Splice] Done: ${(blob.size / 1024).toFixed(0)}KB, ${blobs.length} scenes, ${canvas.width}x${canvas.height}, ${mimeType}`);
               resolve(blob);
             };

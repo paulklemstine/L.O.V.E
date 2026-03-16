@@ -200,7 +200,7 @@ export class BlueskyClient {
   async uploadVideo(videoBlob) {
     // Strategy 1: Try standard uploadBlob — simplest, works for small videos
     try {
-      const videoWithType = new Blob([videoBlob], { type: 'video/mp4' });
+      const videoWithType = new Blob([videoBlob], { type: videoBlob.type || 'video/webm' });
       const blobRef = await this.uploadBlob(videoWithType);
       console.log('[Bluesky] Video uploaded via standard uploadBlob');
       return blobRef;
