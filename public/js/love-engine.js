@@ -618,6 +618,11 @@ export class LoveEngine {
     'Mamiya RZ67', 'Contax 645', 'Rolleiflex 2.8F', 'Linhof Technika',
   ];
 
+  static TTS_VOICES = [
+    'alloy', 'echo', 'fable', 'onyx', 'nova',
+    'shimmer', 'coral', 'verse', 'ballad', 'ash', 'sage',
+  ];
+
   static MUSIC_GENRES = [
     'epic rave anthem', 'deep dubstep bass drop', 'drum and bass roller',
     'psytrance hypnotic build', 'techno industrial pulse', 'house music groove',
@@ -1180,11 +1185,12 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
     // Trim to 50 words max to fit the video
     const words = voiceText.split(/\s+/);
     if (words.length > 50) voiceText = words.slice(0, 50).join(' ') + '... ' + (plan.subliminalPhrase || '');
-    onStatus(`🎙️ Recording voiceover (${voiceText.split(/\s+/).length} words)...`);
+    const ttsVoice = this._pickRandom(LoveEngine.TTS_VOICES, 1)[0];
+    onStatus(`🎙️ Recording voiceover (${voiceText.split(/\s+/).length} words, voice: ${ttsVoice})...`);
     let voiceBlob = null;
     try {
-      voiceBlob = await this.ai.generateAudio(voiceText);
-      onStatus(`🎙️ Voice generated (${(voiceBlob.size / 1024).toFixed(0)}KB)`);
+      voiceBlob = await this.ai.generateAudio(voiceText, { voice: ttsVoice });
+      onStatus(`🎙️ Voice generated (${(voiceBlob.size / 1024).toFixed(0)}KB, ${ttsVoice})`);
     } catch (err) {
       onStatus(`🎙️ TTS FAILED: ${err.message}`);
     }
