@@ -1497,6 +1497,7 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
       let recorder = null;
       const chunks = [];
       let sceneIndex = 0;
+      let spliceStartTime = null;
 
       // ── Trippy Subliminal Caption System (WebGL SuperAcid shaders) ──
       const allCaptions = this._pickRandom(LoveEngine.SUBLIMINAL_CAPTIONS, 15);
@@ -1597,12 +1598,23 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
             recorder.onerror = e => reject(new Error(`Splice: ${e.error}`));
             recorder.start(100);
             if (audioSource) audioSource.start(0);
+            spliceStartTime = Date.now();
           }
 
           // Use setInterval for drawing — requestAnimationFrame throttles in background tabs
           const drawInterval = setInterval(() => {
             if (video.paused || video.ended) {
               clearInterval(drawInterval);
+              return;
+            }
+            // Hard 30s trim — stop recording if we've hit the limit
+            if (spliceStartTime && (Date.now() - spliceStartTime) >= 30000) {
+              clearInterval(drawInterval);
+              video.pause();
+              URL.revokeObjectURL(video.src);
+              video.remove();
+              console.log('[Splice] 30s limit reached, trimming');
+              finish();
               return;
             }
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -1617,6 +1629,12 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
             video.remove();
             sceneIndex++;
             console.log(`[Splice] Scene ${sceneIndex}/${blobs.length} complete`);
+            // Stop if we've hit 30s
+            if (spliceStartTime && (Date.now() - spliceStartTime) >= 30000) {
+              console.log('[Splice] 30s limit reached after scene end, trimming');
+              finish();
+              return;
+            }
             playNextScene();
           };
 

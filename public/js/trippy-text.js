@@ -931,7 +931,7 @@ export class TrippyTextRenderer {
     uniform float uTime;
     void main() {
       float mask = texture2D(uMask, vUv).r;
-      vec2 c = vUv - vec2(0.5, 0.15);
+      vec2 c = vUv - vec2(0.5, 0.5);
       float dist = length(c);
       float ripple = sin(dist * 60.0 - uTime * 6.0) * 0.5 + 0.5;
       float ring = smoothstep(0.3, 0.0, dist) * ripple;
@@ -1295,7 +1295,7 @@ export class TrippyTextRenderer {
   render(targetCtx, text, effectIndex = 0, alpha = 1, animIndex = -1, progress = 0) {
     const w = this.width;
     const h = this.height;
-    const fontSize = Math.max(26, Math.round(w * 0.1));
+    const fontSize = Math.max(26, Math.round(w * 0.12));
 
     // Pick a random font per effect index (deterministic per caption)
     const fontDef = TRIPPY_FONTS[effectIndex % TRIPPY_FONTS.length];
@@ -1310,7 +1310,7 @@ export class TrippyTextRenderer {
     }
 
     const textX = w / 2 + (anim.x || 0) * w;
-    const textY = h * 0.15 + (anim.y || 0) * h;
+    const textY = h * 0.5 + (anim.y || 0) * h;
 
     // Step 1: Render text as white-on-black mask (with animation transforms)
     const mc = this.maskCtx;
