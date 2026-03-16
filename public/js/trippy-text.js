@@ -669,6 +669,554 @@ export class TrippyTextRenderer {
       grad += vec3(0.8, 0.2, 1.0) * gridLine * 0.4;
       gl_FragColor = vec4(grad * mask * 1.1, mask * 0.9);
     }`,
+
+    // ─── SuperAcid Style Ports (30-52) — completing all 53 styles ────
+
+    // 30: Shadow 3D — bold text with deep shadow extrusion
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      float shadow = 0.0;
+      for (int i = 1; i <= 12; i++) {
+        float fi = float(i);
+        vec2 off = vec2(fi * 0.003, fi * 0.004);
+        shadow += texture2D(uMask, vUv + off).r * (1.0 - fi / 14.0) * 0.15;
+      }
+      vec3 shadowCol = vec3(0.15, 0.05, 0.25) * shadow;
+      vec3 face = vec3(1.0, 0.95, 0.85) * mask;
+      float highlight = pow(mask, 3.0) * sin(uTime * 2.0) * 0.2 + 0.8;
+      gl_FragColor = vec4(shadowCol + face * highlight, max(mask, shadow) * 0.95);
+    }`,
+
+    // 31: Hologram — translucent scanlines with cyan/magenta flicker
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float scanline = sin(vUv.y * 200.0) * 0.2 + 0.8;
+      float flicker = sin(uTime * 15.0) * 0.1 + 0.9;
+      float band = smoothstep(0.0, 0.05, abs(fract(vUv.y * 8.0 - uTime * 2.0) - 0.5));
+      vec3 col = mix(vec3(0.0, 1.0, 1.0), vec3(1.0, 0.0, 1.0), sin(uTime * 3.0 + vUv.y * 5.0) * 0.5 + 0.5);
+      col *= scanline * flicker * band;
+      gl_FragColor = vec4(col * mask, mask * 0.7);
+    }`,
+
+    // 32: Crystal Frost — icy crystalline sparkle
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float crystal = abs(sin(vUv.x * 30.0 + vUv.y * 25.0 + uTime)) * abs(cos(vUv.y * 35.0 - vUv.x * 20.0 + uTime * 0.7));
+      float sparkle = pow(hash(floor(vUv * 40.0) + floor(uTime * 5.0)), 12.0) * 3.0;
+      vec3 ice = mix(vec3(0.7, 0.9, 1.0), vec3(0.4, 0.7, 1.0), crystal);
+      ice += vec3(1.0) * sparkle;
+      gl_FragColor = vec4(ice * mask, mask * 0.92);
+    }`,
+
+    // 33: Mycelial Growth — bioluminescent branching veins
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float vein1 = smoothstep(0.02, 0.0, abs(sin(vUv.x * 15.0 + sin(vUv.y * 8.0 + uTime) * 3.0) * 0.1));
+      float vein2 = smoothstep(0.02, 0.0, abs(sin(vUv.y * 12.0 + cos(vUv.x * 10.0 + uTime * 0.7) * 2.0) * 0.1));
+      float veins = max(vein1, vein2);
+      float pulse = sin(uTime * 2.0 + vUv.x * 5.0 + vUv.y * 3.0) * 0.3 + 0.7;
+      vec3 col = vec3(0.1, 0.6, 0.3) * mask + vec3(0.3, 1.0, 0.5) * veins * pulse;
+      col += vec3(0.0, 0.3, 0.8) * veins * (1.0 - pulse);
+      gl_FragColor = vec4(col, mask * 0.9);
+    }`,
+
+    // 34: Viscous Displacement — melting smeared UV distortion
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      vec2 warp = vec2(
+        sin(vUv.y * 8.0 + uTime * 2.0) * 0.03,
+        cos(vUv.x * 6.0 + uTime * 1.5) * 0.04 + sin(uTime) * 0.02
+      );
+      float mask = texture2D(uMask, vUv + warp).r;
+      float maskOrig = texture2D(uMask, vUv).r;
+      float smear = max(mask, maskOrig);
+      vec3 col = mix(vec3(1.0, 0.4, 0.7), vec3(0.4, 0.2, 1.0), sin(vUv.x * 10.0 + uTime) * 0.5 + 0.5);
+      col *= smear;
+      gl_FragColor = vec4(col, smear * 0.9);
+    }`,
+
+    // 35: Anatomical Pulse — red pulse wave traveling through strokes
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float wave = fract(uTime * 0.5);
+      float pulsePos = smoothstep(0.0, 0.2, abs(vUv.x - wave));
+      float pulse = 1.0 - pulsePos;
+      vec3 col = mix(vec3(0.4, 0.0, 0.0), vec3(1.0, 0.1, 0.1), pulse);
+      col += vec3(1.0, 0.8, 0.6) * pow(pulse, 4.0);
+      gl_FragColor = vec4(col * mask, mask * 0.95);
+    }`,
+
+    // 36: Neon Outline — hollow text with cycling neon edge glow
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      float edge = 0.0;
+      for (int i = 0; i < 8; i++) {
+        float a = float(i) * 0.785;
+        float d = 0.006;
+        edge += abs(mask - texture2D(uMask, vUv + vec2(cos(a), sin(a)) * d).r);
+      }
+      edge = min(edge * 2.0, 1.0);
+      float hue = fract(uTime * 0.2 + vUv.x * 0.5);
+      vec3 neon = vec3(
+        sin(hue * 6.28) * 0.5 + 0.5,
+        sin(hue * 6.28 + 2.09) * 0.5 + 0.5,
+        sin(hue * 6.28 + 4.19) * 0.5 + 0.5
+      );
+      float bloom = edge * (1.2 + sin(uTime * 4.0) * 0.3);
+      gl_FragColor = vec4(neon * bloom, edge * 0.95);
+    }`,
+
+    // 37: Luma Window — text as window into kaleidoscopic conic gradient
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      vec2 c = vUv - 0.5;
+      float angle = atan(c.y, c.x) + uTime * 0.8;
+      float sectors = mod(angle * 3.0 / 3.14159, 2.0);
+      float hue = fract(sectors * 0.5 + uTime * 0.15);
+      vec3 col = vec3(
+        sin(hue * 6.28) * 0.5 + 0.7,
+        sin(hue * 6.28 + 2.09) * 0.5 + 0.7,
+        sin(hue * 6.28 + 4.19) * 0.5 + 0.7
+      );
+      col *= 1.0 + sin(angle * 6.0) * 0.3;
+      gl_FragColor = vec4(col * mask, mask * 0.95);
+    }`,
+
+    // 38: ASCII Matrix — tiny grid pattern simulating glyph substitution
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      vec2 cell = floor(vUv * 60.0);
+      float glyph = hash(cell + floor(uTime * 6.0));
+      float cellMask = step(0.3, glyph) * step(glyph, 0.85);
+      vec2 local = fract(vUv * 60.0);
+      float charShape = step(0.15, local.x) * step(local.x, 0.85) * step(0.1, local.y) * step(local.y, 0.9);
+      vec3 col = vec3(0.2, 1.0, 0.4) * charShape * cellMask;
+      col += vec3(0.1, 0.4, 0.15) * mask;
+      gl_FragColor = vec4(col * mask, mask * 0.9);
+    }`,
+
+    // 39: Feedback Tunnel — recursive scaling copies into purple abyss
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float total = 0.0;
+      vec3 col = vec3(0.0);
+      for (int i = 0; i < 6; i++) {
+        float fi = float(i);
+        float s = 1.0 + fi * 0.15 + sin(uTime * 2.0) * fi * 0.02;
+        vec2 uv = (vUv - 0.5) * s + 0.5;
+        if (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0) {
+          float m = texture2D(uMask, uv).r * (1.0 - fi * 0.15);
+          float hue = fi * 0.12 + uTime * 0.1;
+          col += vec3(
+            sin(hue * 6.28 + 1.0) * 0.3 + 0.4,
+            sin(hue * 6.28 + 3.0) * 0.2 + 0.2,
+            sin(hue * 6.28 + 5.0) * 0.4 + 0.6
+          ) * m;
+          total = max(total, m);
+        }
+      }
+      float mask = texture2D(uMask, vUv).r;
+      col += vec3(1.0) * mask * 0.5;
+      gl_FragColor = vec4(col, max(mask, total * 0.7) * 0.9);
+    }`,
+
+    // 40: Slit-Scan Taffy — horizontal time-stretch distortion
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float stretch = sin(vUv.y * 8.0 + uTime * 3.0) * 0.06;
+      float squeeze = cos(vUv.y * 5.0 + uTime * 1.5) * 0.03;
+      vec2 uv = vec2(vUv.x + stretch, vUv.y + squeeze);
+      float mask = texture2D(uMask, uv).r;
+      vec3 col = mix(vec3(1.0, 0.5, 0.3), vec3(1.0, 0.2, 0.6), sin(stretch * 20.0 + uTime) * 0.5 + 0.5);
+      col = mix(col, vec3(1.0, 0.9, 0.7), mask * 0.4);
+      gl_FragColor = vec4(col * mask, mask * 0.9);
+    }`,
+
+    // 41: Stroboscopic Ghost — LSD tracer with frozen ghost copies
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      vec3 col = vec3(1.0) * mask;
+      float ghostTotal = mask;
+      for (int i = 1; i <= 5; i++) {
+        float fi = float(i);
+        vec2 off = vec2(sin(uTime * 0.5 + fi) * fi * 0.012, cos(uTime * 0.3 + fi * 2.0) * fi * 0.008);
+        float g = texture2D(uMask, vUv + off).r * (1.0 - fi * 0.18);
+        float hue = fi * 0.15 + 0.7;
+        col += vec3(
+          sin(hue * 6.28) * 0.5 + 0.5,
+          sin(hue * 6.28 + 2.09) * 0.3 + 0.3,
+          sin(hue * 6.28 + 4.19) * 0.5 + 0.7
+        ) * g;
+        ghostTotal = max(ghostTotal, g * 0.6);
+      }
+      gl_FragColor = vec4(col, max(mask, ghostTotal) * 0.85);
+    }`,
+
+    // 42: RGB Time-Shear — temporal chromatic aberration with animated split
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float t = uTime * 1.5;
+      float splitX = sin(t) * 0.015;
+      float splitY = cos(t * 0.7) * 0.01;
+      float r = texture2D(uMask, vUv + vec2(splitX, splitY)).r;
+      float g = texture2D(uMask, vUv).r;
+      float b = texture2D(uMask, vUv - vec2(splitX, splitY)).r;
+      float a = max(max(r, g), b);
+      vec3 col = vec3(r * 1.3, g, b * 1.3);
+      col += vec3(1.0) * g * 0.3;
+      gl_FragColor = vec4(col, a * 0.9);
+    }`,
+
+    // 43: Cymatic Ripple — concentric expanding wave rings from text
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      vec2 c = vUv - vec2(0.5, 0.15);
+      float dist = length(c);
+      float ripple = sin(dist * 60.0 - uTime * 6.0) * 0.5 + 0.5;
+      float ring = smoothstep(0.3, 0.0, dist) * ripple;
+      vec3 col = mix(vec3(0.0, 0.8, 1.0), vec3(1.0, 0.0, 0.8), ripple);
+      col *= mask + ring * 0.4;
+      gl_FragColor = vec4(col, max(mask, ring * 0.3) * 0.9);
+    }`,
+
+    // 44: Voronoi Shatter — fractured crystalline glass facets
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      vec2 cell = floor(vUv * 12.0);
+      float h = hash(cell + sin(uTime * 0.3));
+      vec2 center = (cell + vec2(h, hash(cell + 1.0))) / 12.0;
+      float d = length(vUv - center);
+      float edge = smoothstep(0.01, 0.02, d);
+      vec3 col = mix(vec3(0.6, 0.85, 1.0), vec3(0.3, 0.5, 0.9), h);
+      col *= edge * (0.8 + h * 0.4);
+      col += vec3(1.0) * pow(1.0 - edge, 4.0) * 0.8;
+      gl_FragColor = vec4(col * mask, mask * 0.95);
+    }`,
+
+    // 45: Tesseract Fold — 4D perspective folding illusion
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      vec2 c = vUv - 0.5;
+      float fold = sin(c.x * 8.0 + uTime * 2.0) * cos(c.y * 6.0 + uTime * 1.5) * 0.3;
+      float depth = sin(fold * 10.0 + uTime) * 0.5 + 0.5;
+      vec3 col = mix(vec3(0.0, 1.0, 1.0), vec3(1.0, 0.0, 1.0), depth);
+      float wireframe = smoothstep(0.02, 0.0, abs(fract(fold * 3.0) - 0.5));
+      col += vec3(0.5) * wireframe;
+      gl_FragColor = vec4(col * mask * 1.1, mask * 0.9);
+    }`,
+
+    // 46: Wireframe Matrix — edge-only neon green with jitter
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      float edge = 0.0;
+      for (int i = 0; i < 8; i++) {
+        float a = float(i) * 0.785;
+        edge += abs(mask - texture2D(uMask, vUv + vec2(cos(a), sin(a)) * 0.005).r);
+      }
+      edge = min(edge * 3.0, 1.0);
+      float jitter = hash(vUv * 100.0 + uTime * 20.0) * 0.3;
+      float wire = edge * (0.8 + jitter);
+      vec3 col = vec3(0.0, 1.0, 0.2) * wire * 1.5;
+      gl_FragColor = vec4(col, wire * 0.95);
+    }`,
+
+    // 47: Boids Swarm — warm glowing particle constellation
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float particles = 0.0;
+      for (int i = 0; i < 12; i++) {
+        float fi = float(i);
+        vec2 pos = vec2(hash(vec2(fi, 0.0)), hash(vec2(fi, 1.0)));
+        pos += vec2(sin(uTime + fi), cos(uTime * 0.7 + fi * 2.0)) * 0.1;
+        pos = fract(pos);
+        float d = length(vUv - pos);
+        particles += smoothstep(0.05, 0.0, d) * 0.3;
+      }
+      vec3 col = vec3(1.0, 0.6, 0.2) * mask + vec3(1.0, 0.8, 0.4) * particles;
+      gl_FragColor = vec4(col, max(mask, particles) * 0.9);
+    }`,
+
+    // 48: Penrose Extrusion — impossible contradictory multi-angle shadows
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      float s1 = texture2D(uMask, vUv + vec2(0.008, 0.008)).r * 0.3;
+      float s2 = texture2D(uMask, vUv + vec2(-0.006, 0.01)).r * 0.25;
+      float s3 = texture2D(uMask, vUv + vec2(0.01, -0.005)).r * 0.2;
+      vec3 col = vec3(0.0, 1.0, 1.0) * s1 + vec3(1.0, 0.0, 1.0) * s2 + vec3(1.0, 1.0, 0.0) * s3;
+      col += vec3(1.0) * mask * 0.8;
+      float total = max(max(max(s1, s2), s3), mask);
+      float pulse = sin(uTime * 2.0) * 0.1 + 0.9;
+      gl_FragColor = vec4(col * pulse, total * 0.95);
+    }`,
+
+    // 49: Seraphim Eyes — repeating eye-pupil surveillance pattern
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      vec2 cell = fract(vUv * 6.0) - 0.5;
+      float iris = length(cell);
+      float pupil = smoothstep(0.12, 0.08, iris);
+      float ring = smoothstep(0.25, 0.22, iris) - smoothstep(0.22, 0.18, iris);
+      vec2 look = vec2(sin(uTime * 1.5), cos(uTime * 1.1)) * 0.05;
+      float pupilOff = smoothstep(0.08, 0.04, length(cell - look));
+      vec3 col = mix(vec3(0.4, 0.0, 0.6), vec3(0.0, 1.0, 0.5), ring);
+      col += vec3(0.0) * pupilOff + vec3(1.0) * (1.0 - pupilOff) * pupil * 0.3;
+      col = mix(col, vec3(0.8, 0.6, 1.0), 1.0 - smoothstep(0.2, 0.3, iris));
+      gl_FragColor = vec4(col * mask, mask * 0.9);
+    }`,
+
+    // 50: Coral Calcification — UV blacklight fractal coral glow
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float branch = sin(vUv.x * 20.0 + sin(vUv.y * 15.0 + uTime) * 3.0) *
+                     cos(vUv.y * 18.0 + cos(vUv.x * 12.0 + uTime * 0.8) * 2.0);
+      float growth = sin(uTime * 1.5 + branch * 4.0) * 0.5 + 0.5;
+      vec3 col = mix(vec3(1.0, 0.3, 0.5), vec3(0.2, 1.0, 0.4), growth);
+      col += vec3(0.8, 0.4, 0.0) * pow(branch * 0.5 + 0.5, 3.0);
+      col *= 1.0 + sin(uTime * 3.0) * 0.15;
+      gl_FragColor = vec4(col * mask * 1.1, mask * 0.9);
+    }`,
+
+    // 51: Moth Swarm — jittery amber/cream fluttering particles
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      float moths = 0.0;
+      for (int i = 0; i < 15; i++) {
+        float fi = float(i);
+        vec2 pos = vec2(hash(vec2(fi, 3.0)), hash(vec2(fi, 7.0)));
+        float flutter = sin(uTime * 8.0 + fi * 5.0) * 0.02;
+        pos += vec2(sin(uTime * 0.5 + fi) * 0.15 + flutter, cos(uTime * 0.3 + fi * 1.5) * 0.1);
+        pos = fract(pos);
+        moths += smoothstep(0.03, 0.0, length(vUv - pos)) * 0.25;
+      }
+      vec3 col = vec3(0.9, 0.7, 0.4) * mask + vec3(1.0, 0.9, 0.6) * moths;
+      gl_FragColor = vec4(col, max(mask, moths) * 0.85);
+    }`,
+
+    // 52: Polarized Stress — rainbow birefringence stress patterns
+    `precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform float uTime;
+    void main() {
+      float mask = texture2D(uMask, vUv).r;
+      if (mask < 0.01) { gl_FragColor = vec4(0.0); return; }
+      vec2 c = vUv - 0.5;
+      float stress = sin(c.x * 20.0 + uTime) * cos(c.y * 20.0 + uTime * 0.7);
+      float angle = atan(c.y, c.x) + uTime * 0.4;
+      float pattern = sin(stress * 8.0 + angle * 3.0) * 0.5 + 0.5;
+      float hue = pattern + uTime * 0.05;
+      vec3 col = vec3(
+        sin(hue * 6.28) * 0.5 + 0.5,
+        sin(hue * 6.28 + 2.09) * 0.5 + 0.5,
+        sin(hue * 6.28 + 4.19) * 0.5 + 0.5
+      );
+      col *= 0.8 + pattern * 0.4;
+      gl_FragColor = vec4(col * mask * 1.1, mask * 0.9);
+    }`,
+  ];
+
+  // ─── Text Animations (ported from SuperAcid callout-overlay) ────
+  // Each animation returns {x, y, scaleX, scaleY, rotation, skewX, alpha}
+  // based on progress (0-1) through the caption duration.
+  static ANIMATIONS = [
+    // 0: wave — gentle vertical sine bob
+    (p) => ({ y: Math.sin(p * Math.PI * 4) * 0.03 }),
+    // 1: bounce — drop in from top, settle
+    (p) => {
+      const t = Math.min(p * 3, 1);
+      const bounce = t < 1 ? 1 - Math.pow(1 - t, 3) * Math.cos(t * Math.PI * 3) : 1;
+      return { y: (1 - bounce) * -0.15, scaleX: bounce, scaleY: bounce };
+    },
+    // 2: pulse — breathing scale
+    (p) => {
+      const s = 1 + Math.sin(p * Math.PI * 6) * 0.12;
+      return { scaleX: s, scaleY: s };
+    },
+    // 3: shake — glitch jitter
+    (p) => ({
+      x: (Math.random() - 0.5) * 0.02 * Math.sin(p * Math.PI),
+      y: (Math.random() - 0.5) * 0.015 * Math.sin(p * Math.PI),
+    }),
+    // 4: slide-left — enter from left
+    (p) => {
+      const t = Math.min(p * 4, 1);
+      return { x: (1 - t * t) * -0.4 };
+    },
+    // 5: slide-right — enter from right
+    (p) => {
+      const t = Math.min(p * 4, 1);
+      return { x: (1 - t * t) * 0.4 };
+    },
+    // 6: zoom-in — scale from 0 to 1
+    (p) => {
+      const t = Math.min(p * 3, 1);
+      const s = t * t * (3 - 2 * t); // smoothstep
+      return { scaleX: s, scaleY: s };
+    },
+    // 7: zoom-out — scale from large to normal
+    (p) => {
+      const t = Math.min(p * 3, 1);
+      const s = 1 + (1 - t) * 1.5;
+      return { scaleX: s, scaleY: s };
+    },
+    // 8: spin — gentle rotation
+    (p) => ({ rotation: Math.sin(p * Math.PI * 2) * 0.08 }),
+    // 9: jello — skew wobble
+    (p) => ({
+      skewX: Math.sin(p * Math.PI * 5) * 0.15 * (1 - p),
+    }),
+    // 10: rubber — horizontal stretch
+    (p) => {
+      const t = Math.min(p * 4, 1);
+      const sx = 1 + Math.sin(t * Math.PI * 3) * 0.3 * (1 - t);
+      return { scaleX: sx };
+    },
+    // 11: drift-up — slow upward float
+    (p) => ({ y: -p * 0.06 }),
+    // 12: orbit — small circular path
+    (p) => ({
+      x: Math.cos(p * Math.PI * 4) * 0.03,
+      y: Math.sin(p * Math.PI * 4) * 0.02,
+    }),
+    // 13: pendulum — swing like pendulum
+    (p) => ({ rotation: Math.sin(p * Math.PI * 3) * 0.12 * (1 - p * 0.5) }),
+    // 14: elastic-drop — drop from top with elastic overshoot
+    (p) => {
+      const t = Math.min(p * 3, 1);
+      const elastic = Math.pow(2, -10 * t) * Math.sin((t - 0.075) * (2 * Math.PI) / 0.3) + 1;
+      return { y: (1 - elastic) * -0.2 };
+    },
+    // 15: flash — strobe opacity
+    (p) => {
+      const flash = Math.sin(p * Math.PI * 8) > 0 ? 1.0 : 0.4;
+      return { alpha: flash };
+    },
+    // 16: spiral — rotate + scale combined
+    (p) => {
+      const t = Math.min(p * 3, 1);
+      const s = t * t;
+      return { scaleX: s, scaleY: s, rotation: (1 - t) * Math.PI * 2 };
+    },
+    // 17: flip — horizontal flip in (scaleX)
+    (p) => {
+      const t = Math.min(p * 4, 1);
+      return { scaleX: Math.cos((1 - t) * Math.PI * 0.5) };
+    },
+    // 18: vortex — spiraling rotation with decreasing radius
+    (p) => ({
+      x: Math.cos(p * Math.PI * 6) * 0.04 * (1 - p),
+      y: Math.sin(p * Math.PI * 6) * 0.03 * (1 - p),
+      rotation: p * Math.PI * 4 * (1 - p),
+    }),
+    // 19: breathe — scale + subtle glow pulse
+    (p) => {
+      const s = 1 + Math.sin(p * Math.PI * 3) * 0.06;
+      const a = 0.8 + Math.sin(p * Math.PI * 3 + 1) * 0.2;
+      return { scaleX: s, scaleY: s, alpha: a };
+    },
   ];
 
   // ─── WebGL Init ──────────────────────────────────────────────────
@@ -739,10 +1287,12 @@ export class TrippyTextRenderer {
    * Render trippy text and composite onto the target Canvas 2D context.
    * @param {CanvasRenderingContext2D} targetCtx - the main canvas context
    * @param {string} text - caption text to render
-   * @param {number} effectIndex - which shader effect (0-9)
+   * @param {number} effectIndex - which shader effect (0-52)
    * @param {number} alpha - overall opacity (0-1)
+   * @param {number} animIndex - which animation (0-19)
+   * @param {number} progress - animation progress (0-1)
    */
-  render(targetCtx, text, effectIndex = 0, alpha = 1) {
+  render(targetCtx, text, effectIndex = 0, alpha = 1, animIndex = -1, progress = 0) {
     const w = this.width;
     const h = this.height;
     const fontSize = Math.max(26, Math.round(w * 0.1));
@@ -751,28 +1301,52 @@ export class TrippyTextRenderer {
     const fontDef = TRIPPY_FONTS[effectIndex % TRIPPY_FONTS.length];
     const fontStr = `${fontDef.weight || '900'} ${fontSize}px ${fontDef.family}`;
 
-    // Step 1: Render text as white-on-black mask
+    // Compute animation transforms
+    let anim = { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, skewX: 0, alpha: 1 };
+    if (animIndex >= 0 && TrippyTextRenderer.ANIMATIONS.length > 0) {
+      const animFn = TrippyTextRenderer.ANIMATIONS[animIndex % TrippyTextRenderer.ANIMATIONS.length];
+      const result = animFn(progress);
+      anim = { ...anim, ...result };
+    }
+
+    const textX = w / 2 + (anim.x || 0) * w;
+    const textY = h * 0.15 + (anim.y || 0) * h;
+
+    // Step 1: Render text as white-on-black mask (with animation transforms)
     const mc = this.maskCtx;
     mc.clearRect(0, 0, w, h);
     mc.fillStyle = '#000';
     mc.fillRect(0, 0, w, h);
+    mc.save();
+    mc.translate(textX, textY);
+    if (anim.rotation) mc.rotate(anim.rotation);
+    if (anim.scaleX !== 1 || anim.scaleY !== 1) mc.scale(anim.scaleX, anim.scaleY);
+    if (anim.skewX) mc.transform(1, 0, anim.skewX, 1, 0, 0);
     mc.fillStyle = '#fff';
     mc.font = fontStr;
     mc.textAlign = 'center';
     mc.textBaseline = 'middle';
-    mc.fillText(text, w / 2, h * 0.15);
+    mc.fillText(text, 0, 0);
+    mc.restore();
+
+    // Apply animation alpha
+    const finalAlpha = alpha * (anim.alpha || 1);
 
     if (!this.gl || !this.programs.length) {
       // Fallback: just draw white text with glow
       targetCtx.save();
-      targetCtx.globalAlpha = alpha;
+      targetCtx.globalAlpha = finalAlpha;
       targetCtx.shadowColor = 'rgba(255,100,255,0.8)';
       targetCtx.shadowBlur = 15;
+      targetCtx.translate(textX, textY);
+      if (anim.rotation) targetCtx.rotate(anim.rotation);
+      if (anim.scaleX !== 1 || anim.scaleY !== 1) targetCtx.scale(anim.scaleX, anim.scaleY);
+      if (anim.skewX) targetCtx.transform(1, 0, anim.skewX, 1, 0, 0);
       targetCtx.fillStyle = '#fff';
       targetCtx.font = fontStr;
       targetCtx.textAlign = 'center';
       targetCtx.textBaseline = 'middle';
-      targetCtx.fillText(text, w / 2, h * 0.15);
+      targetCtx.fillText(text, 0, 0);
       targetCtx.restore();
       return;
     }
@@ -804,7 +1378,7 @@ export class TrippyTextRenderer {
 
     // Step 4: Composite WebGL result onto target Canvas 2D
     targetCtx.save();
-    targetCtx.globalAlpha = alpha;
+    targetCtx.globalAlpha = finalAlpha;
     targetCtx.drawImage(this.glCanvas, 0, 0);
     targetCtx.restore();
   }

@@ -1539,9 +1539,10 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
           }
         }
 
-        // Each caption gets a different shader effect (cycles through 10)
-        const effectIdx = captionIndex % 30;
-        trippyRenderer.render(ctx, visibleText, effectIdx, alpha);
+        // Each caption gets a different shader + animation combo (53 shaders × 20 animations)
+        const effectIdx = captionIndex % 53;
+        const animIdx = Math.floor(captionIndex / 53 + captionIndex * 7) % 20;
+        trippyRenderer.render(ctx, visibleText, effectIdx, alpha, animIdx, progress);
       };
 
       let stopped = false;
