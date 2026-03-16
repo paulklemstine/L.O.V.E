@@ -536,7 +536,7 @@ export class TrippyTextRenderer {
     void main() {
       vec2 block = floor(vUv * 15.0);
       float glitchTrigger = step(0.92, hash(block + floor(uTime * 4.0)));
-      vec2 offset = (hash(block + 1.0) - 0.5) * 0.08 * glitchTrigger;
+      vec2 offset = vec2(hash(block + 1.0) - 0.5, hash(block + 2.0) - 0.5) * 0.08 * glitchTrigger;
       float mask = texture2D(uMask, vUv + offset).r;
       float r = texture2D(uMask, vUv + offset + vec2(0.005, 0.0)).r;
       float b = texture2D(uMask, vUv + offset - vec2(0.005, 0.0)).r;
