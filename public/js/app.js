@@ -1097,19 +1097,18 @@ function updateUI() {
 }
 
 function showLatestPost(result) {
-  // Convert blobs to data URLs for persistence, then store and display
-  const blob = result.imageBlob || result.videoBlob;
-  let pending = blob ? 1 : 0;
-  const done = () => { pending--; if (pending <= 0) storeAndDisplayPost(result); };
-
-  if (blob) {
+  // Use object URLs for video (data URLs fail on large blobs)
+  // Use data URLs for images (small, persist across navigation)
+  if (result.videoBlob) {
+    result._videoDataUrl = URL.createObjectURL(result.videoBlob);
+    storeAndDisplayPost(result);
+  } else if (result.imageBlob) {
     const reader = new FileReader();
     reader.onload = () => {
-      if (result.videoBlob) result._videoDataUrl = reader.result;
-      else result._imageDataUrl = reader.result;
-      done();
+      result._imageDataUrl = reader.result;
+      storeAndDisplayPost(result);
     };
-    reader.readAsDataURL(blob);
+    reader.readAsDataURL(result.imageBlob);
   } else {
     storeAndDisplayPost(result);
   }
