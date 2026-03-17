@@ -1534,7 +1534,9 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
       let recorder = null;
       const chunks = [];
       let sceneIndex = 0;
-      let cumulativeVideoTime = 0; // track actual video playback time, not wall clock
+      let cumulativeVideoTime = 0; // actual video playback time
+      let sceneWallStart = 0; // wall-clock fallback per scene
+      let cumulativeWallTime = 0; // wall-clock fallback total
       let activeVideo = null;
       let activeInterval = null;
 
@@ -1647,16 +1649,18 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
           }
 
           // Use setInterval for drawing — requestAnimationFrame throttles in background tabs
+          sceneWallStart = Date.now();
           const drawInterval = setInterval(() => {
             if (stopped || video.paused || video.ended) {
               clearInterval(drawInterval);
               return;
             }
-            // 30s trim based on actual video playback time (immune to background throttling)
-            const totalVideoTime = cumulativeVideoTime + (video.currentTime || 0);
+            // 30s trim — use video time if available, wall clock as fallback
+            const vt = video.currentTime || 0;
+            const totalVideoTime = cumulativeVideoTime + (isFinite(vt) ? vt : 0);
             if (totalVideoTime >= 30) {
               clearInterval(drawInterval);
-              console.log(`[Splice] 30s of video reached (${totalVideoTime.toFixed(1)}s), trimming`);
+              console.log(`[Splice] 30s video time reached (${totalVideoTime.toFixed(1)}s), trimming`);
               finish();
               return;
             }
@@ -1670,12 +1674,17 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
             if (stopped) return;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             drawCaption();
-            cumulativeVideoTime += video.duration || 0;
+            // Use video.duration if valid, otherwise estimate from wall clock
+            const dur = video.duration;
+            const wallElapsed = (Date.now() - sceneWallStart) / 1000;
+            const sceneDuration = (isFinite(dur) && dur > 0) ? dur : wallElapsed;
+            cumulativeVideoTime += sceneDuration;
+            cumulativeWallTime += wallElapsed;
             URL.revokeObjectURL(video.src);
             video.remove();
             activeVideo = null;
             sceneIndex++;
-            console.log(`[Splice] Scene ${sceneIndex}/${blobs.length} complete (${cumulativeVideoTime.toFixed(1)}s total)`);
+            console.log(`[Splice] Scene ${sceneIndex}/${blobs.length} complete (video: ${cumulativeVideoTime.toFixed(1)}s, wall: ${cumulativeWallTime.toFixed(1)}s)`);
             if (cumulativeVideoTime >= 30) {
               console.log('[Splice] 30s limit reached, trimming');
               finish();
@@ -1704,14 +1713,13 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
 
       playNextScene();
 
-      // Safety timeout — 90s wall time (video-time trim handles the 30s limit,
-      // this catches edge cases like frozen tabs or failed video playback)
+      // Safety timeout — 180s wall time for background tab throttling
       setTimeout(() => {
         if (!stopped) {
-          console.warn(`[Splice] Safety timeout (90s wall), video time: ${cumulativeVideoTime.toFixed(1)}s`);
+          console.warn(`[Splice] Safety timeout (180s wall), video: ${cumulativeVideoTime.toFixed(1)}s, scenes: ${sceneIndex}/${blobs.length}`);
           finish();
         }
-      }, 90000);
+      }, 180000);
     });
   }
 
