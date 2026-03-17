@@ -1709,8 +1709,7 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
             if (audioSource) audioSource.start(0);
           }
 
-          // Speed up playback — helps in background tabs where video plays slowly
-          video.playbackRate = 2;
+          video.playbackRate = 1;
 
           // Scene advancement helper — called by onended, stall detection, or timeout
           sceneWallStart = Date.now();
