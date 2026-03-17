@@ -1591,7 +1591,10 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
       const finish = () => {
         if (stopped) return;
         stopped = true;
-        if (activeInterval) clearInterval(activeInterval);
+        if (activeInterval) {
+          if (activeInterval.stop) activeInterval.stop();
+          else clearInterval(activeInterval);
+        }
         if (activeVideo) {
           try { activeVideo.pause(); } catch {}
           try { URL.revokeObjectURL(activeVideo.src); } catch {}
@@ -1648,29 +1651,43 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
             if (audioSource) audioSource.start(0);
           }
 
-          // Use setInterval for drawing — requestAnimationFrame throttles in background tabs
+          // MessageChannel frame pump — NOT throttled in background tabs
+          // (setInterval gets clamped to 1s+ in background, MessageChannel does not)
           sceneWallStart = Date.now();
-          const drawInterval = setInterval(() => {
-            if (stopped || video.paused || video.ended) {
-              clearInterval(drawInterval);
+          const channel = new MessageChannel();
+          let framePumpActive = true;
+          let lastFrameTime = 0;
+          const FRAME_INTERVAL = 33; // ~30fps
+
+          channel.port1.onmessage = () => {
+            if (!framePumpActive || stopped || video.paused || video.ended) return;
+
+            // Throttle to ~30fps even though MessageChannel fires fast
+            const now = Date.now();
+            if (now - lastFrameTime < FRAME_INTERVAL) {
+              channel.port2.postMessage(null); // keep pumping
               return;
             }
+            lastFrameTime = now;
+
             // 30s trim — use video time if available, wall clock as fallback
             const vt = video.currentTime || 0;
             const totalVideoTime = cumulativeVideoTime + (isFinite(vt) ? vt : 0);
             if (totalVideoTime >= 30) {
-              clearInterval(drawInterval);
+              framePumpActive = false;
               console.log(`[Splice] 30s video time reached (${totalVideoTime.toFixed(1)}s), trimming`);
               finish();
               return;
             }
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            drawCaption(); // Overlay subliminal caption on every frame
-          }, 33); // ~30fps
-          activeInterval = drawInterval;
+            drawCaption();
+            channel.port2.postMessage(null); // request next frame
+          };
+          channel.port2.postMessage(null); // start the pump
+          activeInterval = { stop: () => { framePumpActive = false; } };
 
           video.onended = () => {
-            clearInterval(drawInterval);
+            framePumpActive = false;
             if (stopped) return;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             drawCaption();
@@ -1694,7 +1711,7 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
           };
 
           video.play().catch(err => {
-            clearInterval(drawInterval);
+            framePumpActive = false;
             console.error(`[Splice] Scene ${sceneIndex + 1} play failed:`, err);
             URL.revokeObjectURL(video.src);
             video.remove();
