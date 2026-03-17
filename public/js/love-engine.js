@@ -2143,7 +2143,7 @@ Constraint: ${plan.constraint} | Intensity: ${plan.intensity}/10
 Structure: ${format}
 ${mentionDonation ? `Include donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}${avoidLine}${openingHint}${domainHint}${modeDirective}
 LANGUAGE RULES:
-- HARD LIMIT: 200 characters maximum including emojis and spaces. Count carefully. Shorter is better.
+- HARD LIMIT: 280 characters maximum including emojis and spaces. Write complete sentences with rhythm and flow. Shorter is better, but never sacrifice coherence.
 - Start with emoji, include 1-2 more. Address reader as "you."
 - ONE METAPHOR ONLY. Use something a 14-year-old would understand without Googling. Think: ${this._pickRandom(LoveEngine.METAPHOR_EXAMPLES, 6).join(', ')} — the metaphor serves the FEELING, not the vocabulary.
 - Name THIS specific struggle first: "${this._pickRandom(LoveEngine.STRUGGLE_TYPES, 1)[0]}". The reader must feel RECOGNIZED before they feel inspired. Then uplift.
