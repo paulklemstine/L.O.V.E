@@ -372,14 +372,14 @@ async function doPost() {
   const beforeInfo = await getPollenBalance();
   const balanceBefore = beforeInfo?.balance ?? null;
 
-  // 5% chance to generate a video post instead of image
-  const isVideoPost = Math.random() < 0.05;
+  // 10% chance to generate a video post instead of image
+  const isVideoPost = Math.random() < 0.10;
 
   try {
     let result;
 
     if (isVideoPost) {
-      log('🎬 Rolling video post (5% chance)...');
+      log('🎬 Rolling video post (10% chance)...');
       setStatus('Generating video transmission...');
       result = await love.generateVideoPost((status) => {
         setStatus(status);
