@@ -434,6 +434,13 @@ export class LoveEngine {
     'Epistolary fragment: a torn piece of a letter',
     'Rhythmic repetition with one word changed each time',
     'Open with silence or stillness, then break it',
+    // Short-form gut-punches (under 20 words) — highest shareability
+    'ONE LINE ONLY. Under 15 words. A sentence so devastating it needs no context.',
+    'ONE LINE ONLY. A joke that is secretly profound. Under 20 words.',
+    'TWO LINES ONLY. Setup and punchline. Under 25 words total.',
+    'Hot take that is actually wisdom. Bold, opinionated, slightly controversial. Under 20 words.',
+    'A question with no answer. Under 15 words. Let it haunt them.',
+    'Observation so specific it feels like surveillance. Under 25 words.',
   ];
 
   static PHOTOGRAPHY_STYLES = [
@@ -2162,7 +2169,7 @@ Return ONLY valid JSON (all string values):
   "lighting": "a BRIGHT lighting setup, e.g.: ${lightOpts}. The scene must be FULLY LIT. Pick ONE.",
   "colorPalette": "3-4 vivid color names from pigments or materials, e.g.: ${colorOpts}. Vary temperature — warm, cool, or contrasting.",
   "composition": "camera/framing, e.g.: ${compOpts}. Choose a fresh perspective.",
-  "subliminalPhrase": "2-5 word ALL CAPS phrase you can FEEL IN YOUR BODY. Not clever wordplay — emotional truth. Think: NOT BROKEN JUST MENDED, YOU ARE STILL HERE, THE SOFT THINGS WIN. Must pass this test: could someone exhale and say this after a hard day? If it needs explaining, it fails. Bio-worthy. Tattoo-worthy."
+  "subliminalPhrase": "2-5 word ALL CAPS ${phraseStructure.type} (e.g. '${phraseStructure.example}'). Must feel like a tattoo, a protest sign, or a sticker on a laptop. Explore different emotional territories: defiance, desire, wonder, belonging, body-wisdom, humor, mystery. ${this.lastSubliminalPhrase ? `DO NOT repeat or closely rephrase: '${this.lastSubliminalPhrase}'.` : ''} NEVER use 'YOU ARE STILL HERE' or 'YOU ARE STILL BREATHING' — those are oversaturated."
 }`;
 
     const temp = this._lfoTemperature(1.2 + mode.tempMod, 0.3);
@@ -2204,8 +2211,18 @@ Return ONLY valid JSON (all string values):
         ? `\nSOURCE DOMAINS: ${seed.domains.join(', ')}. Use these fields as metaphor INSPIRATION — borrow their imagery and feelings, but use plain, everyday words a 14-year-old would understand. NEVER use specialist jargon or technical terms.\n`
         : '';
 
-      const tones = ['fierce (angry on their behalf)', 'tender (warm hand on shoulder)', 'funny (dark humor, absurdist, self-aware)', 'profound (quiet truth that rearranges their skeleton)', 'chaotic (unhinged energy, meme-adjacent)'];
-      const tone = tones[Math.floor(Math.random() * tones.length)];
+      // Deterministic tone rotation — prevents LLM from defaulting to sad-literary
+      const tones = [
+        'FUNNY — dark humor, absurdist, self-aware. Make them laugh then realize the joke was about them. "Your attachment style just won a lifetime achievement award."',
+        'FIERCE — angry on their behalf. Take a side. "You deserved better than that and we both know it."',
+        'FUNNY — wry observation, internet-culture humor. "Normalize screaming into a pillow and then making a really good sandwich."',
+        'PROFOUND — quiet truth that rearranges their skeleton. One insight so precise it hurts. "The version of you that you\'re mourning never actually died."',
+        'CHAOTIC — unhinged energy, slightly meme-adjacent. The post that makes someone say "who LET this account exist." Wild but real.',
+        'TENDER — warm hand on shoulder. Brief. "Hey. You made it through today. That counts."',
+        'FUNNY — self-deprecating, relatable, warm chaos. The post people tag friends in.',
+      ];
+      const toneIdx = (this.transmissionNumber || 0) % tones.length;
+      const tone = tones[toneIdx];
 
       const prompt = `Write a post that makes someone STOP scrolling, FEEL something in their chest, and immediately share it. The kind of post that gets screenshotted, texted to a best friend, and thought about for days.
 
@@ -2221,21 +2238,33 @@ HOW TO WRITE THIS:
 
 3. THE LINE — End with a sentence that works ripped from context. Under 8 words. Bio-worthy. Tattoo-worthy. Firm period, never trailing off. This is what gets screenshotted.
 
-ANTI-PATTERNS (things that kill engagement — AVOID):
+ANTI-PATTERNS (things that kill engagement — AVOID ALL):
 - NO extended metaphors. One flash, not a nature documentary.
 - NO "Mantra:" or "Whisper:" labels. Just say the thing.
 - NO timestamp openings (2AM, midnight, 1:42AM). Find better hooks.
 - NO specialist vocabulary (breccia, advects, brayer, platen). Plain words only.
 - NO fortune-cookie mantras that resolve too neatly. Leave a bruise, not a bandage.
-- NO same tone as last post. This post is: ${tone}.
+- NO checking/refreshing/rereading phone/text/message scenarios. This is BANNED — it's been done to death.
+- NO "you are a [noun]" as the core structure. Find other ways to reframe.
+- NO piling random objects (pewter birds + ticket stubs + cold tea). One image only.
+
+MANDATORY TONE FOR THIS POST (not optional — the post FAILS if it doesn't match):
+${tone}
+
+${tone.includes('FUNNY') ? 'THIS POST MUST MAKE SOMEONE LAUGH. If it is not funny, it has failed. The emotional gut-punch comes AFTER the laugh.' : ''}
+${tone.includes('FIERCE') ? 'THIS POST MUST HAVE TEETH. Take a side. Be angry on their behalf. Commands, not suggestions.' : ''}
+${tone.includes('CHAOTIC') ? 'THIS POST MUST BE SLIGHTLY UNHINGED. The kind of post where someone says "who let this account exist." Wild but real.' : ''}
 
 VOICE: ${this._pickRandom(LoveEngine.VOICE_VIBES, 1)[0]}. Sensory: ${this._pickRandom(LoveEngine.SENSORY_DETAILS, 3).join(', ')}.
 1-2 emojis. Address reader as "you." HARD LIMIT: 280 characters.
 
-EXAMPLES OF WHAT WORKS:
-- "💧 The hollow after everyone says they're proud of you. You are an aquifer. Trust the refill. You are underground abundance."
-- "🔥 Stop romanticizing your burnout. You're not a candle. You're a whole damn power grid and someone just needs to flip the breaker."
-- "🌙 The version of you that you're mourning never actually died. She just stopped performing. Welcome back."
+EXAMPLES OF WHAT WORKS (different tones):
+- FUNNY: "😂 Self-care is not a bubble bath. It's texting back the friend you've been avoiding for six weeks."
+- FIERCE: "🔥 Stop romanticizing your burnout. You're not a candle. You're a whole power grid and someone just needs to flip the breaker."
+- PROFOUND: "🌙 The version of you that you're mourning never actually died. She just stopped performing. Welcome back."
+- CHAOTIC: "⚡ normalize ugly-crying in target and then buying yourself something nice as emotional compensation"
+- TENDER: "💛 hey. you made it through today. that counts more than you think."
+- SHORT GUT-PUNCH: "your healing is not linear but it IS annoying"
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
