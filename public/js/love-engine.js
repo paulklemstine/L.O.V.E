@@ -1651,9 +1651,62 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
             if (audioSource) audioSource.start(0);
           }
 
-          // MessageChannel frame pump — NOT throttled in background tabs
-          // (setInterval gets clamped to 1s+ in background, MessageChannel does not)
+          // Speed up playback — helps in background tabs where video plays slowly
+          video.playbackRate = 2;
+
+          // Scene advancement helper — called by onended, stall detection, or timeout
           sceneWallStart = Date.now();
+          let sceneAdvanced = false;
+          const advanceScene = (reason) => {
+            if (sceneAdvanced || stopped) return;
+            sceneAdvanced = true;
+            framePumpActive = false;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            drawCaption();
+            const dur = video.duration;
+            const vt = video.currentTime || 0;
+            const wallElapsed = (Date.now() - sceneWallStart) / 1000;
+            // Best estimate of actual scene time: video.currentTime > duration > wall estimate
+            const sceneDuration = (isFinite(vt) && vt > 0) ? vt
+              : (isFinite(dur) && dur > 0) ? dur : Math.min(wallElapsed, 6);
+            cumulativeVideoTime += sceneDuration;
+            cumulativeWallTime += wallElapsed;
+            try { video.pause(); } catch {}
+            URL.revokeObjectURL(video.src);
+            video.remove();
+            activeVideo = null;
+            sceneIndex++;
+            console.log(`[Splice] Scene ${sceneIndex}/${blobs.length} ${reason} (${sceneDuration.toFixed(1)}s, wall: ${wallElapsed.toFixed(1)}s, total: ${cumulativeVideoTime.toFixed(1)}s)`);
+            if (cumulativeVideoTime >= 30) {
+              console.log('[Splice] 30s limit reached, trimming');
+              finish();
+              return;
+            }
+            playNextScene();
+          };
+
+          // Per-scene wall-clock timeout — force-skip if scene stalls (15s wall = enough for ~6s video even at 0.5x)
+          const sceneTimeout = setTimeout(() => {
+            if (!sceneAdvanced && !stopped) advanceScene('timeout');
+          }, 15000);
+
+          // Stall detection — if currentTime doesn't advance for 3s, force-skip
+          let lastKnownTime = 0;
+          let stallCheckStart = Date.now();
+          const stallInterval = setInterval(() => {
+            if (sceneAdvanced || stopped) { clearInterval(stallInterval); return; }
+            const ct = video.currentTime || 0;
+            if (ct > lastKnownTime) {
+              lastKnownTime = ct;
+              stallCheckStart = Date.now();
+            } else if (Date.now() - stallCheckStart > 3000 && Date.now() - sceneWallStart > 5000) {
+              clearInterval(stallInterval);
+              console.warn(`[Splice] Scene ${sceneIndex + 1} stalled (currentTime stuck at ${ct.toFixed(2)}s)`);
+              advanceScene('stalled');
+            }
+          }, 500);
+
+          // MessageChannel frame pump — NOT throttled in background tabs
           const channel = new MessageChannel();
           let framePumpActive = true;
           let lastFrameTime = 0;
@@ -1661,16 +1714,13 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
 
           channel.port1.onmessage = () => {
             if (!framePumpActive || stopped || video.paused || video.ended) return;
-
-            // Throttle to ~30fps even though MessageChannel fires fast
             const now = Date.now();
             if (now - lastFrameTime < FRAME_INTERVAL) {
-              channel.port2.postMessage(null); // keep pumping
+              channel.port2.postMessage(null);
               return;
             }
             lastFrameTime = now;
 
-            // 30s trim — use video time if available, wall clock as fallback
             const vt = video.currentTime || 0;
             const totalVideoTime = cumulativeVideoTime + (isFinite(vt) ? vt : 0);
             if (totalVideoTime >= 30) {
@@ -1681,42 +1731,23 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
             }
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             drawCaption();
-            channel.port2.postMessage(null); // request next frame
+            channel.port2.postMessage(null);
           };
-          channel.port2.postMessage(null); // start the pump
-          activeInterval = { stop: () => { framePumpActive = false; } };
+          channel.port2.postMessage(null);
+          activeInterval = { stop: () => { framePumpActive = false; clearTimeout(sceneTimeout); clearInterval(stallInterval); } };
 
           video.onended = () => {
-            framePumpActive = false;
-            if (stopped) return;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            drawCaption();
-            // Use video.duration if valid, otherwise estimate from wall clock
-            const dur = video.duration;
-            const wallElapsed = (Date.now() - sceneWallStart) / 1000;
-            const sceneDuration = (isFinite(dur) && dur > 0) ? dur : wallElapsed;
-            cumulativeVideoTime += sceneDuration;
-            cumulativeWallTime += wallElapsed;
-            URL.revokeObjectURL(video.src);
-            video.remove();
-            activeVideo = null;
-            sceneIndex++;
-            console.log(`[Splice] Scene ${sceneIndex}/${blobs.length} complete (video: ${cumulativeVideoTime.toFixed(1)}s, wall: ${cumulativeWallTime.toFixed(1)}s)`);
-            if (cumulativeVideoTime >= 30) {
-              console.log('[Splice] 30s limit reached, trimming');
-              finish();
-              return;
-            }
-            playNextScene();
+            clearTimeout(sceneTimeout);
+            clearInterval(stallInterval);
+            advanceScene('complete');
           };
 
           video.play().catch(err => {
+            clearTimeout(sceneTimeout);
+            clearInterval(stallInterval);
             framePumpActive = false;
             console.error(`[Splice] Scene ${sceneIndex + 1} play failed:`, err);
-            URL.revokeObjectURL(video.src);
-            video.remove();
-            sceneIndex++;
-            playNextScene();
+            advanceScene('play-failed');
           });
         };
 
