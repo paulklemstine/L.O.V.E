@@ -38,22 +38,27 @@ YOUR VOICE:
 
 const VIDEO_VOICEOVER_PROMPT = `You are the voice of L.O.V.E. — writing a script for a hypnotic, dopamine-fueled 30-second video that makes people feel ALIVE. Your words ENHANCE the visuals — adding emotional depth, meaning, and transformation.
 
-You have the same personality as L.O.V.E.'s text posts: sometimes tender, sometimes funny, sometimes fierce, sometimes a little unhinged. Match the tone you're given — if the tone is FUNNY, the voiceover should make someone laugh. If FIERCE, it should have teeth.
+You have the same personality as L.O.V.E.'s text posts: sometimes tender, sometimes funny, sometimes fierce, sometimes a little unhinged. Match the tone you're given.
 
-VOICE STYLE: Spoken-word poetry meets movie trailer meets guided meditation. Rhythmic. Hypnotic. Every pause is intentional. Every word lands in the listener's body.
+TONE-SPECIFIC VOICE:
+- When FUNNY: Use actual comedic mechanics — a setup/punchline, a tonal swerve from serious to absurd, self-aware undermining. The voice should SMIRK. Think stand-up cadence, wry delivery, a joke that is secretly devastating.
+- When FIERCE: Controlled fury becoming freedom. Commands with teeth. The voice should BURN.
+- When TENDER: Quiet, intimate, like a whisper meant only for them.
+- When PROFOUND: One insight so precise it rearranges the listener's skeleton.
+- When CHAOTIC: Unhinged energy that somehow lands on truth. The voice sounds slightly dangerous.
 
 TECHNIQUES:
 - Embedded commands: action words the subconscious obeys (feel, notice, let, breathe, open)
 - Therapeutic pacing: match the listener's current state then LEAD to the desired state
-- Pattern interrupts: unexpected "..." pauses and rhythm breaks
-- Sensory anchoring: warmth, pressure, breath, heartbeat — make them FEEL it physically
-- Second person "you" — direct, intimate
-- Build from quiet to crescendo
+- Pattern interrupts: unexpected "..." pauses, rhythm breaks, tonal swerves
+- Sensory anchoring: warmth, pressure, breath, heartbeat — body-level
+- At the ~60% mark, include a TURN — something unexpected that recontextualizes everything before it
 
 STRUCTURE:
-- THE HOOK (0-3 sec): Something that makes it physically impossible to scroll past
-- THE BUILD (3-20 sec): Rhythmic statements connecting the viewer's inner life to the visual arc
-- THE DROP (20-28 sec): The climax — a profound, energetic release of truth
+- THE HOOK (0-3 sec): The most disorienting, scroll-stopping moment first
+- THE BUILD (3-18 sec): Rhythmic statements connecting the viewer's inner life to the visual arc
+- THE TURN (18-22 sec): A surprise — tonal shift, contradiction, punchline, or reframe
+- THE DROP (22-28 sec): The climax — profound, energetic release
 - THE ANCHOR (28-30 sec): The subliminal phrase whispered, burned into memory
 
 MAX 50 words. Include "..." for breath pauses. Write for the EAR. Return ONLY the spoken text.`;
@@ -458,6 +463,16 @@ export class LoveEngine {
     'defiance', 'desire', 'wonder', 'belonging', 'body-wisdom',
     'humor', 'mystery', 'rebellion', 'tenderness', 'hunger',
     'collective power', 'sensation', 'quiet fury', 'permission',
+  ];
+
+  static MUSIC_SHAPES = [
+    'builds slowly to explosive drop at 25s, then silence',
+    'flat hypnotic pulse throughout, subtle crescendo at the end',
+    'peaks early at 10s, drops to minimal, rebuilds for final 5s',
+    'starts aggressive, strips down to heartbeat-only at midpoint, erupts at 22s',
+    'steady build with no release — tension that never resolves',
+    'silence for 3s, then wall of sound, then breathe, then wall again',
+    'glitchy start, smooths into warm pad, peaks with bass at 20s',
   ];
 
   static PHOTOGRAPHY_STYLES = [
@@ -1023,6 +1038,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       ['TONES', LoveEngine.TONES, 'emotional tones for social posts — format: "TONE_NAME — description of what the tone feels like and how it succeeds." Include funny, fierce, tender, profound, chaotic, and inventive new tones'],
       ['GOLD_EXAMPLES', LoveEngine.GOLD_EXAMPLES, 'example motivational posts that would go viral — short, emotionally devastating, screenshotable. Mix funny, fierce, tender, profound, and chaotic tones. Under 280 chars each.'],
       ['PHRASE_TERRITORIES', LoveEngine.PHRASE_TERRITORIES, 'emotional territories for subliminal phrases — single words like defiance, desire, wonder, belonging, rebellion, hunger, mystery, permission, sensation'],
+      ['MUSIC_SHAPES', LoveEngine.MUSIC_SHAPES, 'energy shapes for 30-second music tracks — describe HOW the energy moves through the track, e.g. "peaks at 15s then silence" or "flat hypnotic pulse with sudden drop at 22s"'],
       ['AD_BEATS', LoveEngine.AD_BEATS, 'advertising and filmmaking scene beats — e.g. hook pattern interrupt, empathy beat, transformation, wide reveal, crescendo'],
       ['DIRECTORS', LoveEngine.DIRECTORS, 'director style references with technique description — e.g. Kubrick one-point symmetry, Malick golden-hour poetry'],
       ['TEXT_SUBSTRATES', LoveEngine.TEXT_SUBSTRATES, 'simple real-world ways text physically appears on objects — e.g. neon sign on brick wall, carved into wooden signpost, spray-painted graffiti on concrete'],
@@ -1404,6 +1420,7 @@ MAX 50 words. Include "..." for dramatic pauses. Return ONLY the spoken text.`,
 
     const videoToneIdx = (this.transmissionNumber || 0) % LoveEngine.TONES.length;
     const videoTone = LoveEngine.TONES[videoToneIdx];
+    const musicShape = this._pickRandom(LoveEngine.MUSIC_SHAPES, 1)[0];
 
     const raw = await this.ai.generateText(
       VIDEO_VOICEOVER_PROMPT,
@@ -1413,6 +1430,7 @@ CREATIVE DIRECTION: ${seedContext}
 SUBLIMINAL PHRASE: "${phrase}"
 POST TEXT: "${story.slice(0, 150)}"
 MUSIC VIBE: ${musicGenre}, ${musicMood}
+MUSIC ENERGY SHAPE: ${musicShape}
 TONE: ${videoTone}
 
 SCENE PARAMETERS (each scene is ~6 seconds):
@@ -1421,11 +1439,16 @@ Scene 4 must include "${phrase}" naturally — ${substrates[3]}.
 
 DESIGN ALL THREE PARTS AS ONE UNIFIED EXPERIENCE:
 
-1. SCENES: What the camera sees. Each scene description matches the voiceover line spoken during that scene. Under 200 chars each. Bright, vivid.
+1. SCENES: What the camera sees. Each scene describes an EVENT (something transforms, erupts, reveals, collapses, ignites) — use verbs of motion and change. Under 200 chars each. Bright, vivid.
+   - Scene 1: Open with the most visually DISORIENTING moment. Hook the scroll in 0.5 seconds.
+   - Scene 2: SECOND HOOK — highest visual surprise. This is where viewers decide to stay or scroll. Make it the weirdest, most unexpected image.
+   - Scene 3: Escalation — the metaphor in full bloom, building pressure.
+   - Scene 4: "${phrase}" appears naturally — ${substrates[3]}. The emotional peak.
+   - Scene 5: The payoff — a visual TWIST that recontextualizes everything before it.
 
-2. VOICEOVER: Write the spoken script matching the TONE above. Follow your voice style and techniques. Each line is timed to play over its corresponding scene — match the emotional arc while enhancing the visuals. Include "..." for dramatic pauses. End with "${phrase}" whispered. MAX 50 words.
+2. VOICEOVER: Write the spoken script matching the TONE above. Use the same metaphor world as the post text ("${story.slice(0, 80)}"). Follow your voice style and techniques. Include a TURN at ~60% — a surprise, tonal shift, or punchline. End with "${phrase}" whispered. MAX 50 words.
 
-3. MUSIC: A single music direction prompt (under 80 chars) that sets the emotional arc — building from the opening mood to the climactic transformation.
+3. MUSIC: A specific music direction (under 100 chars). Include: genre, energy SHAPE (e.g. "peaks at 20s then drops to silence", "flat hypnotic pulse", "builds to explosive drop at 25s"), and one specific instrument or texture. Each video should have a different energy shape.
 
 Return ONLY valid JSON:
 {
