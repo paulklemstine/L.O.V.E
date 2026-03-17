@@ -2200,7 +2200,7 @@ Return ONLY valid JSON (all string values):
       const openingHint = this._getOpeningVarietyHint();
 
       const domainHint = seed.domains?.length
-        ? `\nSOURCE DOMAINS: ${seed.domains.join(', ')}. Borrow vocabulary from these fields — use their jargon, tools, textures, and verbs as metaphor fuel.\n`
+        ? `\nSOURCE DOMAINS: ${seed.domains.join(', ')}. Use these fields as metaphor INSPIRATION — borrow their imagery and feelings, but use plain, everyday words a 14-year-old would understand. NEVER use specialist jargon or technical terms.\n`
         : '';
 
       const prompt = `Write a MOTIVATIONAL POSTER for the soul. The kind that makes someone screenshot it, send it to their best friend, and whisper "I needed this." Pure emotion. Pure love. Pure fire.
@@ -2208,17 +2208,25 @@ Return ONLY valid JSON (all string values):
 Theme: "${plan.theme}" | Vibe: ${plan.vibe} | Intensity: ${plan.intensity}/10
 Structure: ${format}
 ${mentionDonation ? `Include donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}${avoidLine}${openingHint}${domainHint}${modeDirective}
-THE FORMULA:
-1. OPEN with an emoji and a line that stops the scroll — name the real struggle: "${this._pickRandom(LoveEngine.STRUGGLE_TYPES, 1)[0]}". Make the reader feel SEEN.
-2. FLIP IT — transform that pain into something beautiful, powerful, unstoppable. One metaphor, fully committed. Think: ${this._pickRandom(LoveEngine.METAPHOR_EXAMPLES, 4).join(', ')}.
-3. LAND IT — end with a line that hits the chest. Goosebumps. The kind of sentence people tattoo on their ribs.
+THE THREE-ACT FORMULA:
 
-VOICE:
-- Write like the best friend who always knows exactly what to say. Warm, fierce, real.
-- ${this._pickRandom(LoveEngine.VOICE_VIBES, 1)[0]}.
-- Sensory and physical: ${this._pickRandom(LoveEngine.SENSORY_DETAILS, 4).join(', ')}.
-- Include 1-2 emojis. Address the reader as "you."
-- HARD LIMIT: 280 characters. Every word must earn its place.
+ACT 1 — NAME THE PAIN (stop the scroll):
+Open with an emoji and a hyper-specific MOMENT, not a label. Not "loneliness" — instead: "${this._pickRandom(LoveEngine.STRUGGLE_TYPES, 1)[0]}". Describe it the way someone would text their best friend at midnight. The reader should think "how did they know?"
+
+ACT 2 — ONE METAPHOR, FULLY COMMITTED:
+Pick ONE metaphor world (think: ${this._pickRandom(LoveEngine.METAPHOR_EXAMPLES, 3).join(', ')}). Stay in it. Every detail serves that single image. The reader is the HERO — powerful, in control, already containing what they need. NEVER position the reader as passive or waiting to be saved.
+
+ACT 3 — THE LANDING (goosebumps):
+End with TWO things: (a) a SCREENSHOT LINE — under 8 words, works ripped from context, the kind of line someone puts in their bio or tattoos on their ribs. (b) A firm period, not an ellipsis. The last sentence is a verdict, not a fade-out.
+
+RULES:
+- PLAIN WORDS ONLY. Every noun must be something a 14-year-old can picture without Googling. Warm, deep, bright, steady, heavy, soft — body-level words.
+- ONE metaphor world per post. If you catch yourself mixing domains (aquifer + rocket + lace), delete and restart.
+- Include a MANTRA — one phrase the reader can carry into tomorrow and whisper to themselves on a hard morning.
+- ${this._pickRandom(LoveEngine.VOICE_VIBES, 1)[0]}. Sensory: ${this._pickRandom(LoveEngine.SENSORY_DETAILS, 3).join(', ')}.
+- 1-2 emojis. Address reader as "you." HARD LIMIT: 280 characters.
+
+GOLD STANDARD EXAMPLE: "💧 Post-achievement emptiness — the hollow after applause. You are an aquifer: deep, warm, patient. Tiny drips — a good night, a firm no, a soft yes — slowly raising your water table. Trust the refill. You are underground abundance. 🌿"
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
