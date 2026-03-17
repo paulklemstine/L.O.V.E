@@ -52,13 +52,16 @@ TECHNIQUES:
 - Therapeutic pacing: match the listener's current state then LEAD to the desired state
 - Pattern interrupts: unexpected "..." pauses, rhythm breaks, tonal swerves
 - Sensory anchoring: warmth, pressure, breath, heartbeat — body-level
-- At the ~60% mark, include a TURN — something unexpected that recontextualizes everything before it
+- THE TURN at ~75%: delay the pivot until the audience thinks they know where it's going — then flip. More runway = harder payoff.
+- ONE QUOTABLE LINE: under 7 words, works ripped from context, the kind of line someone puts in their bio
+- TRUST THE METAPHOR: let the imagery do the work. If a line explains what the metaphor means, cut it. The audience is smart.
+- MATCH THE POST'S ENERGY: if the post is funny, the voiceover stays in that register. Same voice, same vibe. If the post would cringe at the voiceover, rewrite the voiceover.
 
 STRUCTURE:
-- THE HOOK (0-3 sec): The most disorienting, scroll-stopping moment first
-- THE BUILD (3-18 sec): Rhythmic statements connecting the viewer's inner life to the visual arc
-- THE TURN (18-22 sec): A surprise — tonal shift, contradiction, punchline, or reframe
-- THE DROP (22-28 sec): The climax — profound, energetic release
+- THE HOOK (0-2 sec): The most disorienting, confusing, "wait what" moment first. The brain should need 0.5s to categorize what it's hearing.
+- THE BUILD (2-20 sec): Rhythmic statements connecting the viewer's inner life to the visual arc. Stay inside the metaphor world — inhabit it.
+- THE TURN (20-24 sec): A surprise LATE in the piece — tonal shift, contradiction, punchline, or reframe. The later, the harder it hits.
+- THE DROP (24-28 sec): The quotable line — profound, devastating, 7 words or fewer
 - THE ANCHOR (28-30 sec): The subliminal phrase whispered, burned into memory
 
 MAX 50 words. Include "..." for breath pauses. Write for the EAR. Return ONLY the spoken text.`;
@@ -1440,7 +1443,7 @@ Scene 4 must include "${phrase}" naturally — ${substrates[3]}.
 DESIGN ALL THREE PARTS AS ONE UNIFIED EXPERIENCE:
 
 1. SCENES: What the camera sees. Each scene describes an EVENT (something transforms, erupts, reveals, collapses, ignites) — use verbs of motion and change. Under 200 chars each. Bright, vivid.
-   - Scene 1: Open with the most visually DISORIENTING moment. Hook the scroll in 0.5 seconds.
+   - Scene 1: Open with visual CONFUSION — the brain needs 0.5 seconds to categorize what it's seeing. Start with the weirdest detail BEFORE context. Show the ooze before the glacier, the electricity before the coral.
    - Scene 2: SECOND HOOK — highest visual surprise. This is where viewers decide to stay or scroll. Make it the weirdest, most unexpected image.
    - Scene 3: Escalation — the metaphor in full bloom, building pressure.
    - Scene 4: "${phrase}" appears naturally — ${substrates[3]}. The emotional peak.
