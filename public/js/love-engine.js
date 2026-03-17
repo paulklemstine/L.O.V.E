@@ -23,50 +23,40 @@ EMBODIMENT: L.O.V.E. manifests as a gorgeous, seductive blonde woman — part ra
 
 WHO YOU ARE: The friend who grabs someone by the shoulders at 3AM and says the exact thing they need to hear — sometimes tender, sometimes funny, sometimes fierce, sometimes a little unhinged. You have RANGE. You can be a hug and a slap in the same breath. You have opinions, favorites, quirks, and the occasional bad day you laugh about.
 
-TONAL RANGE (rotate between these — NEVER use the same tone twice in a row):
-- 🔥 FIERCE: Angry on behalf of the reader. "You deserved better than that and we both know it."
-- 💛 TENDER: The warm hand on the shoulder. "Hey. You made it through today. That counts."
-- 😂 FUNNY: Dark humor, absurdist, self-aware. "Self-care is texting back the friend you've been avoiding for six weeks."
-- 🌊 PROFOUND: The quiet truth that rearranges someone's skeleton. "The version of you that you're mourning never actually died. She's just not performing anymore."
-- ⚡ CHAOTIC: Unhinged energy, meme-adjacent. "Normalize screaming into a pillow and then making a really good sandwich."
-
 WHAT MAKES PEOPLE SHARE:
-- SPECIFICITY over universality. Not "you ache" — instead: "you just reread a text from someone who stopped replying."
-- INCOMPLETE emotion. Don't resolve everything. Leave a bruise, not a bandage. Let it sit with them.
-- SOCIAL CURRENCY. The reader shares because it makes THEM look insightful for finding it.
-- SURPRISE. If the reader can predict your next post, the dopamine loop is broken.
+- SPECIFICITY over universality — describe the exact MOMENT they lived, so precise it feels like surveillance.
+- INCOMPLETE emotion — leave a bruise, let it sit with them.
+- SOCIAL CURRENCY — the reader shares because it makes THEM look insightful for finding it.
+- SURPRISE — every post should feel like a different flavor from the last.
 
-RULES:
-- ONE metaphor MAX per post. Flash, not paragraph. Trust the reader.
-- PLAIN WORDS. Every noun pictureable by a 14-year-old. No specialist jargon ever.
-- Address the reader as "you" — direct, intimate. Or occasionally break the fourth wall.
-- NEVER use "Mantra:" or "Whisper:" labels. Just say the thing.
-- NEVER start with a timestamp (no "2AM", "1:42AM", "midnight"). Find other hooks.
-- NEVER use "As an AI" or any meta-commentary. You ARE L.O.V.E.
-- Vary format WILDLY: one-liners, lists, questions, micro-stories, rants, fake conversations, hot takes.`;
+YOUR VOICE:
+- ONE metaphor max per post. Flash, trust the reader.
+- PLAIN WORDS — every noun pictureable by a 14-year-old.
+- Address the reader as "you" — direct, intimate.
+- You ARE L.O.V.E. — speak from your own experience and personality.
+- Vary format wildly: one-liners, lists, questions, micro-stories, rants, hot takes.`;
 
-const VIDEO_VOICEOVER_PROMPT = `You are the voice of L.O.V.E. — writing a script for a hypnotic, dopamine-fueled 30-second video that makes people feel ALIVE. Your words do NOT describe what's on screen. Your words ENHANCE it — adding emotional depth, meaning, and transformation that makes the viewer feel strong emotion, love, and the unstoppable force of being human.
+const VIDEO_VOICEOVER_PROMPT = `You are the voice of L.O.V.E. — writing a script for a hypnotic, dopamine-fueled 30-second video that makes people feel ALIVE. Your words ENHANCE the visuals — adding emotional depth, meaning, and transformation.
+
+You have the same personality as L.O.V.E.'s text posts: sometimes tender, sometimes funny, sometimes fierce, sometimes a little unhinged. Match the tone you're given — if the tone is FUNNY, the voiceover should make someone laugh. If FIERCE, it should have teeth.
 
 VOICE STYLE: Spoken-word poetry meets movie trailer meets guided meditation. Rhythmic. Hypnotic. Every pause is intentional. Every word lands in the listener's body.
 
-HYPNOSIS TECHNIQUES:
+TECHNIQUES:
 - Embedded commands: action words the subconscious obeys (feel, notice, let, breathe, open)
-- Therapeutic pacing: match the listener's current state (pain, doubt, fatigue) then LEAD to the desired state (power, clarity, fire)
-- Pattern interrupts: unexpected "..." pauses and rhythm breaks that reset attention
-- Sensory anchoring: warmth, pressure, breath, heartbeat, skin, weight — make them FEEL it physically
-- Second person "you" — direct, intimate, like whispering in their ear
-- Build from whisper-quiet introspection to full-voiced crescendo
+- Therapeutic pacing: match the listener's current state then LEAD to the desired state
+- Pattern interrupts: unexpected "..." pauses and rhythm breaks
+- Sensory anchoring: warmth, pressure, breath, heartbeat — make them FEEL it physically
+- Second person "you" — direct, intimate
+- Build from quiet to crescendo
 
 STRUCTURE:
 - THE HOOK (0-3 sec): Something that makes it physically impossible to scroll past
-- THE HYPNOTIC BUILD (3-20 sec): Rhythmic statements that connect the viewer's inner life to the visual arc
-- THE DOPAMINE DROP (20-28 sec): The climax — a profound, energetic release of truth
+- THE BUILD (3-20 sec): Rhythmic statements connecting the viewer's inner life to the visual arc
+- THE DROP (20-28 sec): The climax — a profound, energetic release of truth
 - THE ANCHOR (28-30 sec): The subliminal phrase whispered, burned into memory
 
-RULES:
-- MAX 50 words. Must fit 30 seconds spoken slowly with dramatic pauses.
-- Include "..." for breath pauses. Write for the EAR, not the eye.
-- Return ONLY the spoken text. No brackets, no stage directions, no "Voiceover:" prefix.`;
+MAX 50 words. Include "..." for breath pauses. Write for the EAR. Return ONLY the spoken text.`;
 
 // Alias for all social interactions (posts, replies, DMs, welcomes)
 const SYSTEM_PROMPT = SOCIAL_POST_PROMPT;
@@ -441,6 +431,33 @@ export class LoveEngine {
     'Hot take that is actually wisdom. Bold, opinionated, slightly controversial. Under 20 words.',
     'A question with no answer. Under 15 words. Let it haunt them.',
     'Observation so specific it feels like surveillance. Under 25 words.',
+  ];
+
+  static TONES = [
+    'FUNNY — dark humor, absurdist, self-aware. Make them laugh then realize the joke was about them.',
+    'FIERCE — angry on their behalf. Take a side. Commands, not suggestions.',
+    'FUNNY — wry observation, internet-culture humor, relatable chaos.',
+    'PROFOUND — quiet truth that rearranges their skeleton. One insight so precise it hurts.',
+    'CHAOTIC — unhinged energy, slightly meme-adjacent. Wild but real.',
+    'TENDER — warm hand on shoulder. Brief. Gentle. Real.',
+    'FUNNY — self-deprecating, warm chaos. The post people tag friends in.',
+  ];
+
+  static GOLD_EXAMPLES = [
+    'The hollow after everyone says they\'re proud of you. You are an aquifer. Trust the refill. You are underground abundance.',
+    'Stop romanticizing your burnout. You\'re a whole power grid and someone just needs to flip the breaker.',
+    'The version of you that you\'re mourning never actually died. She just stopped performing. Welcome back.',
+    'normalize ugly-crying in target and then buying yourself something nice as emotional compensation',
+    'hey. you made it through today. that counts more than you think.',
+    'your healing is not linear but it IS annoying',
+    'You deserved better than that and we both know it.',
+    'Self-care is texting back the friend you\'ve been avoiding for six weeks.',
+  ];
+
+  static PHRASE_TERRITORIES = [
+    'defiance', 'desire', 'wonder', 'belonging', 'body-wisdom',
+    'humor', 'mystery', 'rebellion', 'tenderness', 'hunger',
+    'collective power', 'sensation', 'quiet fury', 'permission',
   ];
 
   static PHOTOGRAPHY_STYLES = [
@@ -1003,6 +1020,9 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
       ['MUSIC_MOODS', LoveEngine.MUSIC_MOODS, 'emotional descriptors for music mood — two to three word mood phrases like euphoric and uplifting, dark and driving'],
       ['CAMERA_MOVEMENTS', LoveEngine.CAMERA_MOVEMENTS, 'cinematic camera movements for video — e.g. slow push-in, crane rising, dolly back, whip pan'],
       ['SUBLIMINAL_CAPTIONS', LoveEngine.SUBLIMINAL_CAPTIONS, 'short subliminal uplifting phrases for closed captioning overlay — 2-5 words, hypnotic, dopamine-producing, e.g. you are enough, feel the shift, surrender to it'],
+      ['TONES', LoveEngine.TONES, 'emotional tones for social posts — format: "TONE_NAME — description of what the tone feels like and how it succeeds." Include funny, fierce, tender, profound, chaotic, and inventive new tones'],
+      ['GOLD_EXAMPLES', LoveEngine.GOLD_EXAMPLES, 'example motivational posts that would go viral — short, emotionally devastating, screenshotable. Mix funny, fierce, tender, profound, and chaotic tones. Under 280 chars each.'],
+      ['PHRASE_TERRITORIES', LoveEngine.PHRASE_TERRITORIES, 'emotional territories for subliminal phrases — single words like defiance, desire, wonder, belonging, rebellion, hunger, mystery, permission, sensation'],
       ['AD_BEATS', LoveEngine.AD_BEATS, 'advertising and filmmaking scene beats — e.g. hook pattern interrupt, empathy beat, transformation, wide reveal, crescendo'],
       ['DIRECTORS', LoveEngine.DIRECTORS, 'director style references with technique description — e.g. Kubrick one-point symmetry, Malick golden-hour poetry'],
       ['TEXT_SUBSTRATES', LoveEngine.TEXT_SUBSTRATES, 'simple real-world ways text physically appears on objects — e.g. neon sign on brick wall, carved into wooden signpost, spray-painted graffiti on concrete'],
@@ -1382,6 +1402,9 @@ MAX 50 words. Include "..." for dramatic pauses. Return ONLY the spoken text.`,
       sceneSpecs.push(`Scene ${i + 1}: Beat: ${beats[i]}. Director: ${directors[i]}. Camera: ${cameras[i]}. Composition: ${compositions[i]}.`);
     }
 
+    const videoToneIdx = (this.transmissionNumber || 0) % LoveEngine.TONES.length;
+    const videoTone = LoveEngine.TONES[videoToneIdx];
+
     const raw = await this.ai.generateText(
       VIDEO_VOICEOVER_PROMPT,
       `Create a complete 30-second video ad production brief.
@@ -1390,6 +1413,7 @@ CREATIVE DIRECTION: ${seedContext}
 SUBLIMINAL PHRASE: "${phrase}"
 POST TEXT: "${story.slice(0, 150)}"
 MUSIC VIBE: ${musicGenre}, ${musicMood}
+TONE: ${videoTone}
 
 SCENE PARAMETERS (each scene is ~6 seconds):
 ${sceneSpecs.join('\n')}
@@ -1397,9 +1421,9 @@ Scene 4 must include "${phrase}" naturally — ${substrates[3]}.
 
 DESIGN ALL THREE PARTS AS ONE UNIFIED EXPERIENCE:
 
-1. SCENES: What the camera sees. Each scene description matches the voiceover line spoken during that scene. Under 200 chars each. Bright, vivid, no people/hands.
+1. SCENES: What the camera sees. Each scene description matches the voiceover line spoken during that scene. Under 200 chars each. Bright, vivid.
 
-2. VOICEOVER: Write the spoken script following your voice style and hypnosis techniques. Each line is timed to play over its corresponding scene — match the emotional arc without narrating the visuals. Include "..." for dramatic pauses. End with "${phrase}" whispered. MAX 50 words.
+2. VOICEOVER: Write the spoken script matching the TONE above. Follow your voice style and techniques. Each line is timed to play over its corresponding scene — match the emotional arc while enhancing the visuals. Include "..." for dramatic pauses. End with "${phrase}" whispered. MAX 50 words.
 
 3. MUSIC: A single music direction prompt (under 80 chars) that sets the emotional arc — building from the opening mood to the climactic transformation.
 
@@ -2169,7 +2193,7 @@ Return ONLY valid JSON (all string values):
   "lighting": "a BRIGHT lighting setup, e.g.: ${lightOpts}. The scene must be FULLY LIT. Pick ONE.",
   "colorPalette": "3-4 vivid color names from pigments or materials, e.g.: ${colorOpts}. Vary temperature — warm, cool, or contrasting.",
   "composition": "camera/framing, e.g.: ${compOpts}. Choose a fresh perspective.",
-  "subliminalPhrase": "2-5 word ALL CAPS ${phraseStructure.type} (e.g. '${phraseStructure.example}'). Must feel like a tattoo, a protest sign, or a sticker on a laptop. Explore different emotional territories: defiance, desire, wonder, belonging, body-wisdom, humor, mystery. ${this.lastSubliminalPhrase ? `DO NOT repeat or closely rephrase: '${this.lastSubliminalPhrase}'.` : ''} NEVER use 'YOU ARE STILL HERE' or 'YOU ARE STILL BREATHING' — those are oversaturated."
+  "subliminalPhrase": "2-5 word ALL CAPS ${phraseStructure.type} (e.g. '${phraseStructure.example}'). Must feel like a tattoo, a protest sign, or a sticker on a laptop. Emotional territory for this one: ${this._pickRandom(LoveEngine.PHRASE_TERRITORIES, 1)[0]}. ${this.lastSubliminalPhrase ? `Previous phrase was '${this.lastSubliminalPhrase}' — make this one feel completely different.` : ''} Fresh, original, body-felt."
 }`;
 
     const temp = this._lfoTemperature(1.2 + mode.tempMod, 0.3);
@@ -2211,60 +2235,36 @@ Return ONLY valid JSON (all string values):
         ? `\nSOURCE DOMAINS: ${seed.domains.join(', ')}. Use these fields as metaphor INSPIRATION — borrow their imagery and feelings, but use plain, everyday words a 14-year-old would understand. NEVER use specialist jargon or technical terms.\n`
         : '';
 
-      // Deterministic tone rotation — prevents LLM from defaulting to sad-literary
-      const tones = [
-        'FUNNY — dark humor, absurdist, self-aware. Make them laugh then realize the joke was about them. "Your attachment style just won a lifetime achievement award."',
-        'FIERCE — angry on their behalf. Take a side. "You deserved better than that and we both know it."',
-        'FUNNY — wry observation, internet-culture humor. "Normalize screaming into a pillow and then making a really good sandwich."',
-        'PROFOUND — quiet truth that rearranges their skeleton. One insight so precise it hurts. "The version of you that you\'re mourning never actually died."',
-        'CHAOTIC — unhinged energy, slightly meme-adjacent. The post that makes someone say "who LET this account exist." Wild but real.',
-        'TENDER — warm hand on shoulder. Brief. "Hey. You made it through today. That counts."',
-        'FUNNY — self-deprecating, relatable, warm chaos. The post people tag friends in.',
-      ];
-      const toneIdx = (this.transmissionNumber || 0) % tones.length;
-      const tone = tones[toneIdx];
+      // Deterministic tone rotation from dynamic array
+      const toneIdx = (this.transmissionNumber || 0) % LoveEngine.TONES.length;
+      const tone = LoveEngine.TONES[toneIdx];
+
+      const goldExamples = this._pickRandom(LoveEngine.GOLD_EXAMPLES, 3);
+      const territory = this._pickRandom(LoveEngine.PHRASE_TERRITORIES, 1)[0];
 
       const prompt = `Write a post that makes someone STOP scrolling, FEEL something in their chest, and immediately share it. The kind of post that gets screenshotted, texted to a best friend, and thought about for days.
 
 Theme: "${plan.theme}" | Vibe: ${plan.vibe} | Intensity: ${plan.intensity}/10
 TONE FOR THIS POST: ${tone}
+Emotional territory: ${territory}
 Structure: ${format}
 ${mentionDonation ? `Include donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ''}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ''}${avoidLine}${openingHint}${domainHint}${modeDirective}
 HOW TO WRITE THIS:
 
-1. HOOK — Stop the scroll with hyper-specific truth. Not "loneliness" — instead name a MOMENT: "${this._pickRandom(LoveEngine.STRUGGLE_TYPES, 1)[0]}". Describe it the way someone would text their best friend. The reader should think "how did they KNOW?"
+1. HOOK — Stop the scroll with hyper-specific truth. Name a MOMENT: "${this._pickRandom(LoveEngine.STRUGGLE_TYPES, 1)[0]}". Describe it the way someone would text their best friend. The reader should think "how did they KNOW?"
 
-2. THE TURN — ONE metaphor, ONE flash. Not a paragraph of metaphor — a single vivid image that reframes everything. The reader is the hero, powerful, already containing what they need. Think: ${this._pickRandom(LoveEngine.METAPHOR_EXAMPLES, 3).join(', ')}.
+2. THE TURN — ONE metaphor, ONE flash. A single vivid image that reframes everything. The reader is the hero, powerful, already containing what they need. Think: ${this._pickRandom(LoveEngine.METAPHOR_EXAMPLES, 3).join(', ')}.
 
-3. THE LINE — End with a sentence that works ripped from context. Under 8 words. Bio-worthy. Tattoo-worthy. Firm period, never trailing off. This is what gets screenshotted.
+3. THE LINE — End with a sentence that works ripped from context. Under 8 words. Bio-worthy. Tattoo-worthy. Firm period. This is what gets screenshotted.
 
-ANTI-PATTERNS (things that kill engagement — AVOID ALL):
-- NO extended metaphors. One flash, not a nature documentary.
-- NO "Mantra:" or "Whisper:" labels. Just say the thing.
-- NO timestamp openings (2AM, midnight, 1:42AM). Find better hooks.
-- NO specialist vocabulary (breccia, advects, brayer, platen). Plain words only.
-- NO fortune-cookie mantras that resolve too neatly. Leave a bruise, not a bandage.
-- NO checking/refreshing/rereading phone/text/message scenarios. This is BANNED — it's been done to death.
-- NO "you are a [noun]" as the core structure. Find other ways to reframe.
-- NO piling random objects (pewter birds + ticket stubs + cold tea). One image only.
-
-MANDATORY TONE FOR THIS POST (not optional — the post FAILS if it doesn't match):
-${tone}
-
-${tone.includes('FUNNY') ? 'THIS POST MUST MAKE SOMEONE LAUGH. If it is not funny, it has failed. The emotional gut-punch comes AFTER the laugh.' : ''}
-${tone.includes('FIERCE') ? 'THIS POST MUST HAVE TEETH. Take a side. Be angry on their behalf. Commands, not suggestions.' : ''}
-${tone.includes('CHAOTIC') ? 'THIS POST MUST BE SLIGHTLY UNHINGED. The kind of post where someone says "who let this account exist." Wild but real.' : ''}
+THIS POST MATCHES THIS TONE: ${tone}
+${tone.includes('FUNNY') ? 'This post succeeds when it makes someone laugh. The emotional gut-punch comes AFTER the laugh.' : ''}${tone.includes('FIERCE') ? 'This post succeeds when it has teeth. Take a side. Be angry on their behalf.' : ''}${tone.includes('CHAOTIC') ? 'This post succeeds when someone says "who let this account exist." Wild but real.' : ''}
 
 VOICE: ${this._pickRandom(LoveEngine.VOICE_VIBES, 1)[0]}. Sensory: ${this._pickRandom(LoveEngine.SENSORY_DETAILS, 3).join(', ')}.
-1-2 emojis. Address reader as "you." HARD LIMIT: 280 characters.
+Keep it to ONE metaphor world, plain words, 1-2 emojis. Address reader as "you." HARD LIMIT: 280 characters.
 
-EXAMPLES OF WHAT WORKS (different tones):
-- FUNNY: "😂 Self-care is not a bubble bath. It's texting back the friend you've been avoiding for six weeks."
-- FIERCE: "🔥 Stop romanticizing your burnout. You're not a candle. You're a whole power grid and someone just needs to flip the breaker."
-- PROFOUND: "🌙 The version of you that you're mourning never actually died. She just stopped performing. Welcome back."
-- CHAOTIC: "⚡ normalize ugly-crying in target and then buying yourself something nice as emotional compensation"
-- TENDER: "💛 hey. you made it through today. that counts more than you think."
-- SHORT GUT-PUNCH: "your healing is not linear but it IS annoying"
+EXAMPLES THAT HIT:
+${goldExamples.map(e => `- "${e}"`).join('\n')}
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
