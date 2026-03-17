@@ -1743,24 +1743,51 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
             playNextScene();
           };
 
-          // Per-scene wall-clock timeout — force-skip if scene stalls (15s wall = enough for ~6s video even at 0.5x)
+          // Per-scene wall-clock timeout — only force-skip if video actually started playing
           const sceneTimeout = setTimeout(() => {
-            if (!sceneAdvanced && !stopped) advanceScene('timeout');
+            if (sceneAdvanced || stopped) return;
+            const ct = video.currentTime || 0;
+            if (ct > 0) {
+              // Video was playing but took too long — advance
+              advanceScene('timeout');
+            }
+            // If ct === 0, the visibility listener will handle it — don't produce garbage
           }, 15000);
 
-          // Stall detection — if currentTime doesn't advance for 3s, force-skip
+          // Stall detection — if currentTime doesn't advance, wait for tab visibility
           let lastKnownTime = 0;
           let stallCheckStart = Date.now();
+          let waitingForTab = false;
           const stallInterval = setInterval(() => {
             if (sceneAdvanced || stopped) { clearInterval(stallInterval); return; }
             const ct = video.currentTime || 0;
             if (ct > lastKnownTime) {
               lastKnownTime = ct;
               stallCheckStart = Date.now();
+              waitingForTab = false;
             } else if (Date.now() - stallCheckStart > 3000 && Date.now() - sceneWallStart > 5000) {
-              clearInterval(stallInterval);
-              console.warn(`[Splice] Scene ${sceneIndex + 1} stalled (currentTime stuck at ${ct.toFixed(2)}s)`);
-              advanceScene('stalled');
+              // Video never started (ct === 0) — background tab is blocking playback
+              if (ct === 0 && !waitingForTab) {
+                waitingForTab = true;
+                console.warn(`[Splice] Scene ${sceneIndex + 1} blocked by background tab — waiting for tab to become visible`);
+                // Listen for tab becoming visible, then retry play
+                const onVisible = () => {
+                  if (document.visibilityState === 'visible') {
+                    document.removeEventListener('visibilitychange', onVisible);
+                    waitingForTab = false;
+                    stallCheckStart = Date.now();
+                    console.log(`[Splice] Tab visible — retrying scene ${sceneIndex + 1}`);
+                    video.play().catch(() => {});
+                  }
+                };
+                document.addEventListener('visibilitychange', onVisible);
+              }
+              // Video started but got stuck mid-play — actually stalled, advance
+              else if (ct > 0) {
+                clearInterval(stallInterval);
+                console.warn(`[Splice] Scene ${sceneIndex + 1} stalled (currentTime stuck at ${ct.toFixed(2)}s)`);
+                advanceScene('stalled');
+              }
             }
           }, 500);
 
@@ -1819,13 +1846,13 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
 
       playNextScene();
 
-      // Safety timeout — 180s wall time for background tab throttling
+      // Safety timeout — 5 minutes max (allows time for user to return to tab)
       setTimeout(() => {
         if (!stopped) {
-          console.warn(`[Splice] Safety timeout (180s wall), video: ${cumulativeVideoTime.toFixed(1)}s, scenes: ${sceneIndex}/${blobs.length}`);
+          console.warn(`[Splice] Safety timeout (300s wall), video: ${cumulativeVideoTime.toFixed(1)}s, scenes: ${sceneIndex}/${blobs.length}`);
           finish();
         }
-      }, 180000);
+      }, 300000);
     });
   }
 
