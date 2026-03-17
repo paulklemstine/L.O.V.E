@@ -2372,7 +2372,9 @@ Return ONLY valid JSON:
     // Parse spatial layers — LLM chose best-fitting text rendering
     const sceneData = this.ai.extractJSON(raw);
     let scene;
-    const chosenSubstrate = sceneData?.textRendering || this._pickRandom(LoveEngine.TEXT_SUBSTRATES, 1)[0];
+    let chosenSubstrate = sceneData?.textRendering || this._pickRandom(LoveEngine.TEXT_SUBSTRATES, 1)[0];
+    // Strip the phrase from substrate to prevent doubling (LLM often includes it in textRendering)
+    chosenSubstrate = chosenSubstrate.replace(new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '').replace(/['"]/g, '').trim();
     if (sceneData?.foreground && sceneData?.midground) {
       const bg = sceneData.background ? `. In the background, ${sceneData.background}` : '';
       scene = `In the foreground, ${sceneData.foreground}. ${sceneData.midground}${bg}. "${phrase}" ${chosenSubstrate}`;
