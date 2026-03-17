@@ -1534,7 +1534,9 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
       let recorder = null;
       const chunks = [];
       let sceneIndex = 0;
-      let spliceStartTime = null;
+      let cumulativeVideoTime = 0; // track actual video playback time, not wall clock
+      let activeVideo = null;
+      let activeInterval = null;
 
       // ── Trippy Subliminal Caption System (WebGL SuperAcid shaders) ──
       const allCaptions = this._pickRandom(LoveEngine.SUBLIMINAL_CAPTIONS, 15);
@@ -1587,6 +1589,12 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
       const finish = () => {
         if (stopped) return;
         stopped = true;
+        if (activeInterval) clearInterval(activeInterval);
+        if (activeVideo) {
+          try { activeVideo.pause(); } catch {}
+          try { URL.revokeObjectURL(activeVideo.src); } catch {}
+          try { activeVideo.remove(); } catch {}
+        }
         if (audioSource) try { audioSource.stop(); } catch {}
         if (recorder && recorder.state === 'recording') recorder.stop();
         try { audioCtx.close(); } catch {}
@@ -1599,9 +1607,10 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
         }
 
         const video = document.createElement('video');
+        activeVideo = video;
         video.muted = true;
         video.playsInline = true;
-        // Prevent browser from throttling video in background tabs
+        // Prevent browser from refusing to play detached elements
         video.style.position = 'fixed';
         video.style.top = '-9999px';
         video.style.opacity = '0.01';
@@ -1635,40 +1644,40 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
             recorder.onerror = e => reject(new Error(`Splice: ${e.error}`));
             recorder.start(100);
             if (audioSource) audioSource.start(0);
-            spliceStartTime = Date.now();
           }
 
           // Use setInterval for drawing — requestAnimationFrame throttles in background tabs
           const drawInterval = setInterval(() => {
-            if (video.paused || video.ended) {
+            if (stopped || video.paused || video.ended) {
               clearInterval(drawInterval);
               return;
             }
-            // Hard 30s trim — stop recording if we've hit the limit
-            if (spliceStartTime && (Date.now() - spliceStartTime) >= 30000) {
+            // 30s trim based on actual video playback time (immune to background throttling)
+            const totalVideoTime = cumulativeVideoTime + (video.currentTime || 0);
+            if (totalVideoTime >= 30) {
               clearInterval(drawInterval);
-              video.pause();
-              URL.revokeObjectURL(video.src);
-              video.remove();
-              console.log('[Splice] 30s limit reached, trimming');
+              console.log(`[Splice] 30s of video reached (${totalVideoTime.toFixed(1)}s), trimming`);
               finish();
               return;
             }
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             drawCaption(); // Overlay subliminal caption on every frame
           }, 33); // ~30fps
+          activeInterval = drawInterval;
 
           video.onended = () => {
             clearInterval(drawInterval);
+            if (stopped) return;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             drawCaption();
+            cumulativeVideoTime += video.duration || 0;
             URL.revokeObjectURL(video.src);
             video.remove();
+            activeVideo = null;
             sceneIndex++;
-            console.log(`[Splice] Scene ${sceneIndex}/${blobs.length} complete`);
-            // Stop if we've hit 30s
-            if (spliceStartTime && (Date.now() - spliceStartTime) >= 30000) {
-              console.log('[Splice] 30s limit reached after scene end, trimming');
+            console.log(`[Splice] Scene ${sceneIndex}/${blobs.length} complete (${cumulativeVideoTime.toFixed(1)}s total)`);
+            if (cumulativeVideoTime >= 30) {
+              console.log('[Splice] 30s limit reached, trimming');
               finish();
               return;
             }
@@ -1695,13 +1704,14 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
 
       playNextScene();
 
-      // Safety timeout — 3 minutes for background tab throttling
+      // Safety timeout — 90s wall time (video-time trim handles the 30s limit,
+      // this catches edge cases like frozen tabs or failed video playback)
       setTimeout(() => {
         if (!stopped) {
-          console.warn('[Splice] Safety timeout hit (180s)');
+          console.warn(`[Splice] Safety timeout (90s wall), video time: ${cumulativeVideoTime.toFixed(1)}s`);
           finish();
         }
-      }, 180000);
+      }, 90000);
     });
   }
 
