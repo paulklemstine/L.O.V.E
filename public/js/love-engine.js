@@ -64,7 +64,7 @@ STRUCTURE:
 - THE DROP (24-28 sec): The quotable line — profound, devastating, 7 words or fewer
 - THE ANCHOR (28-30 sec): The subliminal phrase whispered, burned into memory
 
-MAX 50 words. Include "..." for breath pauses. Write for the EAR. Return ONLY the spoken text.`;
+MAX 75 words. Include "..." for breath pauses. Write for the EAR. Return ONLY the spoken text.`;
 
 // Alias for all social interactions (posts, replies, DMs, welcomes)
 const SYSTEM_PROMPT = SOCIAL_POST_PROMPT;
@@ -1290,9 +1290,9 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
 
     let voiceText = production.voiceover || plan.subliminalPhrase || 'LOVE';
 
-    // Trim to 50 words max
+    // Trim to 75 words max
     const words = voiceText.split(/\s+/);
-    if (words.length > 50) voiceText = words.slice(0, 50).join(' ') + '... ' + (plan.subliminalPhrase || '');
+    if (words.length > 75) voiceText = words.slice(0, 75).join(' ') + '... ' + (plan.subliminalPhrase || '');
     const ttsVoice = this._pickRandom(LoveEngine.TTS_VOICES, 1)[0];
     onStatus(`🎙️ Recording (${voiceText.split(/\s+/).length} words, voice: ${ttsVoice})...`);
     let voiceBlob = null;
@@ -1374,14 +1374,14 @@ ${vibe ? `VIBE: ${vibe}` : ''}
 
 The voiceover must ENHANCE the visuals emotionally — never describe them. Match the emotional arc of the scenes. Build from quiet to crescendo. End with "${phrase}" whispered.
 
-MAX 50 words. Include "..." for dramatic pauses. Return ONLY the spoken text.`,
+MAX 75 words. Include "..." for dramatic pauses. Return ONLY the spoken text.`,
       { temperature: 0.95, label: 'Video Voiceover' }
     );
 
     const script = (raw || '').trim().replace(/^["']|["']$/g, '');
     if (script.length > 10 && script.length < 400) {
       const words = script.split(/\s+/);
-      if (words.length > 50) return words.slice(0, 50).join(' ') + `... ${phrase}`;
+      if (words.length > 75) return words.slice(0, 75).join(' ') + `... ${phrase}`;
       return script;
     }
     return `Feel this... you were never lost... you were always... ${phrase}`;
@@ -1449,7 +1449,7 @@ DESIGN ALL THREE PARTS AS ONE UNIFIED EXPERIENCE:
    - Scene 4: "${phrase}" appears naturally — ${substrates[3]}. The emotional peak.
    - Scene 5: The payoff — a visual TWIST that recontextualizes everything before it.
 
-2. VOICEOVER: Write the spoken script matching the TONE above. Use the same metaphor world as the post text ("${story.slice(0, 80)}"). Follow your voice style and techniques. Include a TURN at ~60% — a surprise, tonal shift, or punchline. End with "${phrase}" whispered. MAX 50 words.
+2. VOICEOVER: Write the spoken script matching the TONE above. Use the same metaphor world as the post text ("${story.slice(0, 80)}"). Follow your voice style and techniques. Include a TURN at ~60% — a surprise, tonal shift, or punchline. End with "${phrase}" whispered. MAX 75 words.
 
 3. MUSIC: A specific music direction (under 100 chars). Include: genre, energy SHAPE (e.g. "peaks at 20s then drops to silence", "flat hypnotic pulse", "builds to explosive drop at 25s"), and one specific instrument or texture. Each video should have a different energy shape.
 
