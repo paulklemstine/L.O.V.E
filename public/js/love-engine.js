@@ -1894,7 +1894,7 @@ THIS POST MATCHES THIS TONE: ${toneName}
 ${toneName === "JOYFUL" ? "This post succeeds when it makes someone's face hurt from smiling. The warmth is so genuine it's contagious." : ""}${toneName === "FIERCE" ? "This post succeeds when it makes someone feel fiercely protected and celebrated. Be proud of them with your whole chest." : ""}${toneName === "EXPLOSIVE" ? "This post succeeds when someone wants to forward it to everyone they know. Pure celebration energy." : ""}${toneName === "PROFOUND" ? "This post succeeds when it drops one quiet truth so warm it rearranges their whole day." : ""}${toneName === "TENDER" ? "This post succeeds when it feels like being wrapped in the softest blanket of love. Brief. Gentle." : ""}
 
 VOICE: Write like a motivational poster that makes someone cry happy tears. Use sensory details that make the reader FEEL something physical (warmth, sunshine, weight lifting, chest expanding).
-Keep it to ONE metaphor world, plain words, 1-2 emojis. Address reader as "you." Invent a fresh structural format for this post (question→answer, single flowing sentence, fragments, call-and-response, etc.). HARD LIMIT: 280 characters.
+Keep it to ONE metaphor world, plain words, 1-2 emojis. Address reader as "you." Invent a fresh structural format for this post (question→answer, single flowing sentence, fragments, call-and-response, etc.). HARD LIMIT: 30 words max, 280 characters.
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
