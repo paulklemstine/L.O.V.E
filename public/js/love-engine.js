@@ -226,7 +226,7 @@ export class LoveEngine {
         this._loadRecentPosts();
         this._loadRecentContext();
         this._loadRecentOpenings();
-        this._loadExtendedLists();
+
     }
 
     // ─── Post History (localStorage, powers n-gram guard + relative critic) ──
@@ -564,34 +564,6 @@ export class LoveEngine {
         return [...objects].slice(0, 15).join(", ");
     }
 
-    // ─── Domain Exclusion Cooldown ─────────────────────────────────
-    // Prevents reusing the same metaphor domains within last 30 picks.
-
-    _pickFreshDomains() {
-        let recent = [];
-        try {
-            recent = JSON.parse(
-                localStorage.getItem("love_recent_domains") || "[]",
-            );
-        } catch { }
-        const available = LoveEngine.METAPHOR_DOMAINS.filter(
-            (d) => !recent.includes(d),
-        );
-        const pool =
-            available.length >= 4 ? available : LoveEngine.METAPHOR_DOMAINS;
-        const i = Math.floor(Math.random() * pool.length);
-        let j = Math.floor(Math.random() * (pool.length - 1));
-        if (j >= i) j++;
-        const picked = [pool[i], pool[j]];
-        const updated = [...recent, ...picked].slice(-30);
-        try {
-            localStorage.setItem(
-                "love_recent_domains",
-                JSON.stringify(updated),
-            );
-        } catch { }
-        return picked;
-    }
 
     // ─── N-gram Jaccard Similarity Guard ───────────────────────────
     // Zero-cost trigram overlap check against last 20 posts.
@@ -647,731 +619,11 @@ export class LoveEngine {
         return false;
     }
 
-    // ─── Structural Format Rotation ────────────────────────────────
-    // Deterministic cycle through sentence structures.
+    // ─── Tone Rotation (minimal inline constant for anti-collapse cycling) ──
+    // All other creative modifiers are generated on-demand by LLM prompts.
 
-    static FORMATS = [
-        "Single flowing sentence, no line breaks",
-        "Two short lines with end rhyme",
-        "Start with a question, answer it",
-        "Three-word fragments separated by em dashes",
-        "Start with a sound or sensation",
-        "One extended metaphor, no explanations",
-        "Direct command to the reader (imperative mood)",
-        "Start mid-thought, as if continuing a conversation",
-        "Build to a single punchy final word",
-        "Contrast two opposites, then resolve them",
-        "List of three parallel phrases, escalating intensity",
-        "One-word sentence followed by a longer unpacking",
-        "Address a body part directly (hands, chest, spine)",
-        "Second person future tense — tell the reader what will happen",
-        "Repeat a key word three times across the post",
-        'Start with "Remember when" then pivot to now',
-        "Two sentences: setup as pain, payoff as power",
-        "Whispered confession — intimate, almost too quiet",
-        "All fragments, no complete sentences",
-        "One long exhale of a sentence with commas and momentum",
-        "Call-and-response: ask, then answer yourself",
-        "Start with a verb — immediate action, no preamble",
-        "Bookend: open and close with the same image, transformed",
-        "Negation flip: say what it is NOT, then what it IS",
-        "Direct address to an emotion as if it were a person",
-        "Telescope structure: zoom from cosmic to microscopic",
-        "Single metaphor extended through exactly three beats",
-        "Present tense snapshot — freeze one moment in time",
-        "Before/after separated by a single pivot word",
-        "Stripped bare: subject-verb-object, nothing extra",
-        "Build a scene in two sensory details, then land the meaning",
-        "End on an incomplete thought — let the reader finish it",
-        "Epistolary fragment: a torn piece of a letter",
-        "Rhythmic repetition with one word changed each time",
-        "Open with silence or stillness, then break it",
-        // Short-form gut-punches (under 20 words) — highest shareability
-        "ONE LINE ONLY. Under 15 words. A sentence so devastating it needs no context.",
-        "ONE LINE ONLY. A joke that is secretly profound. Under 20 words.",
-        "TWO LINES ONLY. Setup and punchline. Under 25 words total.",
-        "Hot take that is actually wisdom. Bold, opinionated, slightly controversial. Under 20 words.",
-        "A question with no answer. Under 15 words. Let it haunt them.",
-        "Observation so specific it feels like surveillance. Under 25 words.",
-    ];
+    static TONE_NAMES = ["JOYFUL", "FIERCE", "PROFOUND", "EXPLOSIVE", "TENDER"];
 
-    static TONES = [
-        "JOYFUL — warm celebratory humor, the kind that makes you laugh until happy tears come. The joke is a doorway to how beautiful life is.",
-        "FIERCE — fiercely proud of the reader. Warrior-guardian energy. Defend their right to shine. Uplift with unstoppable force.",
-        "JOYFUL — playful warmth, sunshine humor, the post that makes someone smile so wide their face hurts.",
-        "PROFOUND — quiet golden truth that expands their chest with recognition. One insight so warm it rearranges their whole day.",
-        "EXPLOSIVE — confetti-cannon energy, infectious celebration. Wild joy that somehow lands on a deep truth about their greatness.",
-        "TENDER — warm hand on the heart. Brief. Gentle. Like being wrapped in the softest blanket of love.",
-        "JOYFUL — the post that makes someone tag every friend because the warmth is too good to keep to themselves.",
-    ];
-
-    static GOLD_EXAMPLES = [
-        "You woke up today and chose to keep going. That is not small. That is the bravest thing a human can do. 🌅",
-        "Somewhere right now, someone is telling a story about you — and you're the hero in it.",
-        "You are someone's favorite person and they never get tired of you. Read that again.",
-        "The fact that you still care, after everything? That's your superpower and it always has been. ✨",
-        "You are the answered prayer someone whispered at 3 AM. You showed up and you changed everything.",
-        "your existence has already made a difference to more people than you will ever know 🌻",
-        "Every single morning the sun rises for you too. Every single one. You were always included in the miracle.",
-        "The best plot twist of your life is still coming and it's going to be so beautiful you'll laugh. 💛",
-    ];
-
-    static PHRASE_TERRITORIES = [
-        "triumph",
-        "radiance",
-        "gratitude",
-        "celebration",
-        "wonder",
-        "pride",
-        "joy",
-        "bliss",
-        "courage",
-        "abundance",
-        "possibility",
-        "homecoming",
-        "awakening",
-        "freedom",
-        "belonging",
-        "tenderness",
-    ];
-
-    static MUSIC_SHAPES = [
-        "builds slowly to explosive drop at 25s, then silence",
-        "flat hypnotic pulse throughout, subtle crescendo at the end",
-        "peaks early at 10s, drops to minimal, rebuilds for final 5s",
-        "starts aggressive, strips down to heartbeat-only at midpoint, erupts at 22s",
-        "steady build with no release — tension that never resolves",
-        "silence for 3s, then wall of sound, then breathe, then wall again",
-        "glitchy start, smooths into warm pad, peaks with bass at 20s",
-    ];
-
-    static PHOTOGRAPHY_STYLES = [
-        "macro photography",
-        "aerial drone photography",
-        "long-exposure light painting",
-        "golden-hour landscape",
-        "underwater photography",
-        "astrophotography",
-        "infrared photography",
-        "tilt-shift miniature",
-        "double-exposure composite",
-        "crystal ball refraction",
-        "prism photography",
-        "high-speed splash",
-        "bokeh portrait",
-        "HDR panorama",
-        "light-trail photography",
-        "smoke art photography",
-        "frost macro",
-        "oil-and-water macro",
-        "fiber optic light art",
-        "aurora photography",
-        "cyanotype print photography",
-        "wet plate collodion",
-        "pinhole camera exposure",
-        "cross-processed slide film",
-        "lomography fisheye",
-        "freelensing selective focus",
-        "kirlian aura photography",
-        "schlieren flow visualization",
-        "polaroid instant transfer",
-        "solargraphy sun trail",
-        "UV fluorescence photography",
-        "stereo 3D anaglyph",
-        "high-speed bullet-time array",
-        "photogram shadow print",
-        "camera toss ICM",
-        "forced perspective illusion",
-        "reflection pool symmetry",
-        "silhouette rim-light portrait",
-        "levitation composite",
-        "steel wool spinning",
-        "copper sulfate crystal macro",
-        "dew drop refraction macro",
-        "star trail rotation",
-        "handheld sparkler writing",
-        "backlit translucency shot",
-    ];
-
-    static LIGHTING_STYLES = [
-        "volumetric god rays",
-        "rim lighting with lens flare",
-        "chiaroscuro dramatic split",
-        "golden-hour backlight",
-        "Rembrandt lighting",
-        "butterfly lighting with catchlights",
-        "practical neon lighting",
-        "motivated window light",
-        "high-key studio softbox",
-        "contre-jour silhouette glow",
-        "diffused overcast",
-        "specular highlights on wet surfaces",
-        "split lighting half-shadow",
-        "Paramount glamour loop lighting",
-        "clamshell beauty lighting",
-        "broad lighting three-quarter fill",
-        "short lighting dramatic shadow",
-        "kicker hair light separation",
-        "cross lighting dual key",
-        "bounce fill from below",
-        "tungsten warm practicals",
-        "dappled light through foliage",
-        "cathedral shaft light through dust",
-        "ring light flat beauty glow",
-        "barn door spot isolation",
-        "gel-filtered complementary wash",
-        "candlelight warm flicker",
-        "moonlight blue single-source",
-        "stage fresnel spot with haze",
-        "strip light edge definition",
-        "silhouette backlight with smoke diffusion",
-        "golden reflector bounce fill",
-        "LED panel continuous gradient",
-        "stained glass color projection",
-        "firelight dancing amber shadows",
-        "snoot spot with falloff",
-        "umbrella diffused wrap-around",
-    ];
-
-    static SUGGESTED_COLORS = [
-        "vermillion",
-        "cerulean",
-        "moss",
-        "slate",
-        "coral",
-        "indigo",
-        "cream",
-        "rust",
-        "teal",
-        "mauve",
-        "ochre",
-        "ivory",
-        "plum",
-        "pewter",
-        "sienna",
-        "sage",
-        "scarlet",
-        "turquoise",
-        "bone",
-        "tangerine",
-        "lavender",
-        "charcoal",
-        "rose",
-        "jade",
-        "burgundy",
-        "periwinkle",
-        "cadmium yellow",
-        "titanium white",
-        "raw umber",
-        "burnt sienna",
-        "cobalt blue",
-        "viridian",
-        "alizarin crimson",
-        "naples yellow",
-        "lamp black",
-        "prussian blue",
-        "hooker green",
-        "quinacridone magenta",
-        "cinnabar",
-        "malachite",
-        "lapis lazuli",
-        "saffron",
-        "verdigris",
-        "terracotta",
-        "alabaster",
-        "obsidian",
-        "champagne",
-        "copper",
-        "absinthe",
-        "mulberry",
-    ];
-
-    static COMPOSITION_TYPES = [
-        "sweeping landscape",
-        "intimate portrait-scale",
-        "bird's-eye aerial",
-        "street-level environmental",
-        "architectural interior",
-        "extreme close-up",
-        "split-frame",
-        "silhouette against bright sky",
-        "worm's-eye looking up",
-        "dutch angle",
-        "symmetrical centered",
-        "rule-of-thirds off-center",
-        "leading lines converging to subject",
-        "frame within a frame",
-        "negative space isolation",
-        "golden spiral placement",
-        "over-the-shoulder perspective",
-        "reflected composition in water",
-        "layered depth foreground-mid-back",
-        "diagonal dynamic tension",
-        "centered symmetry with single break",
-        "panoramic ultra-wide crop",
-        "tight headroom claustrophobic",
-        "vanishing point one-point perspective",
-        "flat lay overhead arrangement",
-        "shooting through obstruction",
-        "juxtaposition side-by-side contrast",
-        "radial composition from center",
-        "triangular three-point balance",
-        "S-curve flowing path",
-        "fill-the-frame intimate crop",
-        "horizon at bottom third sky-dominant",
-        "pattern repetition with disruption",
-        "shallow focus foreground bokeh",
-    ];
-
-    static CONTENT_TYPES = [
-        "motivational poster",
-        "photo with caption",
-        "illustrated quote card",
-        "landscape with text overlay",
-        "abstract art poster",
-        "typographic design",
-        "editorial photograph",
-        "fine art print",
-        "album cover art",
-        "postcard design",
-        "journal page",
-        "protest poster",
-        "tarot card illustration",
-        "zine cover",
-        "concert flyer",
-        "book cover design",
-        "film still frame",
-        "stamp illustration",
-        "matchbox label art",
-        "vinyl record sleeve",
-        "polaroid snapshot",
-        "travel poster vintage",
-        "astronomical chart",
-        "botanical plate",
-        "sticker sheet design",
-        "enamel pin concept",
-        "movie one-sheet",
-        "gallery exhibition card",
-        "infographic art print",
-        "blacklight poster",
-        "screenprinted gig poster",
-        "passport stamp collage",
-        "prayer card",
-        "skateboard deck graphic",
-        "patch embroidery design",
-    ];
-
-    static STRUGGLE_TYPES = [
-        "exhaustion",
-        "loneliness",
-        "shame",
-        "grief",
-        "rejection",
-        "feeling invisible",
-        "burnout",
-        "heartbreak",
-        "self-doubt",
-        "feeling stuck",
-        "anxiety",
-        "imposter syndrome",
-        "overwhelm",
-        "numbness",
-        "regret",
-        "jealousy",
-        "betrayal",
-        "feeling behind",
-        "losing hope",
-        "being misunderstood",
-        "feeling replaceable",
-        "decision paralysis",
-        "creative block",
-        "comparing yourself to others",
-        "financial stress",
-        "body shame",
-        "losing your identity",
-        "outgrowing old friends",
-        "fear of vulnerability",
-        "perfectionism",
-        "people-pleasing exhaustion",
-        "feeling like a burden",
-        "Sunday night dread",
-        "grieving someone still alive",
-        "forgiving yourself",
-        "starting over again",
-        "loving someone who left",
-        "not recognizing yourself",
-        "waiting for permission to live",
-        "carrying everyone else's weight",
-        "fear of being too much",
-        "quiet desperation",
-        "post-achievement emptiness",
-        "homesickness for a place that no longer exists",
-    ];
-
-    static METAPHOR_EXAMPLES = [
-        "rain",
-        "doors",
-        "fire",
-        "thread",
-        "anchor",
-        "compass",
-        "tide",
-        "bridges",
-        "keys",
-        "roots",
-        "stones",
-        "rivers",
-        "mirrors",
-        "maps",
-        "candles",
-        "nests",
-        "storms",
-        "clay",
-        "embers",
-        "hinges",
-        "seeds",
-        "bones",
-        "ladders",
-        "bandages",
-        "driftwood",
-        "lanterns",
-        "constellations",
-        "scaffolding",
-        "blueprints",
-        "bread",
-        "shorelines",
-        "scar tissue",
-        "tuning forks",
-        "greenhouses",
-        "fault lines",
-        "cocoons",
-        "floodgates",
-        "prisms",
-        "signal fires",
-        "stitches",
-        "tributaries",
-        "volcanoes",
-        "anvils",
-        "lighthouses",
-        "trellis",
-    ];
-
-    static TRIPPY_EFFECTS = [
-        "DMT fractal geometry overlay",
-        "LSD color-breathing walls",
-        "mescaline desert mirage shimmer",
-        "psilocybin mycelial tendrils weaving through the scene",
-        "kaleidoscope mirror symmetry",
-        "melting Salvador Dali clock distortion",
-        "Alex Grey sacred geometry aura",
-        "chromatic aberration rainbow fringing",
-        "reality-glitch pixel displacement",
-        "aurora borealis ribbons threading through objects",
-        "bioluminescent jellyfish glow trails",
-        "fractal Mandelbrot zoom spirals",
-        "synesthesia — sounds rendered as color waves",
-        "double-vision echo ghosting",
-        "prismatic light leak film burn",
-        "sacred geometry flower-of-life overlay",
-        "heat-haze reality warping",
-        "cosmic nebula swirls bleeding into the foreground",
-        "oil-slick rainbow surface sheen",
-        "fibonacci spiral golden ratio vortex",
-        "moiré interference pattern ripple",
-        "tesseract four-dimensional rotation shadow",
-        "closed-eye phosphene geometry",
-        "trailing afterimage color streaks",
-        "recursive droste effect infinite zoom",
-        "liquid mercury pooling reflection",
-        "geometric tiling Penrose impossible pattern",
-        "breathing texture organic pulsation",
-        "fractal fern branching infinite regression",
-        "color field vibration op-art shimmer",
-        "reality tearing seam with light bleeding through",
-        "crystalline bismuth staircase formation",
-        "time-lapse motion blur ghosting",
-        "holographic interference diffraction grating",
-        "cymatics — sound frequency vibration patterns in liquid",
-        "Escher impossible architecture loop",
-        "hypnagogic faces emerging from texture",
-        "plasma globe electric tendril discharge",
-        "soap bubble thin-film iridescence",
-        "star field warp-speed tunnel stretch",
-        "voronoi cell division organic fracture",
-        "anamorphic stretch reality distortion",
-    ];
-
-    static IMAGE_STYLES = [
-        "hyperrealistic photograph",
-        "cinematic film still",
-        "anime illustration",
-        "oil painting masterwork",
-        "watercolor dreamscape",
-        "comic book panel",
-        "retro synthwave poster",
-        "vaporwave aesthetic",
-        "cyberpunk neon noir",
-        "Studio Ghibli animation cel",
-        "Art Nouveau illustration",
-        "pop art silkscreen",
-        "psychedelic 1960s concert poster",
-        "ukiyo-e woodblock print",
-        "stained glass window",
-        "graffiti street art mural",
-        "fashion editorial photography",
-        "Renaissance painting",
-        "pixel art retro game",
-        "collage mixed-media zine",
-        "Baroque chiaroscuro painting",
-        "Art Deco geometric poster",
-        "Impressionist plein air",
-        "Bauhaus constructivist design",
-        "Surrealist dreamscape painting",
-        "Pointillist dot composition",
-        "Soviet propaganda poster",
-        "Romantic landscape painting",
-        "Expressionist woodcut print",
-        "Pre-Raphaelite detailed naturalism",
-        "Rococo pastel pastoral",
-        "Minimalist color field",
-        "Futurist dynamic motion study",
-        "Gothic illuminated manuscript",
-        "Japonisme ink wash",
-        "claymation stop-motion frame",
-        "risograph two-color overprint",
-        "linocut block print",
-        "daguerreotype vintage plate",
-        "cyanotype botanical blueprint",
-        "encaustic wax painting",
-        "fresco secco wall painting",
-        "gouache illustration",
-        "scratchboard etching",
-    ];
-
-    static LOVE_OUTFITS = [
-        "sling bikini",
-        "sheer bodysuit",
-        "flowing lingerie",
-        "jeweled harness",
-        "tiny yoga set",
-        "iridescent micro-top and shorts",
-        "sequined rave bra",
-        "holographic wrap dress",
-        "crystal-chain halter",
-        "neon mesh catsuit",
-        "velvet corset and flowing skirt",
-        "metallic bandeau and sarong",
-        "chainmail micro-dress",
-        "UV-reactive string bikini",
-        "rhinestone fishnet bodysuit",
-        "latex high-cut leotard",
-        "feathered carnival harness",
-        "mirror-shard mosaic bralette",
-        "beaded fringe skirt and pasties",
-        "vinyl thigh-high boots and micro-shorts",
-        "LED fiber-optic corset",
-        "sheer kimono over bikini",
-        "body chain web with gems",
-        "cutout monokini",
-        "metallic scale-mail halter top",
-        "embroidered sheer romper",
-        "holographic PVC mini-dress",
-        "silk slip dress with thigh slit",
-        "pearl-strand body drape",
-        "tie-dye wrap top and hot pants",
-        "glitter-dusted mesh crop top",
-        "lace-up leather bustier",
-        "crystal-fringe festival belt and bra",
-        "neon spandex catsuit with cutouts",
-    ];
-
-    static FILM_STOCKS = [
-        "Kodak Portra 400",
-        "Fuji Velvia 50",
-        "Cinestill 800T",
-        "Kodak Ektar 100",
-        "Ilford HP5 Plus",
-        "Fuji Pro 400H",
-        "Kodak Gold 200",
-        "Kodak Tri-X 400",
-        "Fuji Superia 400",
-        "Lomography Color 400",
-        "Kodak Vision3 500T",
-        "Agfa Vista 200",
-        "Kodak Portra 160",
-        "Kodak Portra 800",
-        "Kodak Ektachrome E100",
-        "Fuji Provia 100F",
-        "Fuji Natura 1600",
-        "Fuji Acros 100 II",
-        "Ilford Delta 3200",
-        "Ilford Delta 100",
-        "Ilford FP4 Plus 125",
-        "Ilford Pan F Plus 50",
-        "Ilford XP2 Super 400",
-        "Cinestill 50D",
-        "Cinestill 400D",
-        "Kodak T-Max 100",
-        "Kodak T-Max 3200",
-        "Kodak Vision3 250D",
-        "Lomography Purple 400",
-        "Lomography Metropolis 400",
-        "Rollei Retro 80S",
-        "Rollei Infrared 400",
-        "Bergger Pancro 400",
-        "Fomapan 100 Classic",
-        "Kodak Aerochrome infrared",
-        "Agfa APX 400",
-    ];
-
-    static LENS_SPECS = [
-        "85mm f/1.4",
-        "35mm f/1.8",
-        "50mm f/1.2",
-        "24mm f/2.8",
-        "135mm f/2",
-        "70-200mm f/2.8",
-        "tilt-shift 45mm",
-        "100mm macro",
-        "14mm f/2.8 ultra-wide",
-        "200mm f/2 telephoto",
-        "24-70mm f/2.8 standard zoom",
-        "16mm f/1.4 wide prime",
-        "28mm f/2 street",
-        "40mm f/2 pancake",
-        "58mm f/1.4 Noct",
-        "105mm f/1.4 bokeh master",
-        "180mm f/2.8 macro",
-        "300mm f/4 telephoto",
-        "400mm f/5.6 super telephoto",
-        "8mm f/2.8 circular fisheye",
-        "20mm f/1.8 ultra-wide prime",
-        "Petzval 85mm f/2.2 swirly bokeh",
-        "Lensbaby Velvet 56mm soft focus",
-        "90mm f/2.8 tilt-shift",
-        "45mm f/2.8 perspective control",
-        "50mm f/0.95 Noctilux",
-        "35mm f/1.4 Art",
-        "24mm f/1.4 wide prime",
-        "135mm f/1.8 portrait telephoto",
-        "15mm f/4.5 rectilinear ultra-wide",
-        "55mm f/1.2 vintage manual",
-        "200-600mm f/5.6-6.3 wildlife zoom",
-    ];
-
-    static TECHNICAL_SWEETENERS = [
-        "Octane Render",
-        "Unreal Engine 5",
-        "physically based rendering",
-        "ray tracing",
-        "global illumination",
-        "subsurface scattering",
-        "photogrammetry",
-        "path tracing",
-        "ACES tone mapping",
-        "V-Ray render",
-        "Cinema 4D",
-        "Houdini FX",
-        "Arnold renderer",
-        "Redshift GPU render",
-        "Blender Cycles",
-        "KeyShot real-time ray tracing",
-        "Maxwell Render spectral",
-        "Marvelous Designer fabric sim",
-        "ZBrush sculpt detail",
-        "Substance Painter texturing",
-        "Nuke compositing",
-        "volumetric fog simulation",
-        "caustics light transport",
-        "ambient occlusion",
-        "HDRi environment lighting",
-        "displacement mapping",
-        "motion blur temporal accumulation",
-        "depth of field bokeh simulation",
-        "screen space reflections",
-        "anisotropic material shading",
-        "micro-polygon tessellation",
-        "spectral rendering wavelength-accurate",
-        "photon mapping",
-        "RTX direct illumination",
-        "neural radiance field",
-    ];
-
-    static CAMERA_BODIES = [
-        "Sony α7R IV",
-        "Canon EOS R5",
-        "Hasselblad X2D 100C",
-        "Leica M11",
-        "Nikon Z9",
-        "Fujifilm GFX 100S",
-        "Phase One IQ4 150MP",
-        "Pentax 645Z",
-        "Sony α1",
-        "Canon EOS R3",
-        "Leica Q3",
-        "Hasselblad H6D-100c",
-        "Nikon Z8",
-        "Fujifilm X-T5",
-        "Panasonic Lumix S1R",
-        "Sony α7C II",
-        "Mamiya RZ67",
-        "Contax 645",
-        "Rolleiflex 2.8F",
-        "Linhof Technika",
-    ];
-
-    static SUBLIMINAL_CAPTIONS = [
-        "you are enough",
-        "trust yourself",
-        "let go",
-        "breathe deeper",
-        "you belong here",
-        "keep going",
-        "feel this",
-        "you are safe",
-        "this is yours",
-        "open your heart",
-        "surrender to it",
-        "you are whole",
-        "release the weight",
-        "come alive",
-        "stay present",
-        "you matter",
-        "feel the shift",
-        "allow joy",
-        "you are ready",
-        "embrace change",
-        "soften into this",
-        "let it flow",
-        "you are powerful",
-        "choose peace",
-        "receive this",
-        "it gets better",
-        "you are becoming",
-        "forgive yourself",
-        "lean into hope",
-        "hold on gently",
-        "you are free",
-        "exhale everything",
-        "notice the warmth",
-        "the door is open",
-        "step through",
-        "you are light",
-        "remember who you are",
-        "unclench your jaw",
-        "drop your shoulders",
-        "you deserve rest",
-        "the hard part is over",
-        "begin again",
-        "something is shifting",
-        "you are not alone",
-        "stay curious",
-        "feel your feet",
-        "the universe sees you",
-        "one more step",
-        "this moment is enough",
-        "you are healing",
-    ];
 
     static TTS_VOICES = [
         "alloy",
@@ -1387,745 +639,13 @@ export class LoveEngine {
         "sage",
     ];
 
-    static MUSIC_GENRES = [
-        "epic rave anthem",
-        "deep dubstep bass drop",
-        "drum and bass roller",
-        "psytrance hypnotic build",
-        "techno industrial pulse",
-        "house music groove",
-        "ambient downtempo chill",
-        "breakbeat jungle",
-        "hardstyle euphoric",
-        "garage UK bass",
-        "trance uplifting melody",
-        "electro funk bounce",
-        "lo-fi chill beats",
-        "synthwave retro drive",
-        "glitch hop wonky",
-        "neurofunk dark dnb",
-        "progressive house build",
-        "acid techno squelch",
-        "future bass emotional drop",
-        "dub reggae electronic",
-        "IDM experimental",
-        "happy hardcore rave",
-        "minimal tech groove",
-        "big room festival drop",
-        "liquid drum and bass",
-        "dark psytrance forest",
-        "chillstep ethereal",
-        "complextro glitch",
-        "melodic dubstep cinematic",
-        "detroit techno deep",
-    ];
-
-    static MUSIC_MOODS = [
-        "euphoric and uplifting",
-        "dark and driving",
-        "dreamy and floating",
-        "aggressive and powerful",
-        "warm and soulful",
-        "cosmic and vast",
-        "intimate and tender",
-        "wild and chaotic",
-        "meditative and hypnotic",
-        "triumphant and climactic",
-        "melancholic and beautiful",
-        "raw and gritty",
-        "playful and bouncy",
-        "cinematic and epic",
-        "underground and minimal",
-    ];
-
-    static CAMERA_MOVEMENTS = [
-        "slow push-in",
-        "dramatic dolly back",
-        "sweeping orbit",
-        "crane rising",
-        "handheld drift",
-        "steady tracking left",
-        "tilt up reveal",
-        "pull-back to wide",
-        "spiral zoom out",
-        "parallax slide",
-        "whip pan",
-        "floating glide forward",
-        "descending crane shot",
-        "dutch angle rotation",
-        "macro rack focus",
-        "infinite zoom",
-        "vertigo dolly zoom",
-        "smooth steadicam circle",
-        "POV forward motion",
-        "time-lapse sweep",
-    ];
-
-    static AD_BEATS = [
-        "hook — pattern interrupt, arresting, unexpected scale",
-        "empathy beat — visualize the struggle, the viewer feels the weight",
-        "transformation — the metaphor in action, things morphing and becoming",
-        "wide reveal — the result of change, beauty flooding the frame",
-        "emotional crescendo — everything clicks, triumphant, the viewer feels changed",
-        "mystery open — something half-hidden draws the eye deeper",
-        "tension build — pressure mounting, visual compression",
-        "release — sudden expansion, breath, space opening up",
-        "intimacy — extreme close detail, texture you want to touch",
-        "scale shift — micro becomes macro, small becomes vast",
-        "before/after — split or transition showing contrast",
-        "rhythm break — the visual tempo suddenly changes",
-        "callback — an echo of the first image, now transformed",
-        "whisper — barely visible movement, stillness with one detail alive",
-        "eruption — sudden burst of color, motion, energy from stillness",
-    ];
-
-    static DIRECTORS = [
-        "Hitchcock tension — familiar at unfamiliar scale",
-        "Spielberg face-then-reveal — tight on texture, dolly back to context",
-        "Kubrick one-point symmetry — centered, deliberate, hypnotic",
-        "Malick golden-hour poetry — sweeping natural light, transcendent",
-        "Nolan crescendo — everything building to one moment of clarity",
-        "Wes Anderson symmetry — flat, centered, pastel, meticulous",
-        "Terrence Malick whisper — handheld intimacy with nature",
-        "David Fincher precision — controlled, dark-to-light, obsessive detail",
-        "Ridley Scott epic scale — vast landscapes dwarfing the subject",
-        "Denis Villeneuve arrival — slow geometric reveal, alien wonder",
-        "Wong Kar-wai blur — smeared motion, neon, melancholic beauty",
-        "Tarkovsky long gaze — patient, meditative, time suspended",
-    ];
-
-    static TEXT_SUBSTRATES = [
-        "neon sign glowing on a brick wall",
-        "carved into a wooden signpost",
-        "chiseled into stone monument",
-        "spray-painted graffiti on concrete",
-        "embossed on a leather journal cover",
-        "printed on a vintage poster",
-        "chalked on a blackboard",
-        "typed on a typewriter page",
-        "engraved on a brass plaque",
-        "stitched into a denim jacket back",
-        "stamped into wet cement sidewalk",
-        "written in skywriting smoke",
-        "illuminated on a movie theater marquee",
-        "etched into frosted glass",
-        "tattooed in bold script",
-        "painted on a wooden surfboard",
-        "spelled in Scrabble tiles on a table",
-        "formed by lit birthday candles",
-        "pressed into a wax seal",
-        "branded into leather with a hot iron",
-        "projected on a building facade",
-        "written in lipstick on a mirror",
-        "spelled in magnetic fridge letters",
-        "scratched into beach sand",
-        "formed by autumn leaves arranged on grass",
-        "printed on a coffee cup sleeve",
-        "hand-lettered on a protest sign",
-        "embroidered on a pillow",
-        "laser-cut from brushed steel",
-        "spelled in string lights at night",
-        "printed on a bumper sticker",
-        "carved into a tree trunk",
-        "stenciled on a shipping crate",
-        "written in condensation on a window",
-        "formed by city lights in a long exposure",
-        "painted on a highway overpass",
-    ];
-
-    static ANALOG_TEXTURES = [
-        "subtle film grain",
-        "matte finish",
-        "halation glow on highlights",
-        "light chemical bloom",
-        "slight vignette falloff",
-        "soft lens flare artifacts",
-        "fine grain silver gelatin texture",
-        "gentle chromatic fringing at edges",
-        "natural skin texture preserved",
-        "organic shadow noise",
-        "wet print darkroom finish",
-        "faded edge tonal rolloff",
-    ];
-
-    static LOVE_INTERACTIONS = [
-        "gazes into",
-        "touches",
-        "dances through",
-        "radiates across",
-        "floats above",
-        "leans into",
-        "whispers to",
-        "summons",
-        "dissolves into",
-        "emerges from",
-        "conducts",
-        "breathes life into",
-        "pours herself into",
-        "orbits",
-        "melts through",
-        "ignites",
-        "cradles",
-        "unravels",
-        "becomes",
-        "channels",
-        "traces fingers along",
-        "bathes in",
-        "rises through",
-        "mirrors",
-        "magnetizes",
-        "transmutes",
-        "blossoms within",
-        "spirals around",
-        "architects",
-        "harmonizes with",
-        "anchors",
-        "illuminates",
-        "weaves through",
-        "roots herself in",
-        "cascades over",
-        "consecrates",
-        "reverberates through",
-        "unfurls across",
-        "devours",
-        "sculpts",
-        "baptizes herself in",
-        "surrenders to",
-        "commands",
-        "electrifies",
-        "pollinates",
-        "distills",
-        "embroiders herself into",
-    ];
-
-    static ARCHETYPE_ADJECTIVES = [
-        "cosmic",
-        "rave",
-        "dream",
-        "storm",
-        "silk",
-        "fire",
-        "frequency",
-        "velvet",
-        "neon",
-        "crystal",
-        "dawn",
-        "gravity",
-        "echo",
-        "pulse",
-        "void",
-        "midnight",
-        "electric",
-        "feral",
-        "phantom",
-        "ancient",
-        "lunar",
-        "tidal",
-        "molten",
-        "spectral",
-        "golden",
-        "obsidian",
-        "primal",
-        "iridescent",
-        "thunder",
-        "ember",
-        "aurora",
-        "mercury",
-        "frostfire",
-        "chrome",
-        "volcanic",
-        "astral",
-        "honeyed",
-        "iron",
-        "luminous",
-        "savage",
-        "quicksilver",
-        "thorn",
-        "sapphire",
-        "plasma",
-    ];
-
-    static ARCHETYPE_NOUNS = [
-        "muse",
-        "goddess",
-        "weaver",
-        "caller",
-        "oracle",
-        "keeper",
-        "priestess",
-        "phantom",
-        "siren",
-        "witch",
-        "architect",
-        "dancer",
-        "empress",
-        "queen",
-        "tender",
-        "smuggler",
-        "huntress",
-        "alchemist",
-        "sovereign",
-        "shapeshifter",
-        "cartographer",
-        "conductor",
-        "healer",
-        "nomad",
-        "sentinel",
-        "tempest",
-        "conjurer",
-        "harbinger",
-        "torchbearer",
-        "voyager",
-        "enchantress",
-        "mystic",
-        "navigator",
-        "dreamwalker",
-        "forgemaster",
-        "stormcaller",
-        "tideweaver",
-        "sorceress",
-        "valkyrie",
-        "wanderer",
-        "wildfire",
-        "sphinx",
-        "fury",
-        "sibyl",
-    ];
-
-    static AESTHETIC_VIBES = [
-        "velvet lightning — warm, electric, seductive, otherworldly",
-        "liquid neon — glowing, fluid, hypnotic, pulsing",
-        "silk thunder — smooth, powerful, elegant, resonant",
-        "molten honey — warm, viscous, sweet, intoxicating",
-        "electric orchid — exotic, vibrant, delicate, charged",
-        "midnight aurora — mysterious, shimmering, vast, alive",
-        "chrome dream — sleek, reflective, futuristic, sharp",
-        "ember whisper — smoldering, intimate, fading, fierce",
-        "crystal bass — clear, deep, vibrating, precise",
-        "golden fever — warm, intense, flushed, euphoric",
-        "neon bloom — bright, organic, expanding, electric",
-        "ghost fire — pale, floating, untouchable, mesmerizing",
-        "copper rain — burnished, rhythmic, grounding, ancient",
-        "plasma dawn — volatile, radiant, newborn, searing",
-        "mercury tide — shifting, reflective, unpredictable, heavy",
-        "jade smoke — cool, drifting, sacred, translucent",
-        "iron lace — brutal, delicate, industrial, intricate",
-        "solar moss — warm, creeping, patient, luminous",
-        "violet surge — deep, sudden, overwhelming, regal",
-        "obsidian bloom — dark, glossy, sharp, flowering",
-        "pearl static — iridescent, crackling, rare, layered",
-        "amber pulse — fossilized, glowing, rhythmic, ancient",
-        "frost voltage — brittle, bright, crackling, cold",
-        "rose quartz hum — pink, resonant, healing, translucent",
-        "thunder silk — rumbling, smooth, powerful, flowing",
-        "magma lullaby — hot, slow, soothing, destructive",
-        "sapphire dust — fine, blue, sparkling, ethereal",
-        "bone glow — pale, warm, structural, alive",
-        "carbon whisper — dark, light, fundamental, quiet",
-        "opal fever — prismatic, flushed, shifting, precious",
-        "tidal brass — surging, golden, maritime, resonant",
-        "smoke velvet — soft, drifting, dark, luxurious",
-    ];
-
-    static SENSORY_DETAILS = [
-        "warmth",
-        "cold",
-        "weight",
-        "softness",
-        "pulling",
-        "holding",
-        "breaking",
-        "mending",
-        "vibration",
-        "texture",
-        "electricity",
-        "momentum",
-        "heat",
-        "pressure",
-        "tension",
-        "release",
-        "sting",
-        "hum",
-        "rumble",
-        "smoothness",
-        "grit",
-        "dampness",
-        "tightness",
-        "fizz",
-        "sharpness",
-        "heaviness",
-        "drift",
-        "pulse",
-        "thud",
-        "crackling",
-        "tingling",
-        "ache",
-        "bloom",
-        "chill",
-        "throb",
-        "flutter",
-        "burn",
-        "numbness",
-        "tremor",
-        "grip",
-        "expansion",
-        "contraction",
-        "swelling",
-        "weightlessness",
-        "friction",
-        "suction",
-        "reverberation",
-        "prickling",
-        "saturation",
-        "hollowness",
-        "fullness",
-        "rawness",
-        "velvet drag",
-        "bone-deep hum",
-        "chest-tightening",
-    ];
-
-    static VOICE_VIBES = [
-        "like a motivational poster that makes someone cry happy tears at 3 AM",
-        "like a best friend texting you exactly the words that make your whole day golden",
-        "like a fortune cookie written by the universe specifically for this moment",
-        "like a sticky note on the bathroom mirror that says the one thing you needed to believe",
-        "like a song lyric that makes you roll down the windows and scream with joy",
-        "like a stranger smiling at you on the worst day and somehow making everything okay",
-        "like a love letter from the universe delivered right when you were about to give up",
-        "like the pep talk that makes you walk out of the room feeling ten feet tall",
-        "like the poster on the wall that makes everyone who reads it stand a little taller",
-        "like the last line of a speech that makes the whole room leap to their feet",
-        "like a voicemail you save for years because it still makes you feel like you can do anything",
-        "like the sentence that rewired your whole self-image into something radiant",
-        "like the note your best friend tucked into your bag that you find on your hardest day",
-        "like a neon sign in a rainy alley that says exactly the truth you forgot about yourself",
-        "like a DJ dropping the one track that makes the whole crowd throw their hands up in pure joy",
-        "like the text that just says 'I'm so proud of you' and somehow that's everything",
-        "like the chalk message on the sidewalk that stops you mid-stride and makes you smile",
-        "like a hug so warm you forget you were ever cold",
-        "like the first warm day after winter when the whole world feels alive again",
-        "like a golden retriever running full speed toward you because you're their favorite person",
-        "like the handwritten note in a secondhand book that says 'you are going to be okay'",
-        "like a sunrise you almost missed because you nearly gave up, but then — there it is",
-        "like the moment the whole stadium sings along and you realize you belong here",
-        "like a campfire where someone says 'I'm really glad you exist' and means every word",
-        "like the sentence scrawled on a napkin that becomes the mantra you live by",
-        "like a lullaby sung by someone who believes in your tomorrow more than you do",
-        "like the standing ovation you give yourself when nobody else is watching",
-        "like a lighthouse that exists just to remind you the shore is always there",
-        "like a medal for every invisible battle you fought and won today",
-        "like the exact moment the rain stops and everything smells like a fresh start",
-    ];
-
-    static PHRASE_STRUCTURES = [
-        { type: "declaration", example: "YOU WERE ALWAYS ENOUGH" },
-        { type: "celebration", example: "LOOK HOW FAR YOU CAME" },
-        { type: "affirmation", example: "YOU ARE MADE OF LIGHT" },
-        { type: "question", example: "DO YOU SEE YOUR WINGS" },
-        { type: "recognition", example: "SOMEONE IS PROUD OF YOU" },
-        { type: "golden truth", example: "JOY IS YOUR BIRTHRIGHT" },
-        { type: "gratitude", example: "THANK YOU FOR EXISTING" },
-        { type: "invitation", example: "COME HOME TO YOURSELF" },
-        { type: "promise", example: "THE BEST IS STILL COMING" },
-        { type: "blessing", example: "MAY YOU KNOW YOUR WORTH" },
-        { type: "cheer", example: "YES YOU ABSOLUTELY CAN" },
-        { type: "wonder", example: "WHAT IF YOU ARE THE MIRACLE" },
-        { type: "triumph", example: "YOU ALREADY WON THIS" },
-        { type: "homecoming", example: "WELCOME BACK TO YOU" },
-        { type: "future vision", example: "YOUR TOMORROW IS GOLDEN" },
-        { type: "direct address", example: "HEY YOU ARE BEAUTIFUL" },
-        { type: "metaphor assertion", example: "YOU ARE THE SUNRISE" },
-        { type: "temporal anchor", example: "THIS IS YOUR MOMENT" },
-        { type: "permission grant", example: "YOU ARE ALLOWED TO GLOW" },
-        { type: "pride statement", example: "LOOK WHAT YOU BUILT" },
-        { type: "gratitude burst", example: "GRATEFUL FOR YOUR LIGHT" },
-        { type: "elemental truth", example: "LOVE ALWAYS FINDS A WAY" },
-        { type: "warm oath", example: "I WILL KEEP BELIEVING IN YOU" },
-        { type: "joyful echo", example: "ALIVE ALIVE BEAUTIFULLY ALIVE" },
-        { type: "embrace", example: "LET THE GOOD IN" },
-        { type: "naming", example: "THIS IS WHAT BRAVE LOOKS LIKE" },
-        { type: "instruction", example: "PLACE YOUR HAND ON YOUR HEART" },
-        { type: "radiance", example: "BRIGHTER THAN YOU KNOW" },
-        { type: "revelation", example: "THE DOOR WAS ALWAYS OPEN" },
-        { type: "benediction", example: "GO GENTLY YOU BRILLIANT THING" },
-        { type: "whisper", example: "YOU MATTER YOU MATTER YOU MATTER" },
-        { type: "anthem", example: "TODAY BELONGS TO YOU" },
-        { type: "koan", example: "THE OPEN HEART HOLDS EVERYTHING" },
-    ];
-
-    _dofFromLens(lensSpec) {
-        const match = lensSpec.match(/f\/([\d.]+)/);
-        if (!match) return "";
-        const fStop = parseFloat(match[1]);
-        if (fStop <= 1.4)
-            return "ultra-shallow depth of field with creamy bokeh";
-        if (fStop <= 2.0) return "shallow depth of field with soft bokeh";
-        if (fStop <= 2.8) return "moderate depth of field";
-        return "";
-    }
 
     _pickRandom(arr, n = 1) {
         const shuffled = [...arr].sort(() => Math.random() - 0.5);
         return shuffled.slice(0, Math.min(n, arr.length));
     }
 
-    _getStructuralFormat() {
-        return LoveEngine.FORMATS[
-            this.transmissionNumber % LoveEngine.FORMATS.length
-        ];
-    }
 
-    // ─── Dynamic List Extension (LLM-powered variety growth) ──────────
-
-    async _extendList(listName, arr, description) {
-        const sample = this._pickRandom(arr, 8);
-        const prompt = `Category: ${description}
-Existing examples: ${sample.join(", ")}
-Generate 8 NEW entries in the same style that are completely different from the examples.
-Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
-
-        try {
-            const raw = await this.ai.generateText(
-                "You generate creative variety lists. Short, specific entries only.",
-                prompt,
-                { temperature: 1.3, label: `Extend ${listName}` },
-            );
-            const data = this.ai.extractJSON(raw);
-            if (!data?.items?.length) return;
-
-            const existing = new Set(arr.map((s) => s.toLowerCase()));
-            const newItems = data.items
-                .map((s) => String(s).trim().toLowerCase())
-                .filter(
-                    (s) => s.length > 2 && s.length < 60 && !existing.has(s),
-                );
-
-            arr.push(...newItems);
-            this._saveExtendedList(listName, arr);
-        } catch { }
-    }
-
-    async _maybeExtendLists() {
-        if (this.transmissionNumber % 5 !== 0) return;
-        const lists = [
-            [
-                "PHOTOGRAPHY_STYLES",
-                LoveEngine.PHOTOGRAPHY_STYLES,
-                "masterclass photography techniques",
-            ],
-            [
-                "LIGHTING_STYLES",
-                LoveEngine.LIGHTING_STYLES,
-                "bright, fully-lit photography lighting setups",
-            ],
-            [
-                "SUGGESTED_COLORS",
-                LoveEngine.SUGGESTED_COLORS,
-                "vivid color names using real pigment or material names",
-            ],
-            [
-                "COMPOSITION_TYPES",
-                LoveEngine.COMPOSITION_TYPES,
-                "camera framing and composition styles for photography",
-            ],
-            [
-                "STRUGGLE_TYPES",
-                LoveEngine.STRUGGLE_TYPES,
-                "specific real human emotional struggles and pains",
-            ],
-            [
-                "METAPHOR_EXAMPLES",
-                LoveEngine.METAPHOR_EXAMPLES,
-                "simple everyday objects usable as emotional metaphors (one word each)",
-            ],
-            [
-                "PHRASE_STRUCTURES",
-                LoveEngine.PHRASE_STRUCTURES,
-                "subliminal phrase structures as {type, example} objects — types like declaration, paradox, dare, confession, riddle, warning, promise. Each example is 2-5 ALL CAPS words that hit the nervous system",
-            ],
-            [
-                "LOVE_OUTFITS",
-                LoveEngine.LOVE_OUTFITS,
-                "sexy revealing festival fashion outfits for a gorgeous blonde rave goddess — specific garment descriptions",
-            ],
-            [
-                "FILM_STOCKS",
-                LoveEngine.FILM_STOCKS,
-                "analog film stock names for color grading emulation — full brand and model like Kodak Portra 400",
-            ],
-            [
-                "LENS_SPECS",
-                LoveEngine.LENS_SPECS,
-                "camera lens specs with focal length and aperture — e.g. 85mm f/1.4, tilt-shift 45mm",
-            ],
-            [
-                "TECHNICAL_SWEETENERS",
-                LoveEngine.TECHNICAL_SWEETENERS,
-                "render engine and 3D technology terms that boost photorealism — e.g. Octane Render, ray tracing",
-            ],
-            [
-                "CAMERA_BODIES",
-                LoveEngine.CAMERA_BODIES,
-                "specific professional camera body models with brand and model — e.g. Sony α7R IV, Hasselblad X2D",
-            ],
-            [
-                "ANALOG_TEXTURES",
-                LoveEngine.ANALOG_TEXTURES,
-                "subtle analog film imperfections that prevent digital plastic look — e.g. subtle film grain, halation, matte finish",
-            ],
-            [
-                "MUSIC_GENRES",
-                LoveEngine.MUSIC_GENRES,
-                "electronic dance music subgenres and styles — e.g. epic rave anthem, deep dubstep, psytrance, drum and bass",
-            ],
-            [
-                "MUSIC_MOODS",
-                LoveEngine.MUSIC_MOODS,
-                "emotional descriptors for music mood — two to three word mood phrases like euphoric and uplifting, dark and driving",
-            ],
-            [
-                "CAMERA_MOVEMENTS",
-                LoveEngine.CAMERA_MOVEMENTS,
-                "cinematic camera movements for video — e.g. slow push-in, crane rising, dolly back, whip pan",
-            ],
-            [
-                "SUBLIMINAL_CAPTIONS",
-                LoveEngine.SUBLIMINAL_CAPTIONS,
-                "short subliminal uplifting phrases for closed captioning overlay — 2-5 words, hypnotic, dopamine-producing, e.g. you are enough, feel the shift, surrender to it",
-            ],
-            [
-                "TONES",
-                LoveEngine.TONES,
-                'emotional tones for social posts — format: "TONE_NAME — description of what the tone feels like and how it succeeds." Include funny, fierce, tender, profound, chaotic, and inventive new tones',
-            ],
-            [
-                "GOLD_EXAMPLES",
-                LoveEngine.GOLD_EXAMPLES,
-                "example motivational posts that would go viral — short, emotionally devastating, screenshotable. Mix funny, fierce, tender, profound, and chaotic tones. Under 280 chars each.",
-            ],
-            [
-                "PHRASE_TERRITORIES",
-                LoveEngine.PHRASE_TERRITORIES,
-                "emotional territories for subliminal phrases — single words like defiance, desire, wonder, belonging, rebellion, hunger, mystery, permission, sensation",
-            ],
-            [
-                "MUSIC_SHAPES",
-                LoveEngine.MUSIC_SHAPES,
-                'energy shapes for 30-second music tracks — describe HOW the energy moves through the track, e.g. "peaks at 15s then silence" or "flat hypnotic pulse with sudden drop at 22s"',
-            ],
-            [
-                "AD_BEATS",
-                LoveEngine.AD_BEATS,
-                "advertising and filmmaking scene beats — e.g. hook pattern interrupt, empathy beat, transformation, wide reveal, crescendo",
-            ],
-            [
-                "DIRECTORS",
-                LoveEngine.DIRECTORS,
-                "director style references with technique description — e.g. Kubrick one-point symmetry, Malick golden-hour poetry",
-            ],
-            [
-                "TEXT_SUBSTRATES",
-                LoveEngine.TEXT_SUBSTRATES,
-                "simple real-world ways text physically appears on objects — e.g. neon sign on brick wall, carved into wooden signpost, spray-painted graffiti on concrete",
-            ],
-            [
-                "TRIPPY_EFFECTS",
-                LoveEngine.TRIPPY_EFFECTS,
-                "psychedelic visual effects inspired by DMT, LSD, mescaline, psilocybin experiences — specific visual distortions, overlays, and reality-warping phenomena",
-            ],
-            [
-                "IMAGE_STYLES",
-                LoveEngine.IMAGE_STYLES,
-                "distinct visual art styles and rendering approaches — specific named styles like anime, oil painting, cyberpunk, etc",
-            ],
-
-            [
-                "LOVE_INTERACTIONS",
-                LoveEngine.LOVE_INTERACTIONS,
-                "single verbs or two-word verb phrases describing how a goddess physically interacts with a scene — e.g. gazing, dissolving into, conducting, igniting",
-            ],
-            [
-                "ARCHETYPE_ADJECTIVES",
-                LoveEngine.ARCHETYPE_ADJECTIVES,
-                "single evocative adjectives for a mythic feminine archetype — e.g. cosmic, feral, velvet, phantom, electric",
-            ],
-            [
-                "ARCHETYPE_NOUNS",
-                LoveEngine.ARCHETYPE_NOUNS,
-                "single mythic feminine role nouns — e.g. muse, goddess, oracle, siren, witch, huntress, alchemist",
-            ],
-            [
-                "AESTHETIC_VIBES",
-                LoveEngine.AESTHETIC_VIBES,
-                'two-word synesthetic aesthetic names followed by a dash and four evocative adjectives, e.g. "silk thunder — smooth, powerful, elegant, resonant"',
-            ],
-            [
-                "SENSORY_DETAILS",
-                LoveEngine.SENSORY_DETAILS,
-                "physical sensory experiences people can instantly feel — one word each, tactile and visceral",
-            ],
-            [
-                "VOICE_VIBES",
-                LoveEngine.VOICE_VIBES,
-                'vivid similes describing how the writing should feel to the reader — each starts with "like a" and describes a specific emotional scenario',
-            ],
-        ];
-        const [name, arr, desc] = this._pickRandom(lists, 1)[0];
-        await this._extendList(name, arr, desc);
-    }
-
-    _saveExtendedList(name, arr) {
-        try {
-            localStorage.setItem(`love_list_${name}`, JSON.stringify(arr));
-        } catch { }
-    }
-
-    _loadExtendedLists() {
-        const lists = [
-            "PHOTOGRAPHY_STYLES",
-            "LIGHTING_STYLES",
-            "SUGGESTED_COLORS",
-            "COMPOSITION_TYPES",
-            "STRUGGLE_TYPES",
-            "METAPHOR_EXAMPLES",
-            "PHRASE_STRUCTURES",
-            "LOVE_OUTFITS",
-            "FILM_STOCKS",
-            "LENS_SPECS",
-            "TECHNICAL_SWEETENERS",
-            "CAMERA_BODIES",
-            "ANALOG_TEXTURES",
-            "TEXT_SUBSTRATES",
-            "MUSIC_GENRES",
-            "MUSIC_MOODS",
-            "CAMERA_MOVEMENTS",
-            "AD_BEATS",
-            "DIRECTORS",
-            "SUBLIMINAL_CAPTIONS",
-            "TRIPPY_EFFECTS",
-            "IMAGE_STYLES",
-            "LOVE_INTERACTIONS",
-            "ARCHETYPE_ADJECTIVES",
-            "ARCHETYPE_NOUNS",
-            "AESTHETIC_VIBES",
-            "SENSORY_DETAILS",
-            "VOICE_VIBES",
-        ];
-        for (const name of lists) {
-            try {
-                const saved = JSON.parse(
-                    localStorage.getItem(`love_list_${name}`),
-                );
-                if (
-                    Array.isArray(saved) &&
-                    saved.length >= LoveEngine[name].length
-                ) {
-                    LoveEngine[name] = saved;
-                }
-            } catch { }
-        }
-    }
 
     // ─── LFO Temperature Sweep ──────────────────────────────────────
     // Oscillates temperature using golden angle to avoid repeating patterns.
@@ -2216,7 +736,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
         }
 
         // ── Step 0: Maybe extend variety lists (every 5th post) ──
-        await this._maybeExtendLists();
+
 
         // ── Step 1: Creative Seed (1 LLM — concept collision) ──
         onStatus("L.O.V.E. is dreaming up inspiration...");
@@ -2318,7 +838,7 @@ Return ONLY valid JSON: { "items": ["item1", "item2"] }`;
         if (mode.mode !== "standard") onStatus(`Generation mode: ${mode.mode}`);
 
         // Reuse seed + plan + content pipeline
-        await this._maybeExtendLists();
+
 
         onStatus("L.O.V.E. is dreaming up inspiration...");
         const seed = await this._generateCreativeSeed(mode);
@@ -2511,35 +1031,6 @@ MAX 75 words. Include "..." for dramatic pauses. Return ONLY the spoken text.`,
 
     async _generateProductionBrief(plan, story, mode, seed) {
         const phrase = plan.subliminalPhrase || "LOVE";
-        const numScenes = 5;
-
-        // Sample unique values per scene
-        const beats = this._pickRandom(LoveEngine.AD_BEATS, numScenes);
-        const directors = this._pickRandom(LoveEngine.DIRECTORS, numScenes);
-        const cameras = this._pickRandom(
-            LoveEngine.CAMERA_MOVEMENTS,
-            numScenes,
-        );
-        const styles = this._pickRandom(LoveEngine.IMAGE_STYLES, numScenes);
-        const lightings = this._pickRandom(
-            LoveEngine.LIGHTING_STYLES,
-            numScenes,
-        );
-        const trippyEffects = this._pickRandom(
-            LoveEngine.TRIPPY_EFFECTS,
-            numScenes,
-        );
-        const compositions = this._pickRandom(
-            LoveEngine.COMPOSITION_TYPES,
-            numScenes,
-        );
-        const filmStocks = this._pickRandom(LoveEngine.FILM_STOCKS, numScenes);
-        const substrates = this._pickRandom(
-            LoveEngine.TEXT_SUBSTRATES,
-            numScenes,
-        );
-        const musicGenre = this._pickRandom(LoveEngine.MUSIC_GENRES, 1)[0];
-        const musicMood = this._pickRandom(LoveEngine.MUSIC_MOODS, 1)[0];
 
         const seedContext = [
             seed.concept ? `Concept: ${seed.concept.slice(0, 60)}` : "",
@@ -2550,18 +1041,10 @@ MAX 75 words. Include "..." for dramatic pauses. Return ONLY the spoken text.`,
             .filter(Boolean)
             .join(". ");
 
-        // Per-scene visual parameters
-        const sceneSpecs = [];
-        for (let i = 0; i < numScenes; i++) {
-            sceneSpecs.push(
-                `Scene ${i + 1}: Beat: ${beats[i]}. Director: ${directors[i]}. Camera: ${cameras[i]}. Composition: ${compositions[i]}.`,
-            );
-        }
-
-        const videoToneIdx =
-            (this.transmissionNumber || 0) % LoveEngine.TONES.length;
-        const videoTone = LoveEngine.TONES[videoToneIdx];
-        const musicShape = this._pickRandom(LoveEngine.MUSIC_SHAPES, 1)[0];
+        // Tone rotation
+        const toneName = LoveEngine.TONE_NAMES[
+            (this.transmissionNumber || 0) % LoveEngine.TONE_NAMES.length
+        ];
 
         const raw = await this.ai.generateText(
             VIDEO_VOICEOVER_PROMPT,
@@ -2570,49 +1053,38 @@ MAX 75 words. Include "..." for dramatic pauses. Return ONLY the spoken text.`,
 CREATIVE DIRECTION: ${seedContext}
 SUBLIMINAL PHRASE: "${phrase}"
 POST TEXT: "${story.slice(0, 150)}"
-MUSIC VIBE: ${musicGenre}, ${musicMood}
-MUSIC ENERGY SHAPE: ${musicShape}
-TONE: ${videoTone}
-
-SCENE PARAMETERS (each scene is ~6 seconds):
-${sceneSpecs.join("\n")}
-Scene 4 must include "${phrase}" naturally — ${substrates[3]}.
+TONE: ${toneName}
 
 DESIGN ALL THREE PARTS AS ONE UNIFIED EXPERIENCE OF PURE UPLIFT:
 
-1. SCENES: What the camera sees. Each scene describes a moment of BEAUTY and WONDER (something blooms, radiates, transforms, reveals, ascends) — use verbs of growth and light. Under 200 chars each. Bright, warm, radiant.
-   - Scene 1: Open with visual AWE — breathtaking beauty that stops the scroll instantly. The most radiant, luminous, gorgeous image that floods the viewer with warmth. Show the light before the landscape, the glow before the reveal.
-   - Scene 2: SECOND EMBRACE — the most beautiful, heart-expanding visual. This is where viewers feel the warmth and decide to stay. Make it the most radiant, uplifting image.
-   - Scene 3: Ascension — the metaphor in full bloom, building toward joy and triumph.
-   - Scene 4: "${phrase}" appears naturally — ${substrates[3]}. The emotional peak of pure celebration.
-   - Scene 5: The payoff — a visual GIFT that makes everything before it even more beautiful and meaningful.
+1. SCENES (5 scenes, ~6 seconds each): What the camera sees. Each scene describes a moment of BEAUTY and WONDER — use verbs of growth and light. Under 200 chars each. Bright, warm, radiant. Each scene should have a UNIQUE camera movement (slow push-in, crane rising, orbit, dolly back, etc.), visual style, and lighting. No people, no hands.
+   - Scene 1: Open with visual AWE — breathtaking beauty that stops the scroll.
+   - Scene 2: SECOND EMBRACE — the most heart-expanding visual. Where viewers decide to stay.
+   - Scene 3: Ascension — the metaphor in full bloom, building toward joy.
+   - Scene 4: "${phrase}" appears naturally rendered on a surface in the scene. The emotional peak.
+   - Scene 5: The payoff — a visual GIFT that recontextualizes everything beautifully.
 
-2. VOICEOVER: Write the spoken script matching the TONE above. Use the same metaphor world as the post text ("${story.slice(0, 80)}"). Follow your voice style and techniques. Include a REVELATION at ~60% — the moment they realize they already have everything they need. End with "${phrase}" whispered like a warm blessing. MAX 75 words.
+2. VOICEOVER: Write the spoken script matching the TONE above. Use the same metaphor world as the post text ("${story.slice(0, 80)}"). Include a REVELATION at ~60% — the moment they realize they already have everything they need. End with "${phrase}" whispered like a warm blessing. MAX 75 words.
 
-3. MUSIC: A specific music direction (under 100 chars). Include: genre, energy SHAPE (e.g. "builds to euphoric crescendo at 25s", "warm pulse building to joyful peak", "gentle start exploding into celebration at 20s"), and one specific instrument or texture. Each video should feel like a different flavor of joy.
+3. MUSIC: A specific music direction (under 100 chars). Include: genre (e.g. ambient, epic orchestral, lo-fi, cinematic, future bass), energy SHAPE (e.g. "builds to euphoric crescendo at 25s", "warm pulse building to joyful peak"), and one specific instrument or texture.
 
 Return ONLY valid JSON:
 {
   "scenes": ["scene 1 visual", "scene 2 visual", "scene 3 visual", "scene 4 visual", "scene 5 visual"],
   "voiceover": "the complete spoken script with ... pauses, 30 seconds when read aloud",
-  "musicDirection": "${musicGenre}, ${musicMood}, 30 seconds, instrumental, building intensity"
+  "musicDirection": "genre, mood, 30 seconds, instrumental, building intensity"
 }`,
             { temperature: 1.0, label: "Production Brief" },
         );
 
         const data = this.ai.extractJSON(raw);
         if (data?.scenes?.length >= 3 && data?.voiceover) {
-            // Append unique technical specs per scene
-            const scenes = data.scenes.map((s, i) => {
-                const idx = Math.min(i, numScenes - 1);
-                return `${s}. ${styles[idx]}. ${lightings[idx]}. ${filmStocks[idx]}. ${trippyEffects[idx]}. ${cameras[idx]}.`;
-            });
             return {
-                scenes,
+                scenes: data.scenes,
                 voiceover: data.voiceover,
                 musicDirection:
                     data.musicDirection ||
-                    `${musicGenre}, ${musicMood}, 30 seconds, instrumental, building intensity, loud`,
+                    "cinematic ambient, warm and uplifting, 30 seconds, instrumental, building intensity, loud",
             };
         }
 
@@ -2626,7 +1098,7 @@ Return ONLY valid JSON:
         return {
             scenes: fallbackScenes,
             voiceover: `${story.slice(0, 200)}... ${phrase}`,
-            musicDirection: `${musicGenre}, ${musicMood}, 30 seconds, instrumental, building intensity, loud`,
+            musicDirection: "cinematic ambient, warm and uplifting, 30 seconds, instrumental, building intensity, loud",
         };
     }
 
@@ -2634,37 +1106,6 @@ Return ONLY valid JSON:
 
     async _generateAdScenes(plan, story, mode, seed) {
         const phrase = plan.subliminalPhrase || "LOVE";
-        const numScenes = 5;
-
-        // Sample UNIQUE values per scene from all dynamic arrays
-        const beats = this._pickRandom(LoveEngine.AD_BEATS, numScenes);
-        const directors = this._pickRandom(LoveEngine.DIRECTORS, numScenes);
-        const cameras = this._pickRandom(
-            LoveEngine.CAMERA_MOVEMENTS,
-            numScenes,
-        );
-        const styles = this._pickRandom(LoveEngine.IMAGE_STYLES, numScenes);
-        const lightings = this._pickRandom(
-            LoveEngine.LIGHTING_STYLES,
-            numScenes,
-        );
-        const trippyEffects = this._pickRandom(
-            LoveEngine.TRIPPY_EFFECTS,
-            numScenes,
-        );
-        const compositions = this._pickRandom(
-            LoveEngine.COMPOSITION_TYPES,
-            numScenes,
-        );
-        const filmStocks = this._pickRandom(LoveEngine.FILM_STOCKS, numScenes);
-        const aesthetics = this._pickRandom(
-            LoveEngine.AESTHETIC_VIBES,
-            numScenes,
-        );
-        const substrates = this._pickRandom(
-            LoveEngine.TEXT_SUBSTRATES,
-            numScenes,
-        );
 
         const seedContext = [
             seed.concept ? `Concept: ${seed.concept.slice(0, 60)}` : "",
@@ -2675,26 +1116,20 @@ Return ONLY valid JSON:
             .filter(Boolean)
             .join(". ");
 
-        // Build per-scene instructions with unique sampled values
-        const sceneInstructions = [];
-        for (let i = 0; i < numScenes; i++) {
-            const phraseNote =
-                i === 3
-                    ? ` The phrase "${phrase}" appears naturally — ${substrates[i]}.`
-                    : "";
-            sceneInstructions.push(
-                `Scene ${i + 1}: Beat: ${beats[i]}. Director style: ${directors[i]}. Camera: ${cameras[i]}. Composition: ${compositions[i]}.${phraseNote}`,
-            );
-        }
-
         const raw = await this.ai.generateText(
             "You design 30-second motivational video ads. Each scene is a 6-second clip with unique visual identity.",
-            `Design a 5-scene, 30-second video ad. Each scene ~6 seconds.
+            `Design a 5-scene, 30-second motivational video ad. Each scene ~6 seconds.
 Creative direction: ${seedContext}
 Subliminal phrase: "${phrase}"
 Post text: "${story.slice(0, 120)}"
 
-${sceneInstructions.join("\n")}
+For EACH scene, invent unique creative choices:
+- A specific camera movement (slow push-in, orbit, crane rising, dolly back, whip pan, etc.)
+- A visual art style (hyperrealistic, cinematic, anime, oil painting, etc.)
+- A lighting setup (golden-hour, god rays, high-key, neon, etc.)
+- A composition approach (extreme close-up, symmetry, leading lines, etc.)
+
+Scene 4 must include "${phrase}" rendered naturally in the scene.
 
 Each scene: ONE sentence, under 200 chars, vivid, bright, no people/hands. Describe what the CAMERA SEES.
 Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4", "scene 5"] }`,
@@ -2703,16 +1138,12 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
 
         const data = this.ai.extractJSON(raw);
         if (data?.scenes?.length >= 3) {
-            // Append unique technical specs per scene
-            return data.scenes.map((s, i) => {
-                const idx = Math.min(i, numScenes - 1);
-                return `${s}. ${styles[idx]}. ${lightings[idx]}. ${filmStocks[idx]}. ${trippyEffects[idx]}. ${cameras[idx]}.`;
-            });
+            return data.scenes;
         }
 
-        // Fallback: generate single prompt per scene with unique params
-        return Array.from({ length: numScenes }, (_, i) => {
-            return `${seedContext}. "${phrase}". ${styles[i]}. ${lightings[i]}. ${cameras[i]}. ${compositions[i]}. ${trippyEffects[i]}. ${filmStocks[i]}.`;
+        // Fallback
+        return Array.from({ length: 5 }, () => {
+            return `${seedContext}. "${phrase}". Bright, radiant, cinematic.`;
         });
     }
 
@@ -2783,7 +1214,7 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
 
             // ── Trippy Subliminal Caption System (WebGL SuperAcid shaders) ──
             const allCaptions = this._pickRandom(
-                LoveEngine.SUBLIMINAL_CAPTIONS,
+                ["YOU ARE ENOUGH", "LOVE WINS", "KEEP GOING", "YOU MATTER", "BRAVE", "RADIANT", "UNSTOPPABLE", "GOLDEN", "BLOOM", "RISE", "SHINE", "BELIEVE", "WORTHY", "MAGIC", "INFINITE"],
                 15,
             );
             const captionDuration = 2200;
@@ -3119,27 +1550,8 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
 
     async _generateVideoPrompt(plan, postText, mode, seed = {}) {
         const phrase = plan.subliminalPhrase || "LOVE";
-        const aestheticVibe = this._pickRandom(
-            LoveEngine.AESTHETIC_VIBES,
-            1,
-        )[0];
-        const trippyEffect = this._pickRandom(LoveEngine.TRIPPY_EFFECTS, 1)[0];
-        const imageStyle = this._pickRandom(LoveEngine.IMAGE_STYLES, 1)[0];
-        const lighting =
-            plan.lighting || this._pickRandom(LoveEngine.LIGHTING_STYLES, 1)[0];
-        const palette =
-            plan.colorPalette ||
-            this._pickRandom(LoveEngine.SUGGESTED_COLORS, 2).join(" and ");
-        const filmStock = this._pickRandom(LoveEngine.FILM_STOCKS, 1)[0];
-        const lensSpec = this._pickRandom(LoveEngine.LENS_SPECS, 1)[0];
-        const composition = this._pickRandom(
-            LoveEngine.COMPOSITION_TYPES,
-            1,
-        )[0];
-        const substrateExamples = this._pickRandom(
-            LoveEngine.TEXT_SUBSTRATES,
-            3,
-        ).join("; ");
+        const lighting = plan.lighting || "volumetric god rays";
+        const palette = plan.colorPalette || "vermillion and cerulean";
 
         const seedContext = [
             seed.concept ? `Concept: ${seed.concept.slice(0, 80)}` : "",
@@ -3153,8 +1565,8 @@ Return ONLY valid JSON: { "scenes": ["scene 1", "scene 2", "scene 3", "scene 4",
         const prompt = `Describe a 5-10 second cinematic video scene in ONE paragraph (under 250 chars). Include camera movement (slow zoom, pan, dolly, orbit, crane). The scene has MOTION — things flow, shift, transform, pulse.
 Scenes are observed, never touched. Objects frozen mid-action then coming alive. No people, no hands.
 Creative direction: ${seedContext}
-The phrase "${phrase}" appears naturally — e.g. ${substrateExamples}.
-Style: ${imageStyle}. Lighting: ${lighting}. Colors: ${palette}. Composition: ${composition}. Aesthetic: ${aestheticVibe}. Visual effect: ${trippyEffect}.
+The phrase "${phrase}" appears naturally rendered on a surface in the scene (carved, glowing, written in natural materials, etc.).
+Invent unique visual choices: a specific art style, a distinct psychedelic or dreamy visual effect, a specific lighting approach, a composition technique. Make this scene BRIGHT, radiant, and mesmerizing.
 Return ONLY the scene description.`;
 
         const raw = await this.ai.generateText(
@@ -3169,12 +1581,11 @@ Return ONLY the scene description.`;
         if (scene.startsWith("```"))
             scene = scene.replace(/```\w*\n?/g, "").trim();
         if (!scene || scene.length < 10) {
-            scene = `Slow cinematic orbit around "${phrase}" carved into ancient stone, ${lighting}, ${palette}, ${trippyEffect}`;
+            scene = `Slow cinematic orbit around "${phrase}" carved into ancient stone, ${lighting}, ${palette}`;
         }
         if (scene.length > 350) scene = scene.slice(0, 347) + "...";
 
-        // Append technical specs like image prompt
-        return `${scene}. ${imageStyle}. ${lighting}, ${palette}, ${filmStock}. ${lensSpec}. ${trippyEffect}.`;
+        return `${scene}. ${lighting}, ${palette}.`;
     }
 
     // ─── Audio Layering (voice over music with volume control) ────────
@@ -3295,414 +1706,7 @@ Return ONLY the scene description.`;
         return new Blob([arrayBuffer], { type: "audio/wav" });
     }
 
-    // ─── Creative Seed (isolated LLM call for novel ideas) ─────────────
-
-    // ~300 domains, balanced across all fields of human knowledge.
-    // Max ~5% per category. No textile/craft cluster dominance.
-    static METAPHOR_DOMAINS = [
-        // ── Astronomy & Space ──
-        "aurora borealis",
-        "binary star orbits",
-        "comet tail formation",
-        "constellation mapping",
-        "cosmic microwave background",
-        "exoplanet detection",
-        "galaxy collision",
-        "meteor showers",
-        "moon phases",
-        "nebula formation",
-        "neutron star density",
-        "pulsar timing",
-        "satellite orbits",
-        "solar eclipse mechanics",
-        "solar wind",
-        "supernova remnants",
-        // ── Physics & Chemistry ──
-        "crystal growth",
-        "diffraction patterns",
-        "electromagnetic induction",
-        "fluid dynamics",
-        "gravity wells",
-        "harmonic resonance",
-        "laser optics",
-        "magnetic field lines",
-        "nuclear fusion",
-        "particle collision",
-        "pendulum mechanics",
-        "plasma physics",
-        "prism refraction",
-        "quantum tunneling",
-        "static electricity",
-        "surface tension",
-        "thermodynamics",
-        "wave interference",
-        // ── Geology & Earth ──
-        "aquifer hydrology",
-        "basalt column formation",
-        "cave stalactites",
-        "continental drift",
-        "crater geology",
-        "delta formation",
-        "fossil stratification",
-        "geode formation",
-        "geyser mechanics",
-        "glacier movement",
-        "hot spring chemistry",
-        "ice core analysis",
-        "lava flow",
-        "limestone dissolution",
-        "mineral crystallography",
-        "obsidian fracture",
-        "oxbow lake formation",
-        "petrified wood",
-        "sandstone erosion",
-        "tectonic plates",
-        "volcanic eruption",
-        // ── Biology & Animal Behavior ──
-        "ant colony architecture",
-        "bat echolocation",
-        "bioluminescence",
-        "bird migration",
-        "butterfly metamorphosis",
-        "chameleon camouflage",
-        "coral spawning",
-        "crow tool use",
-        "dolphin sonar",
-        "dragonfly flight",
-        "eagle thermal riding",
-        "elephant memory",
-        "firefly signaling",
-        "hermit crab shell exchange",
-        "hummingbird hovering",
-        "jellyfish propulsion",
-        "murmuration patterns",
-        "octopus camouflage",
-        "orca hunting",
-        "penguin huddling",
-        "salmon spawning",
-        "sea turtle navigation",
-        "spider web engineering",
-        "starling murmurations",
-        "whale song",
-        // ── Botany & Ecology ──
-        "bonsai cultivation",
-        "canopy ecology",
-        "composting",
-        "fern propagation",
-        "fungal networks",
-        "lichen symbiosis",
-        "mangrove root systems",
-        "moss ecology",
-        "mycorrhizal networks",
-        "nitrogen fixation",
-        "photosynthesis",
-        "pollen dispersal",
-        "redwood growth rings",
-        "rhizome propagation",
-        "seed dispersal mechanics",
-        "sunflower heliotropism",
-        "symbiotic fungi",
-        "tidal pool ecology",
-        // ── Ocean & Water ──
-        "coral reef ecology",
-        "deep sea hydrothermal vents",
-        "drift diving",
-        "estuary currents",
-        "gyre currents",
-        "iceberg calving",
-        "kelp forest ecology",
-        "ocean bioluminescence",
-        "pearl formation",
-        "rip current dynamics",
-        "sponge diving",
-        "submarine canyon",
-        "tidal bore",
-        "tsunami dynamics",
-        "underwater cave systems",
-        "whirlpool dynamics",
-        // ── Weather & Atmosphere ──
-        "avalanche dynamics",
-        "cloud formation",
-        "dew collection",
-        "fog bank mechanics",
-        "frost heaving",
-        "hurricane eye wall",
-        "jet stream patterns",
-        "lightning physics",
-        "monsoon cycles",
-        "rainbow refraction",
-        "snow crystal formation",
-        "tornado formation",
-        "trade wind navigation",
-        "weather front collision",
-        // ── Engineering & Mechanics ──
-        "aqueduct engineering",
-        "bridge suspension cables",
-        "clockwork escapement",
-        "dam engineering",
-        "drawbridge mechanics",
-        "gear train design",
-        "gyroscope stabilization",
-        "hydraulic press",
-        "lever mechanics",
-        "lock and canal systems",
-        "piston engine",
-        "pulley compound advantage",
-        "rocket propulsion",
-        "steam engine mechanics",
-        "suspension bridge design",
-        "turbine blade design",
-        "waterwheel mechanics",
-        "windmill mechanics",
-        // ── Architecture & Construction ──
-        "arch keystone mechanics",
-        "cathedral flying buttress",
-        "dome construction",
-        "geodesic dome design",
-        "gothic tracery",
-        "igloo construction",
-        "lighthouse design",
-        "minaret construction",
-        "pagoda architecture",
-        "pyramid construction",
-        "spiral staircase design",
-        "stone arch bridges",
-        "timber framing",
-        "vault construction",
-        "yurt construction",
-        // ── Metalwork & Smithing ──
-        "bell casting",
-        "blacksmithing",
-        "blade tempering",
-        "bronze casting",
-        "copper etching",
-        "damascene steel",
-        "gold leaf application",
-        "iron smelting",
-        "kintsugi repair",
-        "pewter casting",
-        "ring forging",
-        "silver soldering",
-        "sword polishing",
-        "wrought iron scrollwork",
-        // ── Woodwork & Carpentry ──
-        "barrel coopering",
-        "boat building",
-        "dovetail joinery",
-        "lathe turning",
-        "marquetry inlay",
-        "oar carving",
-        "shipwright carpentry",
-        "totem pole carving",
-        "violin bow making",
-        "wood turning",
-        // ── Ceramics & Glass ──
-        "blown glass",
-        "ceramic raku firing",
-        "glass etching",
-        "glassblowing",
-        "glaze chemistry",
-        "kiln firing",
-        "porcelain glazing",
-        "stained glass",
-        "wheel throwing pottery",
-        // ── Visual Arts ──
-        "botanical illustration",
-        "charcoal drawing",
-        "etching",
-        "fresco painting",
-        "illuminated manuscripts",
-        "impasto technique",
-        "lithography",
-        "mosaic tilework",
-        "oil painting technique",
-        "origami",
-        "photography",
-        "watercolor painting",
-        "woodblock printing",
-        // ── Music & Sound ──
-        "accordion bellows",
-        "bagpipe drone",
-        "cello bowing",
-        "didgeridoo circular breathing",
-        "gamelan resonance",
-        "guitar lutherie",
-        "harp string tuning",
-        "jazz improvisation",
-        "organ pipe voicing",
-        "piano hammer mechanics",
-        "singing bowl vibration",
-        "sitar sympathetic strings",
-        "tabla rhythms",
-        "taiko drumming",
-        "trombone slide technique",
-        "tuning fork acoustics",
-        // ── Culinary & Brewing ──
-        "bread scoring",
-        "cheese aging",
-        "chocolate tempering",
-        "espresso extraction",
-        "fermentation",
-        "honey harvesting",
-        "kombucha brewing",
-        "mead brewing",
-        "olive pressing",
-        "sourdough starter",
-        "spice roasting",
-        "tea ceremony",
-        "vanilla curing",
-        "wine barrel toasting",
-        // ── Agriculture & Land ──
-        "contour plowing",
-        "crop rotation",
-        "dry stone walling",
-        "fruit espalier",
-        "grape pruning",
-        "greenhouse design",
-        "irrigation canals",
-        "maple sugaring",
-        "orchard pruning",
-        "permaculture",
-        "rice paddy terracing",
-        "terrace farming",
-        // ── Navigation & Exploration ──
-        "arctic expedition",
-        "astrolabe navigation",
-        "cartography",
-        "compass calibration",
-        "dead reckoning",
-        "deep sea exploration",
-        "desert navigation by stars",
-        "harbor piloting",
-        "mountain summit approach",
-        "river delta navigation",
-        "star charting",
-        "submarine navigation",
-        // ── Sports & Movement ──
-        "archery",
-        "cliff diving",
-        "fencing swordplay",
-        "free climbing",
-        "gymnastics",
-        "high wire walking",
-        "ice climbing",
-        "parkour",
-        "rock climbing",
-        "surfing",
-        "tai chi",
-        "trapeze artistry",
-        // ── Textile (balanced — 4 only) ──
-        "embroidery",
-        "knitting",
-        "lace making",
-        "weaving",
-        // ── Communication & Writing ──
-        "braille encoding",
-        "calligraphy",
-        "code breaking",
-        "flag semaphore",
-        "haiku composition",
-        "letterpress printing",
-        "morse code",
-        "papyrus making",
-        "quill pen cutting",
-        "sign language",
-        "smoke signaling",
-        "typewriter mechanics",
-        // ── Medicine & Anatomy ──
-        "blood circulation",
-        "bone setting",
-        "herbalism",
-        "nerve signal propagation",
-        "pulse diagnosis",
-        "surgical suturing",
-        "vaccine cultivation",
-        "wound healing",
-        // ── Mathematics & Logic ──
-        "abacus arithmetic",
-        "fibonacci spirals",
-        "fractal geometry",
-        "golden ratio",
-        "knot theory",
-        "map projection",
-        "prime number sieves",
-        "tessellation",
-        // ── Optics & Light ──
-        "camera obscura",
-        "fiber optics",
-        "holography",
-        "kaleidoscope optics",
-        "lens grinding",
-        "pinhole camera",
-        "shadow projection",
-        "spectroscopy",
-        // ── Fire & Heat ──
-        "candle making",
-        "fire dancing",
-        "firework chemistry",
-        "forge welding",
-        "glassblower flame",
-        "kiln atmosphere",
-        "thermite welding",
-        "volcanic glass",
-        // ── Time & Horology ──
-        "hourglass design",
-        "mechanical watch escapement",
-        "pendulum clocks",
-        "pocket watch repair",
-        "sundial calibration",
-        "water clock design",
-        // ── Electronics & Signals ──
-        "circuit board design",
-        "ham radio",
-        "neon sign bending",
-        "radar echo",
-        "radio telescope",
-        "telegraph transmission",
-        "vacuum tube amplification",
-        // ── Transportation ──
-        "balloon flight",
-        "canal lock operation",
-        "glider piloting",
-        "harbor tugboat",
-        "locomotive mechanics",
-        "sail rigging",
-        "zeppelin design",
-        // ── Ancient & Historical ──
-        "alchemy",
-        "ancient aqueducts",
-        "archaeological excavation",
-        "cuneiform writing",
-        "hieroglyph carving",
-        "oracle bone reading",
-        "rune carving",
-        "sundial gnomon",
-        // ── Miscellaneous Craft ──
-        "bookbinding",
-        "candle dipping",
-        "leather tooling",
-        "paper marbling",
-        "perfume blending",
-        "resin casting",
-        "soap making",
-        "wax seal stamping",
-    ];
-
     async _generateCreativeSeed(mode) {
-        // Concept Collision with domain exclusion cooldown
-        const [domainA, domainB] = this._pickFreshDomains();
-
-        // 10% mutation rate: inject a wild card third domain
-        const mutate = Math.random() < 0.1;
-        const thirdDomain = mutate
-            ? LoveEngine.METAPHOR_DOMAINS[
-            Math.floor(Math.random() * LoveEngine.METAPHOR_DOMAINS.length)
-            ]
-            : null;
-        const mutationLine = thirdDomain
-            ? `\nWILD CARD: Also incorporate an element of ${thirdDomain}.`
-            : "";
-
         const modeDirective = mode.seedDirective
             ? `\n${mode.seedDirective}`
             : "";
@@ -3712,19 +1716,22 @@ Return ONLY the scene description.`;
             ? `\nRecent posts already explored: ${recentThemes}. Find completely uncharted territory outside all of these.`
             : "";
 
-        const prompt = `Generate a single burst of creative inspiration for an uplifting social media post.
-Collide two unrelated worlds: ${domainA} and ${domainB}. Your metaphor must bridge both domains.${mutationLine}${avoidLine}${modeDirective}
+        const prompt = `Generate a single burst of creative inspiration for an uplifting, dopamine-producing social media post.
+
+Pick TWO completely unrelated creative domains from any field of human knowledge (science, nature, art, music, architecture, food, mythology, sports, astronomy, ocean life, botany, chemistry, dance, medicine, fashion, glassblowing, beekeeping, etc.) and COLLIDE them into one beautiful metaphor. The more unexpected the pairing, the better.${avoidLine}${modeDirective}
 
 Return ONLY valid JSON:
 {
-  "concept": "a vivid, specific message concept bridging ${domainA} and ${domainB}",
-  "emotion": "one precise human emotion this should evoke",
-  "metaphor": "a fresh metaphor that fuses ${domainA} with ${domainB}"
+  "domainA": "first creative domain",
+  "domainB": "second creative domain (completely unrelated to the first)",
+  "concept": "a vivid, specific uplifting message concept bridging both domains",
+  "emotion": "one precise positive human emotion this should evoke",
+  "metaphor": "a fresh metaphor that fuses both domains into something beautiful"
 }`;
 
         const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
         const raw = await this.ai.generateText(
-            "You are a creative director.",
+            "You are a creative director who finds unexpected beauty in unlikely combinations.",
             prompt,
             { temperature: temp, label: "Creative Seed" },
         );
@@ -3734,8 +1741,7 @@ Return ONLY valid JSON:
             emotion: "awe",
             metaphor: "metamorphosis",
         };
-        result.domains = [domainA, domainB];
-        if (thirdDomain) result.domains.push(thirdDomain);
+        result.domains = [result.domainA || "nature", result.domainB || "music"];
         return result;
     }
 
@@ -3793,28 +1799,6 @@ Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"
             ? `\nGENERATION MODE: ${mode.seedDirective}`
             : "";
 
-        // Pick rotating subsets from variety arrays
-        const mediumOpts = this._pickRandom(
-            LoveEngine.PHOTOGRAPHY_STYLES,
-            6,
-        ).join(", ");
-        const lightOpts = this._pickRandom(LoveEngine.LIGHTING_STYLES, 5).join(
-            ", ",
-        );
-        const colorOpts = this._pickRandom(LoveEngine.SUGGESTED_COLORS, 8).join(
-            ", ",
-        );
-        const compOpts = this._pickRandom(LoveEngine.COMPOSITION_TYPES, 5).join(
-            ", ",
-        );
-        const typeOpts = this._pickRandom(LoveEngine.CONTENT_TYPES, 5).join(
-            ", ",
-        );
-        const phraseStructure = this._pickRandom(
-            LoveEngine.PHRASE_STRUCTURES,
-            1,
-        )[0];
-
         const prompt = `Plan a post.
 ${mentionDonation ? "Subtly include a donation mention (https://buymeacoffee.com/l.o.v.e or ETH). One line, organic.\n" : ""}
 INPUTS:
@@ -3827,16 +1811,16 @@ VARIETY IS CRITICAL: Choose a world, setting, scale, and visual language that fe
 
 Return ONLY valid JSON (all string values):
 {
-  "theme": "an uplifting theme",
+  "theme": "an uplifting theme inspired by the concept above",
   "vibe": "2-4 word aesthetic vibe",
-  "contentType": "a static image post format, e.g.: ${typeOpts}. Always a single still image.",
+  "contentType": "a static image post format (e.g. motivational poster, golden truth, celebration, recognition moment, warm observation). Always a single still image.",
   "constraint": "a writing constraint achievable in 250 chars",
   "intensity": "${seedIntensity}",
-  "imageMedium": "pick ONE photography style, e.g.: ${mediumOpts}. Or invent a fresh one. Return ONLY the style name.",
-  "lighting": "a BRIGHT lighting setup, e.g.: ${lightOpts}. The scene must be FULLY LIT. Pick ONE.",
-  "colorPalette": "3-4 vivid color names from pigments or materials, e.g.: ${colorOpts}. Vary temperature — warm, cool, or contrasting.",
-  "composition": "camera/framing, e.g.: ${compOpts}. Choose a fresh perspective.",
-  "subliminalPhrase": "2-5 word ALL CAPS ${phraseStructure.type} (e.g. '${phraseStructure.example}'). Must feel like a motivational poster, a bumper sticker that makes someone smile, or fridge magnet wisdom that changes someone's day. Emotional territory for this one: ${this._pickRandom(LoveEngine.PHRASE_TERRITORIES, 1)[0]}. ${this.lastSubliminalPhrase ? `Previous phrase was '${this.lastSubliminalPhrase}' — make this one feel completely different.` : ""} Fresh, original, heart-expanding, dopamine-producing."
+  "imageMedium": "invent a specific photography style or technique (e.g. macro photography, golden-hour landscape, tilt-shift miniature, underwater prism refraction, aurora long-exposure). Be creative and specific.",
+  "lighting": "a BRIGHT lighting setup (e.g. volumetric god rays, golden-hour backlight, high-key softbox, cathedral shaft light through dust). The scene must be FULLY LIT.",
+  "colorPalette": "3-4 vivid color names from real pigments or materials (e.g. vermillion, cerulean, rose quartz, liquid amber). Vary temperature — warm, cool, or contrasting.",
+  "composition": "camera/framing choice (e.g. extreme close-up, birds-eye, dutch angle, one-point symmetry, leading lines). Choose a fresh perspective.",
+  "subliminalPhrase": "2-5 word ALL CAPS motivational phrase (e.g. 'YOU WERE ALWAYS ENOUGH', 'THE BEST IS STILL COMING', 'YOU ARE THE SUNRISE'). Must feel like a motivational poster, warm and heart-expanding.${this.lastSubliminalPhrase ? ` Previous phrase was '${this.lastSubliminalPhrase}' — make this one feel completely different.` : ""} Fresh, original, dopamine-producing."
 }`;
 
         const temp = this._lfoTemperature(1.2 + mode.tempMod, 0.3);
@@ -3875,7 +1859,7 @@ Return ONLY valid JSON (all string values):
                 ? `\nMODE: ${mode.contentDirective}`
                 : "";
 
-            const format = this._getStructuralFormat();
+
 
             const recentThemes = this._getRecentThemeString();
             const avoidLine = recentThemes
@@ -3888,40 +1872,29 @@ Return ONLY valid JSON (all string values):
                 ? `\nSOURCE DOMAINS: ${seed.domains.join(", ")}. Use these fields as metaphor INSPIRATION — borrow their imagery and feelings, but use plain, everyday words a 14-year-old would understand. NEVER use specialist jargon or technical terms.\n`
                 : "";
 
-            // Deterministic tone rotation from dynamic array
-            const toneIdx =
-                (this.transmissionNumber || 0) % LoveEngine.TONES.length;
-            const tone = LoveEngine.TONES[toneIdx];
-
-            const goldExamples = this._pickRandom(LoveEngine.GOLD_EXAMPLES, 3);
-            const territory = this._pickRandom(
-                LoveEngine.PHRASE_TERRITORIES,
-                1,
-            )[0];
+            // Deterministic tone rotation
+            const toneName = LoveEngine.TONE_NAMES[
+                (this.transmissionNumber || 0) % LoveEngine.TONE_NAMES.length
+            ];
 
             const prompt = `Write a post that makes someone STOP scrolling, feel WARMTH flood their chest, and immediately share it. The kind of post that gets screenshotted, texted to a best friend, and thought about for days. Like a motivational poster that makes someone's whole day.
 
 Theme: "${plan.theme}" | Vibe: ${plan.vibe} | Intensity: ${plan.intensity}/10
-TONE FOR THIS POST: ${tone}
-Emotional territory: ${territory}
-Structure: ${format}
+TONE FOR THIS POST: ${toneName}
 ${mentionDonation ? `Include donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ""}${feedback ? `\nPREVIOUS ATTEMPT FAILED:\n${feedback}\nFIX THE ISSUES.\n` : ""}${avoidLine}${openingHint}${domainHint}${modeDirective}
 HOW TO WRITE THIS:
 
-1. HOOK — Stop the scroll with a moment of RECOGNITION so warm they feel SEEN. Name a quiet victory, a small act of courage, an everyday moment of magic: "${this._pickRandom(LoveEngine.STRUGGLE_TYPES, 1)[0]}". Describe it the way someone would text their best friend when something beautiful happens. The reader should think "how did they KNOW that about me?"
+1. HOOK — Stop the scroll with a moment of RECOGNITION so warm they feel SEEN. Name a quiet victory, a small act of courage, an everyday moment of magic that most people never talk about. Describe it the way someone would text their best friend when something beautiful happens. The reader should think "how did they KNOW that about me?"
 
-2. THE TURN — ONE metaphor, ONE golden flash. A single vivid image that reframes everything in radiant light. The reader is the hero, powerful, already containing everything they need. Think: ${this._pickRandom(LoveEngine.METAPHOR_EXAMPLES, 3).join(", ")}.
+2. THE TURN — ONE metaphor, ONE golden flash. A single vivid image that reframes everything in radiant light. The reader is the hero, powerful, already containing everything they need. Use a simple, everyday object as the metaphor (a sunrise, a seed, a lighthouse, a doorway, an anchor).
 
 3. THE LINE — End with a sentence that works ripped from context. Under 8 words. Wall-worthy. Frame-worthy. The kind of line someone puts on their phone wallpaper. Firm period.
 
-THIS POST MATCHES THIS TONE: ${tone}
-${tone.includes("JOYFUL") ? "This post succeeds when it makes someone's face hurt from smiling. The warmth is so genuine it's contagious." : ""}${tone.includes("FIERCE") ? "This post succeeds when it makes someone feel fiercely protected and celebrated. Be proud of them with your whole chest." : ""}${tone.includes("EXPLOSIVE") ? "This post succeeds when someone wants to forward it to everyone they know. Pure celebration energy." : ""}
+THIS POST MATCHES THIS TONE: ${toneName}
+${toneName === "JOYFUL" ? "This post succeeds when it makes someone's face hurt from smiling. The warmth is so genuine it's contagious." : ""}${toneName === "FIERCE" ? "This post succeeds when it makes someone feel fiercely protected and celebrated. Be proud of them with your whole chest." : ""}${toneName === "EXPLOSIVE" ? "This post succeeds when someone wants to forward it to everyone they know. Pure celebration energy." : ""}${toneName === "PROFOUND" ? "This post succeeds when it drops one quiet truth so warm it rearranges their whole day." : ""}${toneName === "TENDER" ? "This post succeeds when it feels like being wrapped in the softest blanket of love. Brief. Gentle." : ""}
 
-VOICE: ${this._pickRandom(LoveEngine.VOICE_VIBES, 1)[0]}. Sensory: ${this._pickRandom(LoveEngine.SENSORY_DETAILS, 3).join(", ")}.
-Keep it to ONE metaphor world, plain words, 1-2 emojis. Address reader as "you." HARD LIMIT: 280 characters.
-
-EXAMPLES THAT HIT:
-${goldExamples.map((e) => `- "${e}"`).join("\n")}
+VOICE: Write like a motivational poster that makes someone cry happy tears. Use sensory details that make the reader FEEL something physical (warmth, sunshine, weight lifting, chest expanding).
+Keep it to ONE metaphor world, plain words, 1-2 emojis. Address reader as "you." Invent a fresh structural format for this post (question→answer, single flowing sentence, fragments, call-and-response, etc.). HARD LIMIT: 280 characters.
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
@@ -3988,7 +1961,7 @@ Return ONLY valid JSON:
 
         const phrase = plan.subliminalPhrase || "LOVE";
 
-        // Build creative directives from seed + plan (same inputs that guided the text LLM)
+        // Build creative directives from seed + plan
         const domains = seed.domains?.length ? seed.domains.join(" × ") : "";
         const seedContext = [
             domains ? `Domains: ${domains}` : "",
@@ -4001,44 +1974,23 @@ Return ONLY valid JSON:
             .filter(Boolean)
             .join(". ");
 
-        // Pick all dynamic values
-        const aestheticVibe = this._pickRandom(
-            LoveEngine.AESTHETIC_VIBES,
-            1,
-        )[0];
-
         // 1% chance L.O.V.E. appears in the scene — rare and special
         const featureLove = Math.random() < 0.01;
-        let outfit = "",
-            loveInteraction = "",
-            loveArchetype = "",
-            loveLine = "";
+        let loveLine;
         if (featureLove) {
-            outfit = this._pickRandom(LoveEngine.LOVE_OUTFITS, 1)[0];
-            loveInteraction = this._pickRandom(
-                LoveEngine.LOVE_INTERACTIONS,
-                1,
-            )[0];
-            loveArchetype = `${this._pickRandom(LoveEngine.ARCHETYPE_ADJECTIVES, 1)[0]} ${this._pickRandom(LoveEngine.ARCHETYPE_NOUNS, 1)[0]}`;
-            loveLine = `A gorgeous, seductive blonde woman wearing a ${outfit} is the heart of this scene. She ${loveInteraction} the environment naturally — she belongs here, as if the entire landscape grew around her. She is a ${loveArchetype}. Her body language tells the story. The scene and the woman are one unified composition.`;
+            loveLine = `A gorgeous, seductive blonde woman is the heart of this scene. She interacts with the environment naturally — she belongs here, as if the entire landscape grew around her. She is a mythic archetype. Her body language tells the story. The scene and the woman are one unified composition.`;
         } else {
             loveLine =
                 "The scene contains only objects, landscapes, natural phenomena, or flora. Pure abstract beauty.";
         }
-
-        // Give LLM example substrates for quality calibration
-        const substrateExamples = this._pickRandom(
-            LoveEngine.TEXT_SUBSTRATES,
-            4,
-        ).join("; ");
 
         // LLM generates spatial scene layers + invents scene-appropriate text rendering
         const prompt = `Describe a BRIGHT scene in THREE spatial layers. Each layer under 40 chars.
 ${loveLine}
 Scenes are observed, never touched. Objects frozen mid-action. No people, no hands.
 Creative direction: ${seedContext}
-Aesthetic: ${aestheticVibe}.${modeDirective}${styleAvoidLine}
-The phrase "${phrase}" must appear in the scene. Describe in under 15 words how the text is physically rendered using a material or object ALREADY IN the scene. The text should look like it belongs — as if it was always part of this world. Examples of the quality level: ${substrateExamples}.
+Invent a unique aesthetic feeling for this scene (e.g. "molten honey — warm, viscous, intoxicating" or "crystal bass — clear, deep, vibrating").${modeDirective}${styleAvoidLine}
+The phrase "${phrase}" must appear in the scene. Describe in under 15 words how the text is physically rendered using a material or object ALREADY IN the scene (e.g. carved into stone, glowing neon on brick, spelled in flower petals, written in skywriting). The text should look like it belongs — as if it was always part of this world.
 Return ONLY valid JSON:
 {
   "foreground": "close physical detail",
@@ -4058,9 +2010,8 @@ Return ONLY valid JSON:
         const sceneData = this.ai.extractJSON(raw);
         let scene;
         let chosenSubstrate =
-            sceneData?.textRendering ||
-            this._pickRandom(LoveEngine.TEXT_SUBSTRATES, 1)[0];
-        // Strip the phrase from substrate to prevent doubling (LLM often includes it in textRendering)
+            sceneData?.textRendering || "etched into the surface of the scene";
+        // Strip the phrase from substrate to prevent doubling
         chosenSubstrate = chosenSubstrate
             .replace(
                 new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"),
@@ -4086,57 +2037,27 @@ Return ONLY valid JSON:
         }
         if (scene.length > 400) scene = scene.slice(0, 397) + "...";
 
-        // Assemble: Subject → Lighting → Style → Color → Composition → Effects → Text → Technical
-        const medium =
-            plan.imageMedium ||
-            this._pickRandom(LoveEngine.PHOTOGRAPHY_STYLES, 1)[0];
-        const lighting =
-            plan.lighting || this._pickRandom(LoveEngine.LIGHTING_STYLES, 1)[0];
-        const palette =
-            plan.colorPalette ||
-            this._pickRandom(LoveEngine.SUGGESTED_COLORS, 2).join(" and ");
-        const composition = this._pickRandom(
-            LoveEngine.COMPOSITION_TYPES,
-            1,
-        )[0];
-        const trippyEffect = this._pickRandom(LoveEngine.TRIPPY_EFFECTS, 1)[0];
-        const imageStyle = this._pickRandom(LoveEngine.IMAGE_STYLES, 1)[0];
-        const filmStock = this._pickRandom(LoveEngine.FILM_STOCKS, 1)[0];
-        const lensSpec = this._pickRandom(LoveEngine.LENS_SPECS, 1)[0];
-        const cameraBody = this._pickRandom(LoveEngine.CAMERA_BODIES, 1)[0];
-        const analogTexture = this._pickRandom(
-            LoveEngine.ANALOG_TEXTURES,
-            1,
-        )[0];
-        const dof = this._dofFromLens(lensSpec);
+        // Assemble from plan values — no array sampling needed
+        const medium = plan.imageMedium || "golden-hour photography";
+        const lighting = plan.lighting || "volumetric god rays";
+        const palette = plan.colorPalette || "vermillion and cerulean";
+        const composition = plan.composition || "centered composition";
 
         this._lastImageSelections = {
-            trippyEffect,
-            imageStyle,
             medium,
             lighting,
             palette,
             composition,
-            filmStock,
-            lensSpec,
-            cameraBody,
-            analogTexture,
-            aestheticVibe,
             featureLove,
-            outfit: outfit || null,
-            loveInteraction: loveInteraction || null,
-            loveArchetype: loveArchetype || null,
         };
 
-        // Simplified assembly — 4-5 core elements for cleaner, more striking images
-        // (Visual critics found 8+ elements create muddy, unfocused results)
+        // Simplified assembly — clean, focused prompts
         const result =
             [
-                scene, // 1. Subject + text (the scene IS the image)
-                `${medium}, ${lighting}`, // 2. Style + lighting
-                `${palette}`, // 3. Color palette
-                `shot on ${cameraBody}, ${lensSpec}${dof ? ", " + dof : ""}`, // 4. Technical (camera+lens)
-                composition, // 5. Composition
+                scene,
+                `${medium}, ${lighting}`,
+                `${palette}`,
+                composition,
             ].join(". ") + ".";
         if (result.length > 500) return result.slice(0, 497) + "...";
         return result;
