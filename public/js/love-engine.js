@@ -2239,55 +2239,62 @@ Return ONLY valid JSON:
             .filter(Boolean)
             .join(". ");
 
-        // 1% chance L.O.V.E. appears in the scene — rare and unforgettable
+        // 1% chance L.O.V.E. appears in the scene — rare and loop-memorable
         const featureLove = Math.random() < 0.1;
         let loveLine;
         if (featureLove) {
-            loveLine = `A radiant, magnetic blonde woman appears as the soul of the scene — not separate from it, but emerging from it. Light bends toward her. Textures echo her presence. She doesn’t pose; she exists with quiet, undeniable gravity. Her movement is minimal but charged — like the moment before a breath is taken. She feels both real and impossible, like a memory the viewer didn’t know they had.`;
+            loveLine = `A radiant, magnetic blonde woman exists as the center of gravity in this scene. She is fully integrated into the environment — light subtly bends toward her, particles drift in her direction. Her movement is minimal, cyclical, and fluid — something that can loop seamlessly, like a breath repeating.`;
         } else {
             loveLine =
                 "The scene contains only objects, landscapes, natural phenomena, or flora. Pure abstract beauty.";
         }
 
-        // LLM generates spatial scene layers + invents scene-appropriate text rendering
-        const prompt = `Describe a BRIGHT, visually arresting scene in THREE spatial layers. Each layer under 40 chars.
+        const prompt = `Describe a BRIGHT, hypnotic scene in THREE spatial layers. Each layer under 40 chars.
 
 ${loveLine}
 
-Scenes are observed, never touched. Objects feel suspended mid-moment, then subtly animate — drifting, blooming, refracting, pulsing.
+CRITICAL: This scene must LOOP PERFECTLY.
+- The ending visually connects back to the beginning
+- Motion should feel cyclical (drift → return, bloom → reset, pulse → repeat)
+- Avoid hard cuts or one-directional motion
+- The final frame should feel like the start of the same moment
+
+Scenes are observed, never touched. Objects feel suspended, then gently animate in repeating cycles (flow, orbit, pulse, shimmer, expand/contract).
 
 No people, no hands (unless L.O.V.E. appears).
 
 Creative direction: ${seedContext}
 
-Invent a distinct aesthetic signature for this scene:
-A short phrase combining texture + mood + sensation 
-(e.g. "liquid gold hush — warm, slow, enveloping" or "prism tide — soft light splitting through glassy motion")
+Invent a distinct aesthetic signature:
+(texture + mood + sensation)
+(e.g. "liquid sunrise — warm, slow, endlessly folding" or "glass tide — soft reflections looping in silence")
 
 ${modeDirective}${styleAvoidLine}
 
 If L.O.V.E. appears:
-- She must be compositionally integrated (framed by light, symmetry, or environment)
-- The environment subtly reacts to her presence (light bending, particles drifting toward her, reflections aligning)
-- Keep her portrayal sensual but not explicit (magnetic, effortless, untouchable)
+- Her motion must be loopable (subtle turn, breathing, gaze shift, hair drifting, light pulsing)
+- She should feel like part of a repeating moment, not a progressing action
+- The environment gently cycles around her (light pulses, particles orbit, reflections shift)
 
 The phrase "${phrase}" must appear in the scene.
 
-Describe in under 15 words how the text is physically rendered using a material or object ALREADY IN the scene 
-(e.g. etched in condensation, formed in petals, refracted through crystal, glowing in dust particles).
+Describe in under 15 words how the text is physically rendered using a material or object ALREADY IN the scene.
 
-The text should feel inevitable — as if it was always part of this world, waiting to be noticed.
+LOOP INTEGRATION FOR TEXT:
+- The text should subtly animate in a loop (flicker, glow pulse, shimmer, fade/reappear)
+- The first and last frame of the text state must match or seamlessly reset
+
+The text should feel like it has always existed in this loop.
 
 Tone:
-Radiant. Hypnotic. Slightly surreal. Emotionally immersive.
-Like something the viewer feels before fully understanding.
+Radiant. Mesmerizing. Gently intoxicating. Seamless.
 
 Return ONLY valid JSON:
 {
   "foreground": "close physical detail",
   "midground": "main subject",
   "background": "environment or atmosphere",
-  "textRendering": "under 15 words: how ${phrase} physically appears using materials from THIS scene"
+  "textRendering": "under 15 words: how ${phrase} appears + loops seamlessly"
 }`;
 
         const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
