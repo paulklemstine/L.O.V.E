@@ -167,7 +167,7 @@ export class PollinationsClient {
     const encoded = encodeURIComponent(fullPrompt);
 
     const buildUrl = (m) => {
-      let url = `${IMAGE_URL}/${encoded}?model=${m}&width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=false`;
+      let url = `${IMAGE_URL}/${encoded}?model=${m}&width=${width}&height=${height}&seed=${seed}&nologo=true&safe=false&enhance=false`;
       if (negativePrompt) url += `&negative=${encodeURIComponent(negativePrompt)}`;
       return url;
     };
@@ -281,12 +281,12 @@ export class PollinationsClient {
     if (codeBlockMatch) text = codeBlockMatch[1].trim();
 
     // Try direct parse
-    try { return JSON.parse(text); } catch {}
+    try { return JSON.parse(text); } catch { }
 
     // Try to find JSON object
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      try { return JSON.parse(jsonMatch[0]); } catch {}
+      try { return JSON.parse(jsonMatch[0]); } catch { }
     }
 
     return null;
