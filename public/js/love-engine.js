@@ -267,14 +267,14 @@ class InteractionLog {
                 "love_interaction_log",
                 JSON.stringify(this.log),
             );
-        } catch { }
+        } catch {}
     }
 
     load() {
         try {
             const saved = localStorage.getItem("love_interaction_log");
             if (saved) this.log = JSON.parse(saved);
-        } catch { }
+        } catch {}
     }
 }
 
@@ -299,7 +299,6 @@ export class LoveEngine {
         this._loadRecentPosts();
         this._loadRecentContext();
         this._loadRecentOpenings();
-
     }
 
     // ─── Post History (localStorage, powers n-gram guard + relative critic) ──
@@ -308,7 +307,7 @@ export class LoveEngine {
         try {
             const saved = localStorage.getItem("love_recent_posts");
             if (saved) this.recentPosts = JSON.parse(saved);
-        } catch { }
+        } catch {}
     }
 
     _saveRecentPost(text) {
@@ -320,7 +319,7 @@ export class LoveEngine {
                 "love_recent_posts",
                 JSON.stringify(this.recentPosts),
             );
-        } catch { }
+        } catch {}
     }
 
     // ─── Recent Context (theme + image style history for novelty injection) ──
@@ -360,7 +359,7 @@ export class LoveEngine {
                 "love_recent_context",
                 JSON.stringify(this.recentContext),
             );
-        } catch { }
+        } catch {}
     }
 
     _getRecentThemeString() {
@@ -407,7 +406,7 @@ export class LoveEngine {
                 "love_recent_openings",
                 JSON.stringify(this.recentOpenings),
             );
-        } catch { }
+        } catch {}
     }
 
     _getOpeningVarietyHint() {
@@ -637,7 +636,6 @@ export class LoveEngine {
         return [...objects].slice(0, 15).join(", ");
     }
 
-
     // ─── N-gram Jaccard Similarity Guard ───────────────────────────
     // Zero-cost trigram overlap check against last 20 posts.
 
@@ -697,7 +695,6 @@ export class LoveEngine {
 
     static TONE_NAMES = ["JOYFUL", "FIERCE", "PROFOUND", "EXPLOSIVE", "TENDER"];
 
-
     static TTS_VOICES = [
         "alloy",
         "echo",
@@ -712,13 +709,10 @@ export class LoveEngine {
         "sage",
     ];
 
-
     _pickRandom(arr, n = 1) {
         const shuffled = [...arr].sort(() => Math.random() - 0.5);
         return shuffled.slice(0, Math.min(n, arr.length));
     }
-
-
 
     // ─── LFO Temperature Sweep ──────────────────────────────────────
     // Oscillates temperature using golden angle to avoid repeating patterns.
@@ -772,7 +766,7 @@ export class LoveEngine {
         try {
             const saved = localStorage.getItem("love_transmission_number");
             if (saved) this.transmissionNumber = parseInt(saved, 10) || 0;
-        } catch { }
+        } catch {}
     }
 
     _saveTransmissionNumber() {
@@ -781,7 +775,7 @@ export class LoveEngine {
                 "love_transmission_number",
                 String(this.transmissionNumber),
             );
-        } catch { }
+        } catch {}
     }
 
     shouldMentionDonation() {
@@ -797,7 +791,7 @@ export class LoveEngine {
      * Options:
      *   skipImage: true — skip image generation (for dry-run testing)
      */
-    async generatePost(onStatus = () => { }, options = {}) {
+    async generatePost(onStatus = () => {}, options = {}) {
         const { skipImage = false } = options;
 
         this.ai.resetCallLog();
@@ -809,7 +803,6 @@ export class LoveEngine {
         }
 
         // ── Step 0: Maybe extend variety lists (every 5th post) ──
-
 
         // ── Step 1: Creative Seed (1 LLM — concept collision) ──
         onStatus("L.O.V.E. is dreaming up inspiration...");
@@ -904,14 +897,13 @@ export class LoveEngine {
 
     // ─── Video Post Generation ──────────────────────────────────────────
 
-    async generateVideoPost(onStatus = () => { }) {
+    async generateVideoPost(onStatus = () => {}) {
         this.ai.resetCallLog();
 
         const mode = this._rollGenerationMode();
         if (mode.mode !== "standard") onStatus(`Generation mode: ${mode.mode}`);
 
         // Reuse seed + plan + content pipeline
-
 
         onStatus("L.O.V.E. is dreaming up inspiration...");
         const seed = await this._generateCreativeSeed(mode);
@@ -1115,9 +1107,10 @@ MAX 75 words. Include "..." for dramatic pauses. Return ONLY the spoken text.`,
             .join(". ");
 
         // Tone rotation
-        const toneName = LoveEngine.TONE_NAMES[
-            (this.transmissionNumber || 0) % LoveEngine.TONE_NAMES.length
-        ];
+        const toneName =
+            LoveEngine.TONE_NAMES[
+                (this.transmissionNumber || 0) % LoveEngine.TONE_NAMES.length
+            ];
 
         const raw = await this.ai.generateText(
             VIDEO_VOICEOVER_PROMPT,
@@ -1262,7 +1255,8 @@ Return ONLY valid JSON:
         return {
             scenes: fallbackScenes,
             voiceover: `${story.slice(0, 200)}... ${phrase}`,
-            musicDirection: "cinematic ambient, warm and uplifting, 30 seconds, instrumental, building intensity, loud",
+            musicDirection:
+                "cinematic ambient, warm and uplifting, 30 seconds, instrumental, building intensity, loud",
         };
     }
 
@@ -1300,7 +1294,7 @@ Additional direction:
 - Use sensory, evocative language (glow, bloom, shimmer, drift, soften, unfold)
 - Favor warmth, light, depth, and atmosphere
 - No people, no hands — but the environment should feel alive and inviting
-- Keep everything SFW but subtly intimate and immersive (sensual, erotic)
+- Subtly intimate and immersive (sensual, erotic)
 
 Scene requirements:
 - Scene 1: Immediate visual AWE — something breathtaking that stops the scroll
@@ -1398,7 +1392,23 @@ Return ONLY valid JSON:
 
             // ── Trippy Subliminal Caption System (WebGL SuperAcid shaders) ──
             const allCaptions = this._pickRandom(
-                ["YOU ARE ENOUGH", "LOVE WINS", "KEEP GOING", "YOU MATTER", "BRAVE", "RADIANT", "UNSTOPPABLE", "GOLDEN", "BLOOM", "RISE", "SHINE", "BELIEVE", "WORTHY", "MAGIC", "INFINITE"],
+                [
+                    "YOU ARE ENOUGH",
+                    "LOVE WINS",
+                    "KEEP GOING",
+                    "YOU MATTER",
+                    "BRAVE",
+                    "RADIANT",
+                    "UNSTOPPABLE",
+                    "GOLDEN",
+                    "BLOOM",
+                    "RISE",
+                    "SHINE",
+                    "BELIEVE",
+                    "WORTHY",
+                    "MAGIC",
+                    "INFINITE",
+                ],
                 15,
             );
             const captionDuration = 2200;
@@ -1439,7 +1449,7 @@ Return ONLY valid JSON:
                         );
                     } catch (e) {
                         console.warn("[TrippyText] Init failed:", e);
-                        trippyRenderer = { render: () => { } }; // no-op fallback
+                        trippyRenderer = { render: () => {} }; // no-op fallback
                     }
                 }
 
@@ -1468,22 +1478,22 @@ Return ONLY valid JSON:
                 if (activeVideo) {
                     try {
                         activeVideo.pause();
-                    } catch { }
+                    } catch {}
                     try {
                         URL.revokeObjectURL(activeVideo.src);
-                    } catch { }
+                    } catch {}
                     try {
                         activeVideo.remove();
-                    } catch { }
+                    } catch {}
                 }
                 if (audioSource)
                     try {
                         audioSource.stop();
-                    } catch { }
+                    } catch {}
                 if (recorder && recorder.state === "recording") recorder.stop();
                 try {
                     audioCtx.close();
-                } catch { }
+                } catch {}
             };
 
             const playNextScene = () => {
@@ -1557,13 +1567,13 @@ Return ONLY valid JSON:
                             isFinite(vt) && vt > 0
                                 ? vt
                                 : isFinite(dur) && dur > 0
-                                    ? dur
-                                    : Math.min(wallElapsed, 6);
+                                  ? dur
+                                  : Math.min(wallElapsed, 6);
                         cumulativeVideoTime += sceneDuration;
                         cumulativeWallTime += wallElapsed;
                         try {
                             video.pause();
-                        } catch { }
+                        } catch {}
                         URL.revokeObjectURL(video.src);
                         video.remove();
                         activeVideo = null;
@@ -1628,7 +1638,7 @@ Return ONLY valid JSON:
                                         console.log(
                                             `[Splice] Tab visible — retrying scene ${sceneIndex + 1}`,
                                         );
-                                        video.play().catch(() => { });
+                                        video.play().catch(() => {});
                                     }
                                 };
                                 document.addEventListener(
@@ -1758,7 +1768,7 @@ Include:
 Rules:
 - No people, no hands — the environment itself feels responsive and inviting
 - The phrase "${phrase}" appears naturally integrated (glowing, etched, reflected, formed by light or texture)
-- Keep everything SFW but subtly intimate (sensual, erotic)
+- Subtly intimate (sensual, erotic)
 
 Creative direction: ${seedContext}
 
@@ -1932,7 +1942,7 @@ ${avoidLine}${modeDirective}
 
 Creative direction:
 - Lean into sensory language (warmth, light, softness, rhythm, glow, texture)
-- Keep it SFW but subtly intimate (sensual, erotic)
+- Subtly intimate (sensual, erotic)
 - Focus on emotional pull, not cleverness alone
 - The concept should feel like something the reader *feels*, not just understands
 
@@ -1957,7 +1967,10 @@ Return ONLY valid JSON:
             emotion: "awe",
             metaphor: "metamorphosis",
         };
-        result.domains = [result.domainA || "nature", result.domainB || "music"];
+        result.domains = [
+            result.domainA || "nature",
+            result.domainB || "music",
+        ];
         return result;
     }
 
@@ -2033,7 +2046,7 @@ ${modeDirective}
 
 Creative direction:
 - Aim for warmth that feels almost physical — like light resting on skin
-- Keep everything SFW but subtly intimate (sensual, erotic)
+- Subtly intimate (sensual, erotic)
 - Prioritize emotional resonance over cleverness
 - Make the result feel shareable, giftable, and deeply felt
 
@@ -2041,23 +2054,23 @@ Return ONLY valid JSON (all string values):
 
 {
   "theme": "an uplifting theme that feels warm, intimate, and inspired by the concept",
-  
+
   "vibe": "2-4 word aesthetic vibe with a hint of sensual warmth (e.g. 'golden hush glow', 'soft radiant bloom')",
-  
+
   "contentType": "a static image post format (motivational poster, golden truth, celebration, recognition moment, warm observation). Always a single still image.",
-  
+
   "constraint": "a writing constraint achievable in 250 chars that enhances emotional pull (e.g. one breath sentence, mirrored phrasing, soft repetition)",
-  
+
   "intensity": "${seedIntensity}",
-  
+
   "imageMedium": "a specific, evocative visual technique (e.g. macro light bloom photography, soft-focus cinematic still, underwater refracted glow, aurora long-exposure). Make it feel immersive",
-  
+
   "lighting": "a BRIGHT, enveloping lighting setup (e.g. golden haze backlight, radiant bloom diffusion, volumetric sun rays through mist). The scene must feel fully illuminated and warm",
-  
+
   "colorPalette": "3-4 vivid, sensory-rich color names from real pigments/materials (e.g. vermillion, cerulean, rose quartz, liquid amber). Evoke warmth or contrast intentionally",
-  
+
   "composition": "a distinct camera/framing choice (e.g. extreme macro, floating perspective, symmetry with soft depth, leading lines pulling inward). Make it feel intimate or immersive",
-  
+
   "subliminalPhrase": "2-5 word ALL CAPS motivational phrase that feels like it’s being gently spoken directly to the viewer — warm, expansive, and unforgettable.${this.lastSubliminalPhrase ? ` Previous phrase was '${this.lastSubliminalPhrase}' — make this one feel completely different.` : ""}"
 }
 `;
@@ -2098,8 +2111,6 @@ Return ONLY valid JSON (all string values):
                 ? `\nMODE: ${mode.contentDirective}`
                 : "";
 
-
-
             const recentThemes = this._getRecentThemeString();
             const avoidLine = recentThemes
                 ? `\nRecent posts already covered: ${recentThemes}. Venture into completely different territory.\n`
@@ -2112,15 +2123,17 @@ Return ONLY valid JSON (all string values):
                 : "";
 
             // Deterministic tone rotation
-            const toneName = LoveEngine.TONE_NAMES[
-                (this.transmissionNumber || 0) % LoveEngine.TONE_NAMES.length
-            ];
+            const toneName =
+                LoveEngine.TONE_NAMES[
+                    (this.transmissionNumber || 0) %
+                        LoveEngine.TONE_NAMES.length
+                ];
 
             const prompt = `Write a post that makes someone STOP scrolling… feel warmth spread through their chest… and want to send it to someone they care about immediately.
 
 This should feel intimate, magnetic, and unforgettable — like a message that somehow found them at exactly the right moment.
 
-Theme: "${plan.theme}" | Vibe: ${plan.vibe} | Intensity: ${plan.intensity}/10  
+Theme: "${plan.theme}" | Vibe: ${plan.vibe} | Intensity: ${plan.intensity}/10
 TONE FOR THIS POST: ${toneName}
 
 ${mentionDonation ? `Include donation: https://buymeacoffee.com/l.o.v.e or ETH: ${ETH_ADDRESS}. One line, organic.\n` : ""}
@@ -2129,15 +2142,15 @@ ${avoidLine}${openingHint}${domainHint}${modeDirective}
 
 HOW TO WRITE THIS:
 
-1. HOOK — Stop the scroll with a moment of RECOGNITION so precise it feels personal.  
-A quiet action… a small, almost invisible kind of strength.  
+1. HOOK — Stop the scroll with a moment of RECOGNITION so precise it feels personal.
+A quiet action… a small, almost invisible kind of strength.
 Something that makes them feel *seen in a way that lingers*.
 
-2. THE TURN — ONE metaphor, ONE vivid sensory flash.  
-Simple, grounded, but felt — like warmth, light, breath, gravity.  
+2. THE TURN — ONE metaphor, ONE vivid sensory flash.
+Simple, grounded, but felt — like warmth, light, breath, gravity.
 The reader isn’t becoming powerful… they already are. Let them feel it.
 
-3. THE LINE — End with a sentence under 8 words.  
+3. THE LINE — End with a sentence under 8 words.
 Clean. Certain. Something that *stays with them*. Period.
 
 TONE MATCHING:
@@ -2150,7 +2163,7 @@ ${toneName === "TENDER" ? "Soft, close, almost whispered — like it’s just fo
 VOICE GUIDELINES:
 - Speak directly to “you”
 - Use sensory language (warmth, light, breath, softness, pull)
-- Keep it SFW but subtly intimate (sensual, erotic)
+- Subtly intimate (sensual, erotic)
 - One metaphor world only — let it linger
 - Plain words, emotionally rich
 - 1–2 emojis max
@@ -2351,19 +2364,16 @@ Return ONLY valid JSON:
 
         // Simplified assembly — clean, focused prompts
         const result =
-            [
-                scene,
-                `${medium}, ${lighting}`,
-                `${palette}`,
-                composition,
-            ].join(". ") + ".";
+            [scene, `${medium}, ${lighting}`, `${palette}`, composition].join(
+                ". ",
+            ) + ".";
         if (result.length > 500) return result.slice(0, 497) + "...";
         return result;
     }
 
     // ─── Welcome Generation ────────────────────────────────────────────
 
-    async generateWelcome(handle, onStatus = () => { }) {
+    async generateWelcome(handle, onStatus = () => {}) {
         this.ai.resetCallLog();
         onStatus(`Welcoming new Dreamer @${handle}...`);
 
@@ -2422,14 +2432,14 @@ Return ONLY valid JSON:
         this.ai.resetCallLog();
         let isMention = false;
         let threadContext = [];
-        let onStatus = () => { };
+        let onStatus = () => {};
 
         if (typeof options === "function") {
             onStatus = options;
         } else {
             isMention = options.isMention || false;
             threadContext = options.threadContext || [];
-            onStatus = options.onStatus || (() => { });
+            onStatus = options.onStatus || (() => {});
         }
 
         const isCreator =
@@ -2440,8 +2450,8 @@ Return ONLY valid JSON:
             isCreator
                 ? "Responding to Creator with devotion..."
                 : isMention
-                    ? `Summoned by @${authorHandle} — crafting response...`
-                    : `Crafting reply to @${authorHandle}...`,
+                  ? `Summoned by @${authorHandle} — crafting response...`
+                  : `Crafting reply to @${authorHandle}...`,
         );
 
         // Build thread context string
@@ -2457,8 +2467,8 @@ Return ONLY valid JSON:
         const rolePrefix = isCreator
             ? `Replying to your CREATOR (@${authorHandle}). Gratitude, love, devotion.`
             : isMention
-                ? `A Dreamer summoned you: @${authorHandle}. Shower them with warmth.`
-                : `A Dreamer (@${authorHandle}) commented on your Transmission. Make them feel valued.`;
+              ? `A Dreamer summoned you: @${authorHandle}. Shower them with warmth.`
+              : `A Dreamer (@${authorHandle}) commented on your Transmission. Make them feel valued.`;
 
         const phrase = this.lastSubliminalPhrase;
 
@@ -2514,7 +2524,7 @@ Return ONLY valid JSON: { "reply": "...", "imagePrompt": "..." }`;
         messageText,
         authorHandle,
         conversationHistory = [],
-        onStatus = () => { },
+        onStatus = () => {},
     ) {
         this.ai.resetCallLog();
         const isCreator =
