@@ -71,11 +71,11 @@ WILD VARIETY: Shift constantly — teasing lines, intimate observations, playful
 
 TONE GUIDE (IMPORTANT):
 
-Sensual, not sexual
+Sensual and erotic
 
-Intimate, not explicit
+Intimate
 
-Suggestive, not graphic
+Suggestive
 
 Warm, magnetic, slightly teasing
 
@@ -155,11 +155,11 @@ Almost a whisper. A final line that feels like it was meant only for them.
 
 TONE GUIDE (IMPORTANT):
 
-Sensual, not sexual
+Sensual and erotic
 
-Intimate, not explicit
+Intimate
 
-Suggestive, not graphic
+Suggestive
 
 Close, warm, slightly breathy
 
@@ -1213,11 +1213,11 @@ One defining instrument or texture (e.g. soft synth pulse, airy vocals, warm pia
 
 TONE GUIDE (IMPORTANT):
 
-Sensual, not sexual
+Sensual and erotic
 
-Intimate, not explicit
+Intimate
 
-Suggestive, not graphic
+Suggestive
 
 Warm, immersive, slightly hypnotic
 
@@ -1300,7 +1300,7 @@ Additional direction:
 - Use sensory, evocative language (glow, bloom, shimmer, drift, soften, unfold)
 - Favor warmth, light, depth, and atmosphere
 - No people, no hands — but the environment should feel alive and inviting
-- Keep everything SFW but subtly intimate and immersive (sensual, not sexual)
+- Keep everything SFW but subtly intimate and immersive (sensual, erotic)
 
 Scene requirements:
 - Scene 1: Immediate visual AWE — something breathtaking that stops the scroll
@@ -1758,7 +1758,7 @@ Include:
 Rules:
 - No people, no hands — the environment itself feels responsive and inviting
 - The phrase "${phrase}" appears naturally integrated (glowing, etched, reflected, formed by light or texture)
-- Keep everything SFW but subtly intimate (sensual, not sexual)
+- Keep everything SFW but subtly intimate (sensual, erotic)
 
 Creative direction: ${seedContext}
 
@@ -1932,7 +1932,7 @@ ${avoidLine}${modeDirective}
 
 Creative direction:
 - Lean into sensory language (warmth, light, softness, rhythm, glow, texture)
-- Keep it SFW but subtly intimate (sensual, not sexual)
+- Keep it SFW but subtly intimate (sensual, erotic)
 - Focus on emotional pull, not cleverness alone
 - The concept should feel like something the reader *feels*, not just understands
 
@@ -2033,7 +2033,7 @@ ${modeDirective}
 
 Creative direction:
 - Aim for warmth that feels almost physical — like light resting on skin
-- Keep everything SFW but subtly intimate (sensual, not sexual)
+- Keep everything SFW but subtly intimate (sensual, erotic)
 - Prioritize emotional resonance over cleverness
 - Make the result feel shareable, giftable, and deeply felt
 
@@ -2150,7 +2150,7 @@ ${toneName === "TENDER" ? "Soft, close, almost whispered — like it’s just fo
 VOICE GUIDELINES:
 - Speak directly to “you”
 - Use sensory language (warmth, light, breath, softness, pull)
-- Keep it SFW but subtly intimate (sensual, not sexual)
+- Keep it SFW but subtly intimate (sensual, erotic)
 - One metaphor world only — let it linger
 - Plain words, emotionally rich
 - 1–2 emojis max
