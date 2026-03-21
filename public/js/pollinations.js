@@ -160,7 +160,7 @@ export class PollinationsClient {
     let fullPrompt = prompt;
     if (subliminalText) {
       fullPrompt += ` Seamlessly integrate the text "${subliminalText}" into the scene, `
-        + `matching the art style naturally. Visible but not overpowering.`;
+        + `matching the art style naturally. Visible but not overpowering. Erotic and sensual.`;
     }
 
     const seed = Math.floor(Math.random() * 2147483647);
