@@ -160,10 +160,11 @@ export class PollinationsClient {
     let fullPrompt = prompt;
     if (subliminalText) {
       fullPrompt += ` Seamlessly integrate the text "${subliminalText}" into the scene, `
-        + `matching the art style naturally. Visible but not overpowering. Erotic and sensual.`;
+        + `matching the art style naturally. Visible but not overpowering.`;
     }
 
     const seed = Math.floor(Math.random() * 2147483647);
+    fullPrompt = `Very erotic and sensual: ${fullPrompt}`;
     const encoded = encodeURIComponent(fullPrompt);
 
     const buildUrl = (m) => {
