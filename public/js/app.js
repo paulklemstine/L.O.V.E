@@ -187,6 +187,7 @@ function loadSettings() {
       document.getElementById('bsky-handle').value = s.handle || '';
       document.getElementById('bsky-password').value = s.password || '';
       document.getElementById('pollinations-key').value = s.pollinationsKey || 'pk_nxM10AP0L7y8AX1I';
+      document.getElementById('video-enabled').checked = s.videoEnabled ?? false;
       log('Settings loaded from localStorage.');
     } catch {
       log('Failed to parse saved settings.');
@@ -201,13 +202,14 @@ function saveSettings() {
   const handle = document.getElementById('bsky-handle').value.trim();
   const password = document.getElementById('bsky-password').value.trim();
   const pollinationsKey = document.getElementById('pollinations-key').value.trim();
+  const videoEnabled = document.getElementById('video-enabled').checked;
 
   if (!handle || !password) {
     log('ERROR: Bluesky handle and password are required.');
     return;
   }
 
-  localStorage.setItem('love_settings', JSON.stringify({ handle, password, pollinationsKey }));
+  localStorage.setItem('love_settings', JSON.stringify({ handle, password, pollinationsKey, videoEnabled }));
   log('Settings saved to localStorage.');
 }
 
@@ -373,7 +375,8 @@ async function doPost() {
   const balanceBefore = beforeInfo?.balance ?? null;
 
   // 10% chance to generate a video post instead of image
-  const isVideoPost = Math.random() < 0.10;
+  const videoEnabled = document.getElementById('video-enabled')?.checked ?? false;
+  const isVideoPost = videoEnabled && Math.random() < 0.10;
 
   try {
     let result;
@@ -478,6 +481,11 @@ async function forcePost() {
 
 window._forceVideoPost = forceVideoPost;
 async function forceVideoPost() {
+  if (!document.getElementById('video-enabled')?.checked) {
+    log('ERROR: Enable video posts in Settings first.');
+    return;
+  }
+
   const handle = document.getElementById('bsky-handle').value.trim();
   const password = document.getElementById('bsky-password').value.trim();
   const pollinationsKey = document.getElementById('pollinations-key').value.trim();
