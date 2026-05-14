@@ -68,7 +68,7 @@
         <button id="btn-start" class="btn btn-start">Start L.O.V.E.</button>
         <button id="btn-stop" class="btn btn-stop" disabled>Stop</button>
         <button id="btn-force-post" class="btn btn-test">Force Post</button>
-        <button id="btn-force-video" class="btn btn-test">Force Video</button>
+        <button id="btn-force-video" class="btn btn-test" disabled title="Enable video posts in Settings first">Force Video</button>
         <div class="status-display">
           Status: <span id="status-text">Idle</span>
         </div>
@@ -189,6 +189,16 @@
         console.log('[DEBUG] Force Video button found');
         btn.addEventListener('click', () => {
           console.log('[DEBUG] Force Video clicked!');
+          if (!document.getElementById('video-enabled')?.checked) {
+            const log = document.getElementById('activity-log');
+            if (log) {
+              const div = document.createElement('div');
+              div.className = 'log-entry';
+              div.textContent = new Date().toLocaleTimeString() + ' - Enable video posts in Settings first.';
+              log.prepend(div);
+            }
+            return;
+          }
           if (!window._forceVideoPost) {
             const log = document.getElementById('activity-log');
             if (log) {

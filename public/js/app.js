@@ -168,6 +168,9 @@ function setupEventListeners() {
   document.getElementById('btn-stop').addEventListener('click', stopLoop);
   document.getElementById('btn-force-post').addEventListener('click', forcePost);
   document.getElementById('btn-force-video').addEventListener('click', forceVideoPost);
+  document.getElementById('video-enabled').addEventListener('change', (e) => {
+    document.getElementById('btn-force-video').disabled = !e.target.checked;
+  });
   document.getElementById('toggle-settings').addEventListener('click', toggleSettings);
   document.getElementById('btn-prev-post').addEventListener('click', () => {
     if (postHistoryIndex > 0) displayPost(postHistoryIndex - 1);
@@ -188,7 +191,6 @@ function loadSettings() {
       document.getElementById('bsky-password').value = s.password || '';
       document.getElementById('pollinations-key').value = s.pollinationsKey || 'pk_nxM10AP0L7y8AX1I';
       document.getElementById('video-enabled').checked = s.videoEnabled ?? false;
-      log('Settings loaded from localStorage.');
     } catch {
       log('Failed to parse saved settings.');
     }
@@ -196,6 +198,7 @@ function loadSettings() {
     // Default Pollinations key
     document.getElementById('pollinations-key').value = 'pk_nxM10AP0L7y8AX1I';
   }
+  document.getElementById('btn-force-video').disabled = !document.getElementById('video-enabled').checked;
 }
 
 function saveSettings() {
