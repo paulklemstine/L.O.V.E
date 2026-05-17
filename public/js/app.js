@@ -292,17 +292,31 @@ async function startLoop() {
 
 async function scheduleNextPost() {
   if (!isRunning) return;
-  const interval = await calculatePostInterval();
-  nextPostTime = Date.now() + interval;
-  updateCountdown();
-  if (countdownTimer) clearInterval(countdownTimer);
-  countdownTimer = setInterval(updateCountdown, 1000);
-  postTimer = setTimeout(async () => {
-    nextPostTime = null;
+
+  // Check if pollen is available
+  const info = await getPollenBalance();
+  if (!info || info.balance <= 0) {
+    const resetAt = info?.resetAt ? new Date(info.resetAt) : null;
+    const wait = resetAt ? Math.max(60000, resetAt.getTime() - Date.now()) : 300000;
+    const mLeft = Math.round(wait / 60000);
+    log(`⏱️ No pollen left — waiting ${mLeft}m for reset`);
+    nextPostTime = Date.now() + wait;
     updateCountdown();
-    await doPost();
-    await scheduleNextPost();
-  }, interval);
+    if (countdownTimer) clearInterval(countdownTimer);
+    countdownTimer = setInterval(updateCountdown, 1000);
+    postTimer = setTimeout(async () => {
+      nextPostTime = null;
+      updateCountdown();
+      await scheduleNextPost();
+    }, wait);
+    return;
+  }
+
+  log(`💰 ${info.balance.toFixed(2)} pollen available — posting now`);
+  nextPostTime = null;
+  updateCountdown();
+  await doPost();
+  await scheduleNextPost();
 }
 
 function updateCountdown() {
