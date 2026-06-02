@@ -155,7 +155,7 @@ export class PollinationsClient {
    * Model: flux-2-dev (FLUX.2 Dev) with fallback to flux (FLUX Schnell)
    */
   async generateImage(prompt, options = {}) {
-    const { width = 1024, height = 1024, subliminalText = null, model = 'flux-2-dev', negativePrompt = null } = options;
+    const { width = 1024, height = 1024, subliminalText = null, model = 'kontext', negativePrompt = null } = options;
 
     let fullPrompt = prompt;
     if (subliminalText) {
@@ -173,7 +173,7 @@ export class PollinationsClient {
       return url;
     };
 
-    // Try FLUX.2 Dev first, fall back to FLUX Schnell
+    // Try FLUX.1 Kontext first, fall back to FLUX
     const models = [model, 'flux'];
     for (const m of models) {
       const response = await fetch(buildUrl(m), {
