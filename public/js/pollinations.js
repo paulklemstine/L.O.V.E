@@ -154,7 +154,7 @@ export class PollinationsClient {
    * GET /image/{prompt} — returns binary image.
    */
   async generateImage(prompt, options = {}) {
-    const { width = 1024, height = 1024, subliminalText = null, model = 'klein', negativePrompt = null } = options;
+    const { width = 1024, height = 1024, subliminalText = null, model = 'gptimage', negativePrompt = null } = options;
 
     let fullPrompt = prompt;
     if (subliminalText) {
