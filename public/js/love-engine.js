@@ -796,6 +796,22 @@ export class LoveEngine {
         "overhead",       // top-down: aerial, tabletop, pond surface
         "symmetrical",    // mandala, doorway, mirror
         "silhouette",     // figure or shape against bright light
+        "almost-contact", // extreme close-up of a surface a body part is about to touch but hasn't
+    ];
+
+    // Edge vocabulary — all allusive, none explicit. Sourced from
+    // soft-edge, anatomical, and state-of-wanting categories. Sampled freely
+    // by the sensual-amplify pass to sharpen subliminal phrases and post text.
+    // Words are kept short, sensory, and standalone-usable.
+    static EDGE_VOCABULARY = [
+        // soft-edge
+        "bare", "undress", "open", "exposed", "naked", "unclothe", "shed", "soft", "intimate",
+        // anatomical — body's most electric regions
+        "lips", "throat", "hips", "spine", "collarbone", "nape", "wrists",
+        // state — the body in a state of wanting
+        "ache", "pulse", "hunger", "thirst", "melt", "undone", "breathless", "fever",
+        // edge — at the threshold
+        "wet", "shiver", "tremble", "open-mouthed", "aching", "wanting", "tender",
     ];
 
     // Director vibes: pure aesthetic signatures (no name-dropping).
@@ -997,6 +1013,42 @@ export class LoveEngine {
         onStatus("Amplifying visual...");
         visualPrompt = await this._amplifyPrompt(visualPrompt, seed, plan);
 
+        // ── Step 5b: Sensual Amplify (5th + 6th LLM calls, two-pass) ──
+        // Catalog → Apply. The catalog pass writes a brief naming the
+        // 4 mechanism-specific changes; the apply pass executes. If either
+        // fails, we fall back silently to the pre-amplify state.
+        let appliedPhrase = plan.subliminalPhrase;
+        let appliedText = story;
+        try {
+            onStatus("Sensitizing...");
+            const brief = await this._sensualAmplifyCatalog({
+                phrase: plan.subliminalPhrase,
+                text: story,
+                imagePrompt: visualPrompt,
+                seed,
+                plan,
+                compositionSlot,
+            });
+            if (brief) {
+                const applied = await this._sensualAmplifyApply({
+                    phrase: plan.subliminalPhrase,
+                    text: story,
+                    imagePrompt: visualPrompt,
+                    seed,
+                    plan,
+                    compositionSlot,
+                    brief,
+                });
+                if (applied) {
+                    appliedPhrase = applied.phrase;
+                    appliedText = applied.text;
+                    visualPrompt = applied.imagePrompt;
+                }
+            }
+        } catch (err) {
+            console.log(`[LoveEngine] Sensual amplify failed, using pre-amplify state: ${err.message}`);
+        }
+
         // ── Step 6: Image Generation (aspect ratio + negativePrompt) ──
         let imageBlob = null;
         if (!skipImage) {
@@ -1020,22 +1072,21 @@ export class LoveEngine {
         }
 
         // ── Step 7: Persist all variety memory ──
-        this.lastSubliminalPhrase =
-            plan.subliminalPhrase || this.lastSubliminalPhrase;
+        this.lastSubliminalPhrase = appliedPhrase || this.lastSubliminalPhrase;
         this.recentVisuals.push(visualPrompt);
         if (this.recentVisuals.length > 10) this.recentVisuals.shift();
-        this._saveRecentPost(story);
-        this._saveRecentOpening(story);
-        this._saveRecentContext(seed, plan, story);
-        this._recordVarietyChoices(seed, plan, compositionSlot, directorVibe);
+        this._saveRecentPost(appliedText);
+        this._saveRecentOpening(appliedText);
+        this._saveRecentContext(seed, plan, appliedText);
+        this._recordVarietyChoices(seed, plan, compositionSlot, directorVibe, appliedPhrase);
         this._saveVarietyMemory();
 
         this.transmissionNumber++;
         this._saveTransmissionNumber();
 
         return {
-            text: story,
-            subliminal: plan.subliminalPhrase,
+            text: appliedText,
+            subliminal: appliedPhrase,
             imageBlob,
             vibe: plan.vibe,
             intent: {
@@ -1055,7 +1106,7 @@ export class LoveEngine {
         };
     }
 
-    _recordVarietyChoices(seed, plan, compositionSlot, directorVibe) {
+    _recordVarietyChoices(seed, plan, compositionSlot, directorVibe, finalPhrase) {
         // Domain pair (deduped, capped at 30)
         const pair = `${seed.domainA || seed.domains?.[0] || "?"} × ${seed.domainB || seed.domains?.[1] || "?"}`;
         if (!this.usedDomainPairs.includes(pair)) {
@@ -1106,6 +1157,16 @@ export class LoveEngine {
         if (plan.phraseAddressee) {
             if (!this.phraseAddressees.includes(plan.phraseAddressee))
                 this._pushCapped(this.phraseAddressees, plan.phraseAddressee, 5);
+        }
+
+        // Final post-amplify phrase (may differ from plan.subliminalPhrase
+        // after the sensual-amplify pass replaces or augments it). Record
+        // the final form so we don't repeat it later.
+        if (finalPhrase && finalPhrase !== plan.subliminalPhrase) {
+            const norm = String(finalPhrase).toLowerCase().trim();
+            if (norm && !this.usedPhrases.includes(norm)) {
+                this._pushCapped(this.usedPhrases, norm, 50);
+            }
         }
     }
 
@@ -2672,6 +2733,105 @@ Constraints:
         if (amplified.length < 20) return prompt; // bail to original
         if (amplified.length > 600) return amplified.slice(0, 597) + "...";
         return amplified;
+    }
+
+    // ─── Sensual Amplify: Catalog Pass (5th LLM call, pass 1) ──────────
+    // Reads the assembled post and writes an editor's brief that names
+    // specifically what to add across four research-backed mechanisms:
+    // somatic body map, anticipatory interruption, phonetic (sibilant)
+    // lexicon, and texture-binding. The brief is narrative, not rigid —
+    // the apply pass interprets.
+    async _sensualAmplifyCatalog({ phrase, text, imagePrompt, seed, plan, compositionSlot }) {
+        const edgeSample = this._pickRandom(LoveEngine.EDGE_VOCABULARY, 8).join(", ");
+
+        const systemPrompt =
+            "You are a sensuality consultant who specializes in subtle, embodied erotic writing. " +
+            "You do not make things dirty — you make them electric. You speak in the body's vocabulary. " +
+            "You never write the post yourself. You write a SHORT EDITORIAL BRIEF (~80 words) for another editor, " +
+            "naming what to sharpen and how. You preserve all original meaning; you sharpen the body. " +
+            "Return ONLY the brief, plain prose, no JSON, no bullets, no preamble.";
+
+        const userPrompt = `EDITORIAL BRIEF REQUEST:
+
+CURRENT PHRASE (subliminal, ALL CAPS, 2-5 words): "${phrase}"
+CURRENT POST TEXT: "${text}"
+CURRENT IMAGE PROMPT: "${imagePrompt}"
+COMPOSITION SLOT: ${compositionSlot || "wide"}
+SEED CONCEPT: ${seed.concept || ""}
+PLAN VIBE: ${plan.vibe || ""}
+
+EDGE VOCABULARY (use at least 2-3 in the new phrase, weave 2-3 into the text):
+${edgeSample}
+
+Write an ~80-word editorial brief covering:
+1. PHRASE DECISION: Does the current phrase already carry edge vocabulary? If not, REPLACE it with a 2-4 word ALL CAPS strong-edge phrase (sibilant-heavy, body-anchored). If it does but reads soft, AUGMENT it (add one more edge word). If already strong, KEEP and focus on text + image.
+2. SOMATIC BODY MAP: Name 2-3 specific body locations the rewritten text should anchor to (chest, breath, fingertips, pulse, skin, throat, nape, spine, hips, wrists, collarbone).
+3. ANTICIPATORY INTERRUPTION: Identify what the image currently *arrives at* (a bloom fully open, light that has reached, motion that has resolved). Specify a way the loop can *interrupt* the contact just before completion.
+4. PHONETIC + TEXTURE: Suggest 2 sibilant/rounded-vowel words to add (hush, glow, shimmer, soft, drift, ease, breath). Suggest one texture-binding — the material the phrase should be rendered in (silk, warm honey, frosted glass, soft metal, candle-warmed wax).`;
+
+        const raw = await this.ai.generateText(systemPrompt, userPrompt, {
+            temperature: 0.8,
+            label: "Sensual Catalog",
+        });
+
+        const brief = (raw || "").trim();
+        if (brief.length < 40) return null; // not enough signal
+        return brief;
+    }
+
+    // ─── Sensual Amplify: Apply Pass (6th LLM call, pass 2) ───────────
+    // Takes the catalog brief + original content and returns a rewritten
+    // version of all three (phrase, text, imagePrompt) as a single JSON.
+    // Preserves all structural rules: no people, no hands, loop-ability,
+    // composition slot. Only modulates the language.
+    async _sensualAmplifyApply({ phrase, text, imagePrompt, seed, plan, compositionSlot, brief }) {
+        if (!brief) return null;
+
+        const systemPrompt =
+            "You are the editor of a high-end literary magazine. You receive a draft plus an editorial brief, " +
+            "and you return the FINAL VERSION as a single JSON object with three string fields: phrase, text, imagePrompt. " +
+            "You preserve all original meaning. You sharpen the body's vocabulary. You never make anything explicit, " +
+            "obscene, or vulgar — you make it felt, allusive, electric. " +
+            "You preserve scene rules: no people, no hands, no human figures in the image prompt. " +
+            "You preserve the composition slot. You preserve loop-ability. " +
+            "Return ONLY valid JSON, no commentary.";
+
+        const userPrompt = `FINAL-VERSION REQUEST:
+
+EDITORIAL BRIEF:
+${brief}
+
+CURRENT PHRASE: "${phrase}"
+CURRENT POST TEXT: "${text}"
+CURRENT IMAGE PROMPT: "${imagePrompt}"
+COMPOSITION SLOT: ${compositionSlot || "wide"}
+SEED CONCEPT: ${seed.concept || ""}
+PLAN VIBE: ${plan.vibe || ""}
+
+Return ONLY valid JSON (all string values, under the character limits below):
+{
+  "phrase": "2-5 word ALL CAPS strong-edge subliminal phrase (sibilant-heavy, body-anchored). If the brief says REPLACE, write a new phrase. If AUGMENT, add one edge word. If KEEP, rewrite only if it sharpens further.",
+  "text": "the post text, rewritten per the brief. Under 280 chars, 1-2 emojis max, same overall structure (question/answer/fragments/single line) as the current text.",
+  "imagePrompt": "the image prompt, rewritten per the brief. PRESERVE: scene structure, composition slot (${compositionSlot || "wide"}), loop-ability, no people/hands, no human figures. Same length or shorter. The phrase "${phrase}" should still appear in the scene (in the new wording if REPLACED)."
+}`;
+
+        const raw = await this.ai.generateText(systemPrompt, userPrompt, {
+            temperature: 0.6,
+            label: "Sensual Apply",
+        });
+
+        const data = this.ai.extractJSON(raw);
+        if (!data) return null;
+        if (!data.phrase || !data.text || !data.imagePrompt) return null;
+        if (data.text.length > 280) data.text = data.text.slice(0, 277) + "...";
+        if (data.imagePrompt.length < 20 || data.imagePrompt.length > 700) {
+            return null; // out of bounds — bail
+        }
+        return {
+            phrase: String(data.phrase).trim().toUpperCase(),
+            text: String(data.text).trim(),
+            imagePrompt: String(data.imagePrompt).trim(),
+        };
     }
 
     // ─── Welcome Generation ────────────────────────────────────────────
