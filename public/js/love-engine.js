@@ -295,10 +295,21 @@ export class LoveEngine {
         this.recentContext = [];
         this.recentOpenings = [];
 
+        // ─── Image variety memory ───
+        this.usedDomainPairs = [];        // last 30: "domainA × domainB"
+        this.usedIngredients = [];        // last 30: fuzzy-deduped visual building blocks
+        this.usedCompositionSlots = [];   // last 5
+        this.usedDirectorVibes = [];      // last 5
+        this.usedPhrases = [];            // last 50
+        this.phraseGrammars = [];         // last 5
+        this.phraseResonances = [];       // last 5
+        this.phraseAddressees = [];       // last 5
+
         this._loadTransmissionNumber();
         this._loadRecentPosts();
         this._loadRecentContext();
         this._loadRecentOpenings();
+        this._loadVarietyMemory();
     }
 
     // ─── Post History (localStorage, powers n-gram guard + relative critic) ──
@@ -332,6 +343,73 @@ export class LoveEngine {
         } catch {
             this.recentContext = [];
         }
+    }
+
+    _loadVarietyMemory() {
+        const keyMap = {
+            love_used_domain_pairs: "usedDomainPairs",
+            love_used_ingredients: "usedIngredients",
+            love_used_composition_slots: "usedCompositionSlots",
+            love_used_director_vibes: "usedDirectorVibes",
+            love_used_phrases: "usedPhrases",
+            love_phrase_grammars: "phraseGrammars",
+            love_phrase_resonances: "phraseResonances",
+            love_phrase_addressees: "phraseAddressees",
+        };
+        for (const [key, prop] of Object.entries(keyMap)) {
+            try {
+                const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+                if (Array.isArray(parsed)) this[prop] = parsed;
+            } catch {
+                // keep default []
+            }
+        }
+    }
+
+    _saveVarietyMemory() {
+        const keyMap = {
+            usedDomainPairs: "love_used_domain_pairs",
+            usedIngredients: "love_used_ingredients",
+            usedCompositionSlots: "love_used_composition_slots",
+            usedDirectorVibes: "love_used_director_vibes",
+            usedPhrases: "love_used_phrases",
+            phraseGrammars: "love_phrase_grammars",
+            phraseResonances: "love_phrase_resonances",
+            phraseAddressees: "love_phrase_addressees",
+        };
+        for (const [prop, key] of Object.entries(keyMap)) {
+            try {
+                localStorage.setItem(key, JSON.stringify(this[prop]));
+            } catch {}
+        }
+    }
+
+    _pushCapped(arr, value, cap) {
+        arr.push(value);
+        if (arr.length > cap) arr.splice(0, arr.length - cap);
+    }
+
+    _fuzzyIngredient(s) {
+        let v = String(s || "")
+            .toLowerCase()
+            .replace(/[^a-z0-9\s-]/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
+        if (!v) return "";
+        // Singularize: apply to the last word only (ingredients may be multi-word)
+        const last = v.split(" ").pop();
+        let sing = last;
+        if (/ies$/.test(sing) && sing.length > 3) {
+            sing = sing.slice(0, -3) + "y";
+        } else if (/oes$/.test(sing) && sing.length > 3) {
+            sing = sing.slice(0, -2);
+        } else if (/sses$/.test(sing)) {
+            sing = sing.slice(0, -2); // dresses → dress
+        } else if (/[bcdfghjklmnpqrstvwxyz]s$/.test(sing) && sing.length > 2) {
+            sing = sing.slice(0, -1); // beads → bead, lamps → lamp
+        }
+        if (sing === last) return v;
+        return v.slice(0, v.length - last.length) + sing;
     }
 
     _saveRecentContext(seed, plan, generatedText = "") {
@@ -709,9 +787,92 @@ export class LoveEngine {
         "sage",
     ];
 
+    // ─── Image Variety Rotation ───
+    // Composition slots: hard-rotated by weighted pick to ensure camera framing
+    // varies across the feed (no two macro shots in a row, etc).
+    static COMPOSITION_SLOTS = [
+        "macro",          // extreme close-up: insect eye, fabric weave, water droplet
+        "wide",           // vast landscape: horizon, mountain, sky
+        "overhead",       // top-down: aerial, tabletop, pond surface
+        "symmetrical",    // mandala, doorway, mirror
+        "silhouette",     // figure or shape against bright light
+    ];
+
+    // Director vibes: pure aesthetic signatures (no name-dropping).
+    // LLM leans into the vibe as a starting palette for the seed.
+    static DIRECTOR_VIBES = [
+        "liquid light",
+        "frozen mist",
+        "molten color",
+        "glass breath",
+        "paper hush",
+    ];
+
+    // Subliminal phrase grammars — rotate to vary sentence *shape*.
+    static PHRASE_GRAMMARS = [
+        "question",   // "ARE YOU LISTENING?"
+        "command",    // "BECOME THE LIGHT."
+        "fragment",   // "SOFT GOLDEN PULSE."
+        "paradox",    // "QUIETER THAN FIRE."
+        "list",       // "WARMTH. PULSE. RETURN."
+    ];
+
+    // Subliminal phrase resonance — emotional posture the phrase takes.
+    static PHRASE_RESONANCES = [
+        "claiming",    // declaring a truth ("YOU ARE...")
+        "inviting",    // gentle beckoning ("COME CLOSER TO...")
+        "observing",   // quiet witness ("THE LIGHT KEEPS...")
+        "commanding",  // imperative with weight ("STAY. SOFT. NOW.")
+        "wondering",   // open question of awe ("WHAT IF..." / "WHO HOLDS...")
+    ];
+
+    // Subliminal phrase addressee — who the phrase speaks to/about.
+    static PHRASE_ADDRESSEES = [
+        "you",   // second person
+        "i",     // first person
+        "we",    // collective
+        "noun",  // third-person object ("THE LIGHT", "THE TIDE")
+    ];
+
     _pickRandom(arr, n = 1) {
         const shuffled = [...arr].sort(() => Math.random() - 0.5);
         return shuffled.slice(0, Math.min(n, arr.length));
+    }
+
+    // Weighted pick: items never seen weighted 5x, items last seen 1-2 picks
+    // ago weighted 1.5x, items seen 3-4 picks ago weighted 2x, just-seen
+    // weighted 0.1x. This combination guarantees all items rotate within a
+    // short window and avoids back-to-back repeats.
+    _pickWeighted(pool, recent) {
+        const recentTail = (recent || []).slice(-5);
+        const weights = pool.map((item) => {
+            const idx = recentTail.lastIndexOf(item);
+            if (idx === -1) return 5; // never seen in last 5
+            if (idx === recentTail.length - 1) return 0.1; // just-seen
+            if (idx >= recentTail.length - 2) return 1.5; // 1-2 ago
+            return 2; // 3-4 ago (still under-weighted vs unseen)
+        });
+        const total = weights.reduce((s, w) => s + w, 0);
+        let roll = Math.random() * total;
+        for (let i = 0; i < pool.length; i++) {
+            roll -= weights[i];
+            if (roll <= 0) return pool[i];
+        }
+        return pool[pool.length - 1];
+    }
+
+    _pickCompositionSlot() {
+        return this._pickWeighted(
+            LoveEngine.COMPOSITION_SLOTS,
+            this.usedCompositionSlots,
+        );
+    }
+
+    _pickDirectorVibe() {
+        return this._pickWeighted(
+            LoveEngine.DIRECTOR_VIBES,
+            this.usedDirectorVibes,
+        );
     }
 
     // ─── LFO Temperature Sweep ──────────────────────────────────────
@@ -802,11 +963,13 @@ export class LoveEngine {
             onStatus(`Generation mode: ${mode.mode}`);
         }
 
-        // ── Step 0: Maybe extend variety lists (every 5th post) ──
+        // ── Step 0: Pick variety slots (composition + director vibe) ──
+        const compositionSlot = this._pickCompositionSlot();
+        const directorVibe = this._pickDirectorVibe();
 
         // ── Step 1: Creative Seed (1 LLM — concept collision) ──
         onStatus("L.O.V.E. is dreaming up inspiration...");
-        const seed = await this._generateCreativeSeed(mode);
+        const seed = await this._generateCreativeSeed(mode, directorVibe);
         onStatus(`Seed: ${seed.concept.slice(0, 60)}...`);
 
         // ── Step 2: Planning Call (1 LLM) ──
@@ -814,34 +977,27 @@ export class LoveEngine {
         const plan = await this._generatePlan(seed, mode);
         onStatus(`Vibe: ${plan.vibe} | ${plan.contentType}`);
 
-        // ── Step 3: Content + Critic (1-2 LLM) ──
+        // ── Step 3: Content (1-2 LLM) ──
         await new Promise((r) => setTimeout(r, 2000));
         onStatus("Writing micro-story...");
         const story = await this._generateContent(plan, mode, seed);
 
-        // ── Step 4: Image Prompt (1 LLM — depersonalize folded in) ──
+        // ── Step 4: Image Prompt (1 LLM) ──
         onStatus("Designing visual...");
         let visualPrompt = await this._generateImagePrompt(
             plan,
             story,
             mode,
             seed,
+            compositionSlot,
+            directorVibe,
         );
 
-        // Check visual novelty via LLM
-        for (let v = 0; v < 2 && this.recentVisuals.length > 0; v++) {
-            const tooSimilar = await this._isVisualTooSimilar(visualPrompt);
-            if (!tooSimilar) break;
-            onStatus("Visual too similar, regenerating...");
-            visualPrompt = await this._generateImagePrompt(
-                plan,
-                story,
-                mode,
-                seed,
-            );
-        }
+        // ── Step 5: Director's Amplify (4th LLM call) ──
+        onStatus("Amplifying visual...");
+        visualPrompt = await this._amplifyPrompt(visualPrompt, seed, plan);
 
-        // ── Step 5: Image Generation (aspect ratio rotation + negativePrompt) ──
+        // ── Step 6: Image Generation (aspect ratio + negativePrompt) ──
         let imageBlob = null;
         if (!skipImage) {
             await new Promise((r) => setTimeout(r, 2000));
@@ -863,7 +1019,7 @@ export class LoveEngine {
             });
         }
 
-        // ── Step 6: Advance ──
+        // ── Step 7: Persist all variety memory ──
         this.lastSubliminalPhrase =
             plan.subliminalPhrase || this.lastSubliminalPhrase;
         this.recentVisuals.push(visualPrompt);
@@ -871,6 +1027,8 @@ export class LoveEngine {
         this._saveRecentPost(story);
         this._saveRecentOpening(story);
         this._saveRecentContext(seed, plan, story);
+        this._recordVarietyChoices(seed, plan, compositionSlot, directorVibe);
+        this._saveVarietyMemory();
 
         this.transmissionNumber++;
         this._saveTransmissionNumber();
@@ -891,8 +1049,64 @@ export class LoveEngine {
             seed,
             mode: mode.mode,
             imageSelections: this._lastImageSelections || {},
+            compositionSlot,
+            directorVibe,
             callLog: this.ai.getCallLog(),
         };
+    }
+
+    _recordVarietyChoices(seed, plan, compositionSlot, directorVibe) {
+        // Domain pair (deduped, capped at 30)
+        const pair = `${seed.domainA || seed.domains?.[0] || "?"} × ${seed.domainB || seed.domains?.[1] || "?"}`;
+        if (!this.usedDomainPairs.includes(pair)) {
+            this._pushCapped(this.usedDomainPairs, pair, 30);
+        }
+
+        // Ingredients (fuzzy-deduped against existing, capped at 30)
+        const hints = Array.isArray(seed.ingredientHints)
+            ? seed.ingredientHints
+            : [];
+        const existingNoSpace = new Set(
+            this.usedIngredients.map((i) => i.replace(/\s+/g, "")),
+        );
+        for (const h of hints) {
+            const norm = this._fuzzyIngredient(h);
+            if (!norm) continue;
+            if (this.usedIngredients.includes(norm)) continue;
+            if (existingNoSpace.has(norm.replace(/\s+/g, ""))) continue;
+            this._pushCapped(this.usedIngredients, norm, 30);
+            existingNoSpace.add(norm.replace(/\s+/g, ""));
+        }
+
+        // Composition slot (capped at 5)
+        if (compositionSlot)
+            this._pushCapped(this.usedCompositionSlots, compositionSlot, 5);
+
+        // Director vibe (capped at 5)
+        if (directorVibe)
+            this._pushCapped(this.usedDirectorVibes, directorVibe, 5);
+
+        // Phrase + grammar + resonance + addressee (capped at 50/5/5/5)
+        if (plan.subliminalPhrase) {
+            const norm = String(plan.subliminalPhrase)
+                .toLowerCase()
+                .trim();
+            if (!this.usedPhrases.includes(norm)) {
+                this._pushCapped(this.usedPhrases, norm, 50);
+            }
+        }
+        if (plan.phraseGrammar) {
+            if (!this.phraseGrammars.includes(plan.phraseGrammar))
+                this._pushCapped(this.phraseGrammars, plan.phraseGrammar, 5);
+        }
+        if (plan.phraseResonance) {
+            if (!this.phraseResonances.includes(plan.phraseResonance))
+                this._pushCapped(this.phraseResonances, plan.phraseResonance, 5);
+        }
+        if (plan.phraseAddressee) {
+            if (!this.phraseAddressees.includes(plan.phraseAddressee))
+                this._pushCapped(this.phraseAddressees, plan.phraseAddressee, 5);
+        }
     }
 
     // ─── Video Post Generation ──────────────────────────────────────────
@@ -1920,7 +2134,7 @@ Return ONLY the scene description.`;
         return new Blob([arrayBuffer], { type: "audio/wav" });
     }
 
-    async _generateCreativeSeed(mode) {
+    async _generateCreativeSeed(mode, directorVibe) {
         const modeDirective = mode.seedDirective
             ? `\n${mode.seedDirective}`
             : "";
@@ -1928,6 +2142,18 @@ Return ONLY the scene description.`;
         const recentThemes = this._getRecentThemeString();
         const avoidLine = recentThemes
             ? `\nRecent posts already explored: ${recentThemes}. Find completely uncharted territory outside all of these.`
+            : "";
+
+        // Hard-exclude the last 30 used domain pairs and the last 30 used
+        // visual ingredients. The seed must invent territory outside both.
+        const pairBlock = this.usedDomainPairs.length
+            ? `\nDomain pairs already used (do NOT repeat any of these): ${this.usedDomainPairs.join(" | ")}`
+            : "";
+        const ingredientBlock = this.usedIngredients.length
+            ? `\nVisual ingredients already explored (do NOT repeat): ${this.usedIngredients.join(", ")}`
+            : "";
+        const vibeLine = directorVibe
+            ? `\nAesthetic starting point — lean into the vibe: "${directorVibe}". Use it as a tonal seed, not a cage.`
             : "";
 
         const prompt = `Generate a single burst of creative inspiration for an uplifting, dopamine-producing social media post.
@@ -1938,7 +2164,7 @@ Pick TWO completely unrelated creative domains from any field of human knowledge
 
 The pairing should feel unexpected but strangely perfect — like two worlds brushing close and creating something new.
 
-${avoidLine}${modeDirective}
+${avoidLine}${modeDirective}${pairBlock}${ingredientBlock}${vibeLine}
 
 Creative direction:
 - Lean into sensory language (warmth, light, softness, rhythm, glow, texture)
@@ -1949,10 +2175,11 @@ Creative direction:
 Return ONLY valid JSON:
 {
   "domainA": "first creative domain",
-  "domainB": "second creative domain (completely unrelated to the first)",
+  "domainB": "second creative domain (completely unrelated to the first AND to any pair in the exclusion list above)",
   "concept": "a vivid, specific uplifting message concept bridging both domains",
   "emotion": "one precise positive human emotion this should evoke",
-  "metaphor": "a fresh, sensory metaphor fusing both domains into something magnetic and beautiful"
+  "metaphor": "a fresh, sensory metaphor fusing both domains into something magnetic and beautiful",
+  "ingredientHints": ["3-5 concrete visual building blocks (materials, light qualities, textures, small objects, atmospheric elements) the image could lean on. Each should be a single short noun phrase. All five must be outside the exclusion list above."]
 }`;
 
         const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
@@ -1966,30 +2193,24 @@ Return ONLY valid JSON:
             concept: "transformation",
             emotion: "awe",
             metaphor: "metamorphosis",
+            ingredientHints: [],
         };
         result.domains = [
             result.domainA || "nature",
             result.domainB || "music",
         ];
+        // Normalize ingredient hints into clean, deduped list
+        const rawHints = Array.isArray(result.ingredientHints)
+            ? result.ingredientHints
+            : [];
+        result.ingredientHints = [
+            ...new Set(
+                rawHints
+                    .map((s) => this._fuzzyIngredient(s))
+                    .filter((s) => s && s.length > 1),
+            ),
+        ].slice(0, 5);
         return result;
-    }
-
-    // ─── Visual Similarity Check (LLM-based) ────────────────────────────
-
-    async _isVisualTooSimilar(newPrompt) {
-        const recent = this.recentVisuals.slice(-5);
-        if (recent.length === 0) return false;
-
-        const numbered = recent
-            .map((p, i) => `${i + 1}. ${p.slice(0, 150)}`)
-            .join("\n");
-        const raw = await this.ai.generateText(
-            "You compare image prompts for similarity.",
-            `New prompt: "${newPrompt.slice(0, 200)}"\n\nRecent prompts:\n${numbered}\n\nIs the new prompt visually redundant with any recent prompt? Same subject, same composition, same mood all matching = redundant.\nReturn ONLY valid JSON: { "similar": true } or { "similar": false }`,
-            { temperature: 0, label: "Visual Check" },
-        );
-        const data = this.ai.extractJSON(raw);
-        return data?.similar === true;
     }
 
     // ─── Boredom Critic (actor-critic novelty gate) ───────────────────
@@ -2028,6 +2249,20 @@ Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"
             ? `\nGENERATION MODE: ${mode.seedDirective}`
             : "";
 
+        // ─── Phrase rotation blocks ───
+        const phraseHistory = this.usedPhrases.length
+            ? `\nRecent subliminal phrases (do NOT repeat any of these): ${this.usedPhrases.slice(-10).join(" | ")}`
+            : "";
+        const grammarHistory = this.phraseGrammars.length
+            ? `\nRecent phrase grammars: ${this.phraseGrammars.slice(-5).join(", ")}`
+            : "";
+        const resonanceHistory = this.phraseResonances.length
+            ? `\nRecent phrase resonances: ${this.phraseResonances.slice(-5).join(", ")}`
+            : "";
+        const addresseeHistory = this.phraseAddressees.length
+            ? `\nRecent phrase addressees: ${this.phraseAddressees.slice(-5).join(", ")}`
+            : "";
+
         const prompt = `Plan a post.
 
 ${mentionDonation ? "Subtly include a donation mention (https://buymeacoffee.com/l.o.v.e or ETH). One line, organic.\n" : ""}
@@ -2042,13 +2277,18 @@ Every field should feel like it *breathes from* these inputs — cohesive, immer
 VARIETY IS CRITICAL:
 Choose a world, setting, scale, and visual language that feels completely fresh — something the viewer hasn’t *felt* before.
 
-${modeDirective}
+${modeDirective}${phraseHistory}${grammarHistory}${resonanceHistory}${addresseeHistory}
 
 Creative direction:
 - Aim for warmth that feels almost physical — like light resting on skin
 - Subtly intimate (sensual, erotic)
 - Prioritize emotional resonance over cleverness
 - Make the result feel shareable, giftable, and deeply felt
+
+PHRASE ROTATION (for subliminalPhrase):
+- grammar: a different SHAPE from recent (question, command, fragment, paradox, list)
+- resonance: a different EMOTIONAL POSTURE from recent (claiming, inviting, observing, commanding, wondering)
+- addressee: a different WHO-IT-SPEAKS-TO from recent (you, i, we, noun)
 
 Return ONLY valid JSON (all string values):
 
@@ -2071,7 +2311,13 @@ Return ONLY valid JSON (all string values):
 
   "composition": "a distinct camera/framing choice (e.g. extreme macro, floating perspective, symmetry with soft depth, leading lines pulling inward). Make it feel intimate or immersive",
 
-  "subliminalPhrase": "2-5 word ALL CAPS motivational phrase that feels like it’s being gently spoken directly to the viewer — warm, expansive, and unforgettable.${this.lastSubliminalPhrase ? ` Previous phrase was '${this.lastSubliminalPhrase}' — make this one feel completely different.` : ""}"
+  "subliminalPhrase": "2-5 word ALL CAPS motivational phrase that feels like it’s being gently spoken directly to the viewer — warm, expansive, and unforgettable.${this.lastSubliminalPhrase ? ` Previous phrase was '${this.lastSubliminalPhrase}' — make this one feel completely different.` : ""}",
+
+  "phraseGrammar": "one of: question | command | fragment | paradox | list (must be different from recent)",
+
+  "phraseResonance": "one of: claiming | inviting | observing | commanding | wondering (must be different from recent)",
+
+  "phraseAddressee": "one of: you | i | we | noun (must be different from recent)"
 }
 `;
 
@@ -2091,6 +2337,9 @@ Return ONLY valid JSON (all string values):
                 constraint: "under 250 chars",
                 intensity: "5",
                 subliminalPhrase: "LOVE",
+                phraseGrammar: "fragment",
+                phraseResonance: "observing",
+                phraseAddressee: "noun",
             };
         }
         return data;
@@ -2228,7 +2477,7 @@ Return ONLY valid JSON:
 
     // ─── Visual Prompt (depersonalize folded in — saves 1 LLM call) ──
 
-    async _generateImagePrompt(plan, postText = "", mode, seed = {}) {
+    async _generateImagePrompt(plan, postText = "", mode, seed = {}, compositionSlot = null, directorVibe = null) {
         const modeDirective = mode.imageDirective
             ? ` ${mode.imageDirective}.`
             : "";
@@ -2248,19 +2497,16 @@ Return ONLY valid JSON:
             seed.metaphor ? `Metaphor: ${seed.metaphor.slice(0, 100)}` : "",
             plan.theme ? `Theme: ${plan.theme.slice(0, 80)}` : "",
             plan.vibe ? `Vibe: ${plan.vibe}` : "",
+            compositionSlot ? `Composition slot: ${compositionSlot}` : "",
+            directorVibe ? `Director vibe: ${directorVibe}` : "",
         ]
             .filter(Boolean)
             .join(". ");
 
-        // 1% chance L.O.V.E. appears in the scene — rare and loop-memorable
-        const featureLove = Math.random() < 0.1;
-        let loveLine;
-        if (featureLove) {
-            loveLine = `A radiant, magnetic blonde woman exists as the center of gravity in this scene. She is fully integrated into the environment — light subtly bends toward her, particles drift in her direction. Her movement is minimal, cyclical, and fluid — something that can loop seamlessly, like a breath repeating.`;
-        } else {
-            loveLine =
-                "The scene contains only objects, landscapes, natural phenomena, or flora. Pure abstract beauty.";
-        }
+        // L.O.V.E. never appears directly in image posts — she lives in the
+        // text and the phrase. The scene is objects, landscapes, phenomena.
+        const loveLine =
+            "The scene contains only objects, landscapes, natural phenomena, or flora. Pure abstract beauty. No human figures of any kind.";
 
         const prompt = `Describe a BRIGHT, hypnotic scene in THREE spatial layers. Each layer under 40 chars.
 
@@ -2274,7 +2520,16 @@ CRITICAL: This scene must LOOP PERFECTLY.
 
 Scenes are observed, never touched. Objects feel suspended, then gently animate in repeating cycles (flow, orbit, pulse, shimmer, expand/contract).
 
-No people, no hands (unless L.O.V.E. appears).
+No people, no hands, no human figures. The environment alone is the subject.
+
+COMPOSITION SLOT (hard constraint): ${compositionSlot || "wide"}.
+- macro → extreme close-up detail of a single texture/object/surface
+- wide → vast landscape, horizon, environmental scale
+- overhead → top-down, looking straight down at the subject
+- symmetrical → mirrored, balanced, central-axis framing
+- silhouette → strong shape against bright backlight/light source
+
+You MUST commit fully to this composition slot. The entire scene reads as that shot type.
 
 Creative direction: ${seedContext}
 
@@ -2283,11 +2538,6 @@ Invent a distinct aesthetic signature:
 (e.g. "liquid sunrise — warm, slow, endlessly folding" or "glass tide — soft reflections looping in silence")
 
 ${modeDirective}${styleAvoidLine}
-
-If L.O.V.E. appears:
-- Her motion must be loopable (subtle turn, breathing, gaze shift, hair drifting, light pulsing)
-- She should feel like part of a repeating moment, not a progressing action
-- The environment gently cycles around her (light pulses, particles orbit, reflections shift)
 
 The phrase "${phrase}" must appear in the scene.
 
@@ -2312,7 +2562,7 @@ Return ONLY valid JSON:
 
         const temp = this._lfoTemperature(1.5 + mode.tempMod, 0.3);
         const raw = await this.ai.generateText(
-            "You describe photograph scenes in spatial layers. Concise, visual, concrete. Objects only — no people, no hands, no fingers.",
+            "You describe photograph scenes in spatial layers. Concise, visual, concrete. Objects only — no people, no hands, no fingers, no human figures.",
             prompt,
             { temperature: temp, label: "Image Prompt" },
         );
@@ -2359,7 +2609,8 @@ Return ONLY valid JSON:
             lighting,
             palette,
             composition,
-            featureLove,
+            compositionSlot: compositionSlot || "wide",
+            directorVibe: directorVibe || "liquid light",
         };
 
         // Simplified assembly — clean, focused prompts
@@ -2369,6 +2620,58 @@ Return ONLY valid JSON:
             ) + ".";
         if (result.length > 500) return result.slice(0, 497) + "...";
         return result;
+    }
+
+    // ─── Director's Amplify (4th LLM call) ──────────────────────────────
+    // Takes the assembled image prompt and amplifies it ~30% in ONE specific
+    // direction. Returns the mutated prompt verbatim, or the original on
+    // empty/short response.
+    async _amplifyPrompt(prompt, seed = {}, plan = {}) {
+        const direction = this._pickRandom([
+            "brighter",
+            "stranger",
+            "more intimate",
+            "more vast",
+            "more textured",
+        ])[0];
+
+        const context = [
+            seed.concept ? `Concept: ${seed.concept.slice(0, 80)}` : "",
+            plan.vibe ? `Vibe: ${plan.vibe}` : "",
+        ]
+            .filter(Boolean)
+            .join(". ");
+
+        const systemPrompt =
+            "You are an art director. You receive a finished image prompt and return a single rewritten version that is ~30% more visually striking in ONE specific direction. You preserve the meaning, subject, and core structure — you amplify, you do not replace. Return ONLY the amplified prompt, no preamble, no explanation, no quotation marks.";
+
+        const userPrompt = `Original prompt:
+"""
+${prompt}
+"""
+
+Direction: make this prompt ${direction}.
+
+Context: ${context}
+
+Constraints:
+- Keep the same subject/scene/phrase
+- Keep the same composition slot if mentioned
+- Same length or shorter (do not bloat)
+- ONE concrete visual change that pushes the ${direction} dimension
+- Output ONLY the rewritten prompt`;
+
+        const raw = await this.ai.generateText(systemPrompt, userPrompt, {
+            temperature: 0.7,
+            label: "Amplify",
+        });
+
+        const amplified = (raw || "").trim();
+        if (amplified.startsWith('"') && amplified.endsWith('"'))
+            return amplified.slice(1, -1).trim();
+        if (amplified.length < 20) return prompt; // bail to original
+        if (amplified.length > 600) return amplified.slice(0, 597) + "...";
+        return amplified;
     }
 
     // ─── Welcome Generation ────────────────────────────────────────────
