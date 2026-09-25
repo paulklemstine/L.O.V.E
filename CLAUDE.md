@@ -42,3 +42,13 @@ firebase.json            # Firebase hosting config
 ```bash
 git add <files> && git commit -m "message" && git push && bash deploy.sh
 ```
+
+## Local AI Stack (replaces Pollinations API)
+- **LLM**: Ollama + `qwen2.5:7b-instruct-q4_K_M`, OpenAI-compatible endpoint at `http://127.0.0.1:11434/v1/chat/completions` (drop-in for `generateText`)
+- **Images**: diffusers + SDXL base fp16 in `~/ai/sdxl`, 6GB-VRAM tuned (drop-in for `generateImage`)
+- **Entry point**: `~/ai/love-ai.sh text|image ...` — see `~/ai/README.md`
+- **CLI app**: `node love-cli.mjs [--post] [--skip-image]` — runs the full LoveEngine
+  pipeline locally (state in `.love-state.json`, credentials in gitignored `.env`).
+  Re-encodes oversized PNGs to JPEG before upload (Bluesky 2MB blob cap).
+- **GPU sharing**: the LLM (Ollama) and SDXL cannot share the 6GB VRAM; `love-ai.sh image` and `love-cli.mjs` unload the Ollama model first. The SRBMiner miner (`~/epic-mining/start_epic_ubuntu.sh`) also holds ~2GB VRAM and auto-respawns — stop the wrapper script, not just the miner.
+- **Local-mode gaps**: video, TTS, and music throw — only text + image posts are supported.
