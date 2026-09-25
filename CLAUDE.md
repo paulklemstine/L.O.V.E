@@ -45,10 +45,15 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
 
 ## Local AI Stack (replaces Pollinations API)
 - **LLM**: Ollama + `qwen2.5:7b-instruct-q4_K_M`, OpenAI-compatible endpoint at `http://127.0.0.1:11434/v1/chat/completions` (drop-in for `generateText`)
-- **Images**: diffusers + SDXL base fp16 in `~/ai/sdxl`, 6GB-VRAM tuned (drop-in for `generateImage`)
+- **Images**: Pony Diffusion V6 XL (fp16) in `~/ai/pony` (SDXL-arch, reuses base SDXL
+  encoders/VAE), 6GB-VRAM tuned (drop-in for `generateImage`). Prompts get Pony's
+  score-tag convention (`score_9, score_8_up...` + score negatives, CFG 7) added in
+  `~/ai/generate_image.py` and `~/ai/render_batch.py`. Base SDXL kept at `~/ai/sdxl`.
 - **Entry point**: `~/ai/love-ai.sh text|image ...` — see `~/ai/README.md`
-- **CLI app**: `node love-cli.mjs [--post] [--skip-image]` — runs the full LoveEngine
-  pipeline locally (state in `.love-state.json`, credentials in gitignored `.env`).
-  Re-encodes oversized PNGs to JPEG before upload (Bluesky 2MB blob cap).
+- **CLI app**: `node love-cli.mjs [--post] [--skip-image] [--batch N]` — runs the full
+  LoveEngine pipeline locally (state in `.love-state.json`, credentials in gitignored `.env`).
+  `--batch N` queues N texts, renders all images in one warm SDXL session (~2.4x faster),
+  then posts in a burst. Re-encodes oversized PNGs to JPEG (Bluesky 2MB blob cap).
+  Scheduled runs: `./love-run.sh [batches] [batch_size]` (logs to `love-run.log`).
 - **GPU sharing**: the LLM (Ollama) and SDXL cannot share the 6GB VRAM; `love-ai.sh image` and `love-cli.mjs` unload the Ollama model first. The SRBMiner miner (`~/epic-mining/start_epic_ubuntu.sh`) also holds ~2GB VRAM and auto-respawns — stop the wrapper script, not just the miner.
 - **Local-mode gaps**: video, TTS, and music throw — only text + image posts are supported.

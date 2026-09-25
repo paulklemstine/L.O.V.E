@@ -51,7 +51,11 @@ const OUTPUT_DIR = path.join(import.meta.dirname, "output");
 
 // ─── Local client: same interface as PollinationsClient ─────────────────
 class LocalClient {
-    constructor() { this.callLog = []; }
+    constructor(queueOnly = false) {
+        this.callLog = [];
+        this.queueOnly = queueOnly;
+        this.queue = [];
+    }
     resetCallLog() { this.callLog = []; }
     getCallLog() { return this.callLog; }
 
@@ -93,6 +97,11 @@ class LocalClient {
     async generateImage(prompt, options = {}) {
         const { width = 1024, height = 1024, negativePrompt = null, seed = null } = options;
         const fullPrompt = `Very erotic and sensual: ${prompt}`;
+
+        if (this.queueOnly) {
+            this.queue.push({ prompt: fullPrompt, negative: negativePrompt, w: width, h: height, seed });
+            return null;
+        }
 
         // LLM and SDXL cannot share the 6GB GPU: unload the Ollama model first
         await fetch(`${OLLAMA_URL}/api/generate`, {
@@ -140,57 +149,141 @@ class LocalClient {
 const args = process.argv.slice(2);
 const doPost = args.includes("--post");
 const skipImage = args.includes("--skip-image");
+const batchArg = args.indexOf("--batch");
+const batchSize = batchArg !== -1 ? parseInt(args[batchArg + 1], 10) || 10 : 0;
 
-const client = new LocalClient();
-const engine = new LoveEngine(client);
-
-const t0 = Date.now();
-const result = await engine.generatePost((msg) => console.error(`[love] ${msg}`), { skipImage });
-const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-
-console.log("═".repeat(60));
-console.log(`TRANSMISSION #${result.transmissionNumber}  (${elapsed}s, mode: ${result.mode})`);
-console.log(`vibe: ${result.vibe} | subliminal: "${result.subliminal}"`);
-console.log("─".repeat(60));
-console.log(result.text);
-if (result.imageBlob) {
-    const imgPath = path.join(OUTPUT_DIR, `transmission-${result.transmissionNumber}.png`);
-    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-    fs.writeFileSync(imgPath, Buffer.from(await result.imageBlob.arrayBuffer()));
-    console.log("─".repeat(60));
-    console.log(`image: ${imgPath}`);
-}
-console.log(`llm calls: ${result.callLog.length}`);
-
-if (doPost) {
+// Bluesky login once, reused across posts
+async function getBsky() {
     const handle = process.env.BLUESKY_HANDLE;
     const password = process.env.BLUESKY_APP_PASSWORD;
     if (!handle || !password) {
         console.error("missing BLUESKY_HANDLE / BLUESKY_APP_PASSWORD (set in .env)");
         process.exit(1);
     }
+    const bsky = new BlueskyClient();
+    await bsky.login(handle, password);
+    return bsky;
+}
 
-    // Bluesky caps blobs at 2MB; re-encode oversized PNGs as JPEG
-    if (result.imageBlob && result.imageBlob.size > 1_900_000) {
-        console.error("[love] image over 2MB, converting to JPEG...");
-        const src = path.join(OUTPUT_DIR, "upload-src.png");
-        const dst = path.join(OUTPUT_DIR, "upload.jpg");
-        fs.writeFileSync(src, Buffer.from(await result.imageBlob.arrayBuffer()));
+// Bluesky caps blobs at 2MB; re-encode oversized PNGs as JPEG (in place)
+async function shrinkForUpload(pngPath) {
+    let buf = fs.readFileSync(pngPath);
+    if (buf.length > 1_900_000) {
+        console.error(`[love] image ${buf.length} bytes, converting to JPEG...`);
+        const dst = pngPath.replace(/\.png$/, ".jpg");
         await new Promise((resolve, reject) => {
             const proc = spawn(IMG_PY, ["-c", `
 from PIL import Image
-im = Image.open("${src}").convert("RGB")
+im = Image.open("${pngPath}").convert("RGB")
 im.thumbnail((1200, 1200))
 im.save("${dst}", quality=88)
 `]);
             proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error("jpeg conversion failed"))));
         });
-        result.imageBlob = new Blob([fs.readFileSync(dst)], { type: "image/jpeg" });
+        buf = fs.readFileSync(dst);
+        return { buf, type: "image/jpeg" };
+    }
+    return { buf, type: "image/png" };
+}
+
+async function postOne(bsky, text, imagePath) {
+    const { buf, type } = await shrinkForUpload(imagePath);
+    const res = await bsky.createPost(text, new Blob([buf], { type }));
+    console.log(`posted: ${res.uri}`);
+}
+
+if (batchSize > 0) {
+    // ── Phase 1: queue N texts (LLM only, image requests recorded) ──
+    const client = new LocalClient(true);
+    const engine = new LoveEngine(client);
+    const batch = [];
+    const t0 = Date.now();
+    for (let i = 1; i <= batchSize; i++) {
+        console.error(`[batch] === text ${i}/${batchSize} ===`);
+        const result = await engine.generatePost(
+            (msg) => console.error(`[love] ${msg}`), {}
+        );
+        const imgReq = client.queue[client.queue.length - 1];
+        batch.push({
+            text: result.text,
+            subliminal: result.subliminal,
+            transmissionNumber: result.transmissionNumber,
+            image: imgReq ? { ...imgReq, out: path.join(OUTPUT_DIR, `transmission-${result.transmissionNumber}.png`) } : null,
+        });
+        console.error(`[batch] queued #${result.transmissionNumber}: ${result.text.slice(0, 50)}...`);
+    }
+    const queueFile = path.join(OUTPUT_DIR, `batch-${Date.now()}.json`);
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+    fs.writeFileSync(queueFile, JSON.stringify(batch, null, 2));
+    console.error(`[batch] queued ${batch.length} texts in ${((Date.now() - t0) / 1000).toFixed(0)}s -> ${queueFile}`);
+
+    // ── Phase 2: render all images in one warm SDXL session ──
+    const jobs = batch.filter((b) => b.image).map((b) => ({
+        prompt: b.image.prompt, negative: b.image.negative,
+        w: b.image.w, h: b.image.h, seed: b.image.seed, out: b.image.out,
+    }));
+    if (jobs.length > 0) {
+        await fetch(`${OLLAMA_URL}/api/generate`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: OLLAMA_MODEL, keep_alive: 0 }),
+        }).catch(() => {});
+        console.error(`[batch] rendering ${jobs.length} images (one model load)...`);
+        const jobsFile = queueFile.replace(/\.json$/, "-jobs.json");
+        fs.writeFileSync(jobsFile, JSON.stringify(jobs));
+        await new Promise((resolve, reject) => {
+            const proc = spawn(path.join(process.env.HOME, "ai", "imgenv", "bin", "python"),
+                [path.join(process.env.HOME, "ai", "render_batch.py"), jobsFile],
+                { stdio: "inherit" });
+            proc.on("error", reject);
+            proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`render batch exited ${code}`))));
+        });
     }
 
-    console.error(`[love] posting to Bluesky as ${handle}...`);
-    const bsky = new BlueskyClient();
-    await bsky.login(handle, password);
-    const res = await bsky.createPost(result.text, result.imageBlob);
-    console.log(`posted: ${res.uri}`);
+    // ── Phase 3: post everything ──
+    if (doPost) {
+        const bsky = await getBsky();
+        for (const b of batch) {
+            if (!b.image) { await bsky.createPost(b.text); continue; }
+            try {
+                await postOne(bsky, b.text, b.image.out);
+            } catch (err) {
+                console.error(`[batch] post #${b.transmissionNumber} failed: ${err.message}`);
+            }
+        }
+    }
+    console.error(`[batch] done`);
+} else {
+    const client = new LocalClient();
+    const engine = new LoveEngine(client);
+
+    const t0 = Date.now();
+    const result = await engine.generatePost((msg) => console.error(`[love] ${msg}`), { skipImage });
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+
+    console.log("═".repeat(60));
+    console.log(`TRANSMISSION #${result.transmissionNumber}  (${elapsed}s, mode: ${result.mode})`);
+    console.log(`vibe: ${result.vibe} | subliminal: "${result.subliminal}"`);
+    console.log("─".repeat(60));
+    console.log(result.text);
+    if (result.imageBlob) {
+        fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+        const imgPath = path.join(OUTPUT_DIR, `transmission-${result.transmissionNumber}.png`);
+        fs.writeFileSync(imgPath, Buffer.from(await result.imageBlob.arrayBuffer()));
+        console.log("─".repeat(60));
+        console.log(`image: ${imgPath}`);
+    }
+    console.log(`llm calls: ${result.callLog.length}`);
+
+    if (doPost) {
+        const bsky = await getBsky();
+        if (result.imageBlob) {
+            fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+            const imgPath = path.join(OUTPUT_DIR, `transmission-${result.transmissionNumber}.png`);
+            fs.writeFileSync(imgPath, Buffer.from(await result.imageBlob.arrayBuffer()));
+            await postOne(bsky, result.text, imgPath);
+        } else {
+            const res = await bsky.createPost(result.text);
+            console.log(`posted: ${res.uri}`);
+        }
+    }
 }
