@@ -45,10 +45,10 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
 
 ## Local AI Stack (replaces Pollinations API)
 - **LLM**: Ollama + `qwen2.5:7b-instruct-q4_K_M`, OpenAI-compatible endpoint at `http://127.0.0.1:11434/v1/chat/completions` (drop-in for `generateText`)
-- **Images**: Pony Diffusion V6 XL (fp16) in `~/ai/pony` (SDXL-arch, reuses base SDXL
-  encoders/VAE), 6GB-VRAM tuned (drop-in for `generateImage`). Prompts get Pony's
-  score-tag convention (`score_9, score_8_up...` + score negatives, CFG 7) added in
-  `~/ai/generate_image.py` and `~/ai/render_batch.py`. Base SDXL kept at `~/ai/sdxl`.
+- **Images**: 3-model rotation — SDXL base (`~/ai/sdxl`), LEOSAM HelloWorld v7 (`~/ai/leosam`),
+  RealVisXL V5 (`~/ai/realvis`) — one picked randomly per image in `~/ai/generate_image.py`
+  and `~/ai/render_batch.py` (Euler A scheduler, CFG 7). Model choice is compared/tested via
+  `~/ai/compare/` (contact sheets). Unused-but-installed: BigASP v2 (`~/ai/bigasp`).
 - **Entry point**: `~/ai/love-ai.sh text|image ...` — see `~/ai/README.md`
 - **CLI app**: `node love-cli.mjs [--post] [--skip-image] [--batch N]` — runs the full
   LoveEngine pipeline locally (state in `.love-state.json`, credentials in gitignored `.env`).
