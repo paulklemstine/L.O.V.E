@@ -200,9 +200,17 @@ if (batchSize > 0) {
     const t0 = Date.now();
     for (let i = 1; i <= batchSize; i++) {
         console.error(`[batch] === text ${i}/${batchSize} ===`);
-        const result = await engine.generatePost(
-            (msg) => console.error(`[love] ${msg}`), {}
-        );
+        let result = null;
+        for (let attempt = 1; attempt <= 2 && !result; attempt++) {
+            try {
+                result = await engine.generatePost(
+                    (msg) => console.error(`[love] ${msg}`), {}
+                );
+            } catch (err) {
+                console.error(`[batch] text ${i} attempt ${attempt} failed: ${err.message}`);
+            }
+        }
+        if (!result) { console.error(`[batch] text ${i} skipped after retries`); continue; }
         const imgReq = client.queue[client.queue.length - 1];
         batch.push({
             text: result.text,

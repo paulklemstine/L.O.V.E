@@ -2256,6 +2256,9 @@ Return ONLY valid JSON:
             metaphor: "metamorphosis",
             ingredientHints: [],
         };
+        result.concept = result.concept || "transformation";
+        result.emotion = result.emotion || "awe";
+        result.metaphor = result.metaphor || "metamorphosis";
         result.domains = [
             result.domainA || "nature",
             result.domainB || "music",
