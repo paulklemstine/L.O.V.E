@@ -57,3 +57,11 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   Scheduled runs: `./love-run.sh [batches] [batch_size]` (logs to `love-run.log`).
 - **GPU sharing**: the LLM (Ollama) and SDXL cannot share the 6GB VRAM; `love-ai.sh image` and `love-cli.mjs` unload the Ollama model first. The SRBMiner miner (`~/epic-mining/start_epic_ubuntu.sh`) also holds ~2GB VRAM and auto-respawns — stop the wrapper script, not just the miner.
 - **Local-mode gaps**: video, TTS, and music throw — only text + image posts are supported.
+- **Subliminal text in images**: NOT rendered locally. The webapp prompted gpt-image (cloud)
+  to weave the phrase into the scene; local diffusion models cannot render readable text.
+  A PIL compositing fallback exists (`~/ai/overlay_text.py`) but is disabled by design.
+
+## Robustness notes
+- qwen3 occasionally emits off-schema JSON at high LFO temperatures: the creative seed
+  falls back to default fields, and batch generation retries a post once before skipping
+  (a single bad generation never kills a batch).
