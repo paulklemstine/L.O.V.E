@@ -44,7 +44,7 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
 ```
 
 ## Local AI Stack (replaces Pollinations API)
-- **LLM**: Ollama + `qwen2.5:7b-instruct-q4_K_M`, OpenAI-compatible endpoint at `http://127.0.0.1:11434/v1/chat/completions` (drop-in for `generateText`)
+- **LLM**: Ollama + `qwen3:8b`, OpenAI-compatible endpoint at `http://127.0.0.1:11434/v1/chat/completions` (drop-in for `generateText`; verified no thinking-mode pollution via /v1). Previous: `qwen2.5:7b-instruct-q4_K_M`
 - **Images**: 3-model rotation — SDXL base (`~/ai/sdxl`), LEOSAM HelloWorld v7 (`~/ai/leosam`),
   RealVisXL V5 (`~/ai/realvis`) — one picked randomly per image in `~/ai/generate_image.py`
   and `~/ai/render_batch.py` (Euler A scheduler, CFG 7). Model choice is compared/tested via

@@ -44,7 +44,7 @@ if (fs.existsSync(ENV_FILE)) {
 }
 
 const OLLAMA_URL = "http://127.0.0.1:11434";
-const OLLAMA_MODEL = "qwen2.5:7b-instruct-q4_K_M";
+const OLLAMA_MODEL = "qwen3:8b";
 const IMG_PY = path.join(process.env.HOME, "ai", "imgenv", "bin", "python");
 const IMG_SCRIPT = path.join(process.env.HOME, "ai", "generate_image.py");
 const OUTPUT_DIR = path.join(import.meta.dirname, "output");
