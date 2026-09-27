@@ -145,12 +145,41 @@ class LocalClient {
     }
 }
 
+// ─── Ollama supervision (started detached if not already up) ───────────
+async function ollamaHealthy() {
+    try {
+        const res = await fetch(`${OLLAMA_URL}/api/version`, { signal: AbortSignal.timeout(2000) });
+        return res.ok;
+    } catch {
+        return false;
+    }
+}
+
+async function ensureOllama() {
+    if (await ollamaHealthy()) return;
+    const startScript = path.join(process.env.HOME, "ai", "start-ollama.sh");
+    if (!fs.existsSync(startScript)) throw new Error(`missing ${startScript}`);
+    console.error("[llm] Ollama is down, starting it...");
+    const child = spawn(startScript, [], { stdio: "ignore", detached: true });
+    child.unref();
+    for (let i = 0; i < 90; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        if (await ollamaHealthy()) {
+            console.error("[llm] Ollama is up");
+            return;
+        }
+    }
+    throw new Error("Ollama did not become ready within 90s");
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
 const doPost = args.includes("--post");
 const skipImage = args.includes("--skip-image");
 const batchArg = args.indexOf("--batch");
 const batchSize = batchArg !== -1 ? parseInt(args[batchArg + 1], 10) || 10 : 0;
+
+await ensureOllama();
 
 // Bluesky login once, reused across posts
 async function getBsky() {
