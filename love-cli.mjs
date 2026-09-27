@@ -245,6 +245,7 @@ if (batchSize > 0) {
             proc.on("error", reject);
             proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`render batch exited ${code}`))));
         });
+
     }
 
     // ── Phase 3: post everything ──
@@ -277,6 +278,7 @@ if (batchSize > 0) {
         fs.mkdirSync(OUTPUT_DIR, { recursive: true });
         const imgPath = path.join(OUTPUT_DIR, `transmission-${result.transmissionNumber}.png`);
         fs.writeFileSync(imgPath, Buffer.from(await result.imageBlob.arrayBuffer()));
+        result.imageBlob = new Blob([fs.readFileSync(imgPath)], { type: "image/png" });
         console.log("─".repeat(60));
         console.log(`image: ${imgPath}`);
     }
