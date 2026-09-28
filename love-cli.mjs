@@ -60,34 +60,54 @@ class LocalClient {
     getCallLog() { return this.callLog; }
 
     async generateText(systemPrompt, userPrompt, options = {}) {
-        const { temperature = 0.85, maxRetries = 2, label = "LLM Call" } = options;
+        const {
+            temperature = 0.85,
+            maxRetries = 2,
+            label = "LLM Call",
+            // qwen3 at high temperature occasionally falls into a repetition loop and
+            // generates until the context window is full; without a cap the request can
+            // spin for minutes and never return.
+            maxTokens = 1024,
+            // A stalled request never rejects on its own, so the retry loop below only
+            // ever sees errors. Abort it ourselves so a hang becomes a retryable failure.
+            timeoutMs = 120000,
+        } = options;
         const body = {
             model: OLLAMA_MODEL,
             messages: [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: userPrompt },
             ],
-            temperature,
+            // qwen3 defaults to emitting a long <think> block first. On the OpenAI-compatible
+            // /v1 endpoint that reasoning is returned in a separate `reasoning` field, leaving
+            // `content` empty, and it burns the whole token budget before anything usable comes
+            // back. The native endpoint's `think: false` suppresses it outright.
+            think: false,
+            options: { temperature, num_predict: maxTokens },
             stream: false,
         };
         if (userPrompt.includes("Return ONLY valid JSON") || userPrompt.includes("Return ONLY raw JSON")) {
-            body.response_format = { type: "json_object" };
+            body.format = "json";
         }
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
             try {
-                const res = await fetch(`${OLLAMA_URL}/v1/chat/completions`, {
+                const res = await fetch(`${OLLAMA_URL}/api/chat`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(body),
+                    signal: AbortSignal.timeout(timeoutMs),
                 });
                 if (!res.ok) throw new Error(`Ollama ${res.status}: ${(await res.text()).slice(0, 200)}`);
                 const data = await res.json();
-                const text = data.choices?.[0]?.message?.content || "";
+                const text = data.message?.content || "";
                 if (!text.trim()) throw new Error("Ollama returned empty response");
                 this.callLog.push({ label, systemPrompt, userPrompt, response: text, model: OLLAMA_MODEL });
                 return text;
             } catch (err) {
+                if (err.name === "TimeoutError") {
+                    err = new Error(`timed out after ${timeoutMs}ms`);
+                }
                 if (attempt === maxRetries) throw err;
                 await new Promise((r) => setTimeout(r, 5000 * Math.pow(2, attempt)));
             }

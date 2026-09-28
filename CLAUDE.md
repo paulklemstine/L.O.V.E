@@ -44,7 +44,7 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
 ```
 
 ## Local AI Stack (replaces Pollinations API)
-- **LLM**: Ollama + `qwen3:8b`, OpenAI-compatible endpoint at `http://127.0.0.1:11434/v1/chat/completions` (drop-in for `generateText`; verified no thinking-mode pollution via /v1). Previous: `qwen2.5:7b-instruct-q4_K_M`
+- **LLM**: Ollama + `qwen3:8b` via the native endpoint `http://127.0.0.1:11434/api/chat`. `generateText` must pass `think: false` — qwen3 otherwise emits a long <think> block that the OpenAI-compatible `/v1/chat/completions` endpoint returns in a separate `reasoning` field, leaving `content` empty after burning the entire token budget. Neither `chat_template_kwargs.enable_thinking` nor a `/no_think` suffix suppresses it on `/v1`; only the native endpoint's `think: false` works (~12s → ~1s per call). Previous: `qwen2.5:7b-instruct-q4_K_M`
 - **Images**: 3-model rotation — SDXL base (`~/ai/sdxl`), LEOSAM HelloWorld v7 (`~/ai/leosam`),
   RealVisXL V5 (`~/ai/realvis`) — one picked randomly per image in `~/ai/generate_image.py`
   and `~/ai/render_batch.py` (Euler A scheduler, CFG 7). Model choice is compared/tested via
@@ -65,3 +65,6 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
 - qwen3 occasionally emits off-schema JSON at high LFO temperatures: the creative seed
   falls back to default fields, and batch generation retries a post once before skipping
   (a single bad generation never kills a batch).
+- Every LLM call is capped (`num_predict`) and bounded by an `AbortSignal.timeout`. Without
+  the timeout a stalled request never rejects, so the retry loop only ever sees errors and a
+  hang waits forever — this is what wedged a continuous run in 2026-09-27.
