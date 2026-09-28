@@ -7,20 +7,24 @@ BATCHES="${1:-0}"
 SIZE="${2:-10}"
 LOG="love-run.log"
 
+log () {
+  echo "[$(date '+%F %T')] $*" | tee -a "$LOG"
+}
+
 run_batch () {
   local i="$1"
-  echo "[$(date '+%F %T')] === batch $i ($SIZE posts) ===" >> "$LOG"
-  node love-cli.mjs --batch "$SIZE" --post >> "$LOG" 2>&1
-  echo "[$(date '+%F %T')] === batch $i done (exit $?) ===" >> "$LOG"
+  log "=== batch $i ($SIZE posts) ==="
+  node love-cli.mjs --batch "$SIZE" --post 2>&1 | tee -a "$LOG"
+  log "=== batch $i done (exit ${PIPESTATUS[0]}) ==="
 }
 
 if [ "$BATCHES" -gt 0 ] 2>/dev/null; then
   for i in $(seq 1 "$BATCHES"); do
     run_batch "$i/$BATCHES"
   done
-  echo "[$(date '+%F %T')] all $BATCHES batches complete" >> "$LOG"
+  log "all $BATCHES batches complete"
 else
-  echo "[$(date '+%F %T')] starting continuous mode ($SIZE posts per batch, Ctrl-C to stop)" >> "$LOG"
+  log "starting continuous mode ($SIZE posts per batch, Ctrl-C to stop)"
   i=1
   while true; do
     run_batch "$i"
