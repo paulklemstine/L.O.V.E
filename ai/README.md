@@ -72,11 +72,12 @@ a bug when you see them:
 - LLM post text: ~8-17s (16 tok/s, split CPU/GPU on the 6GB card)
 - Image: ~54s at 768px/25 steps warm; ~3.5 min at 1024px/28 steps
 - Batch of 10 posts, warm batch render (the old three-phase path): ~50 min end-to-end
-- 10 posts, sequential (current path): **not yet measured.** Each post now pays a full SDXL
-  model load plus an Ollama unload/reload between its text and its image, so expect it to be
-  slower than the figure above. The trade is that posts go live one at a time instead of all
-  10 arriving ~50 min after the run started, and a mid-render failure costs one post rather
-  than the whole batch. Record the real number here after the first full run.
+- 10 posts, sequential (current path): **3477s (~58 min)**, ~348s per post, measured
+  2026-09-29 with 10/10 posted and no retries. That is ~16% slower than the warm
+  batch above, not dramatically so — each post pays a ~35s SDXL model load and an
+  Ollama unload/reload, but a render is almost entirely diffusion steps. The win is
+  that posts go live one at a time and a mid-render failure costs one post rather
+  than the whole batch.
 
 ## Reinstall notes
 Everything lives in `~/ai` (~38GB: three image models + bigasp, ollama + 5 models, venv).

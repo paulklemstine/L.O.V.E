@@ -259,10 +259,12 @@ async function postOne(bsky, text, imagePath) {
 // batch when a process died mid-render. `--batch N` now means "N sequential
 // posts" rather than "a batch of N".
 //
-// The trade is a full SDXL model load per image, plus an Ollama
-// unload/reload between each post's text and image — CLAUDE.md measured the
-// warm-session version at ~2.4x faster. `--batch N` and single-post mode now
-// share this one path, so there is a single code path to reason about.
+// The trade is a full SDXL model load per image, plus an Ollama unload/reload
+// between each post's text and image. Measured cost: 3477s for 10 posts
+// (~348s each) against ~50 min for the warm-session batch — about 16% slower,
+// not the 2.4x an earlier note here claimed. A render is almost entirely
+// diffusion steps, so the ~35s model load is a small fraction of it.
+// `--batch N` and single-post mode share this one path.
 //
 // ai/render_batch.py is still the manual recovery tool for re-rendering a
 // jobs.json produced before this change; nothing here spawns it.

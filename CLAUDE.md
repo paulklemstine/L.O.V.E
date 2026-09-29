@@ -88,9 +88,12 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   three-phase design that queued N texts, rendered them in one warm SDXL session, then posted in
   a burst; that one stalled ~50 min before anything reached Bluesky and lost every render in the
   batch when a process died mid-render. The cost of going sequential is a full SDXL model load per
-  image plus an Ollama unload/reload between each post's text and image — the warm-session version
-  measured ~2.4x faster, so expect a slower run in exchange for posts going live immediately and a
-  failure that costs one post instead of ten. A failed post is caught and the loop continues.
+  image plus an Ollama unload/reload between each post's text and image, but it is cheaper than
+  expected: 3477s for 10 posts (~348s each) against ~50 min for the warm-session batch, roughly
+  16% slower rather than the 2.4x an earlier version of this note claimed. A render is almost
+  entirely diffusion steps, so the ~35s model load is a small fraction of it. In exchange, posts go
+  live immediately and a failure costs one post instead of ten. A failed post is caught and the
+  loop continues.
   Re-encodes oversized PNGs to JPEG (Bluesky 2MB blob cap).
   `ai/render_batch.py` is no longer spawned by the CLI; it survives as the manual recovery tool for
   re-rendering a `jobs.json` written before this change.
