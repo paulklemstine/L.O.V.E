@@ -46,8 +46,8 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
 ## Local AI Stack (replaces Pollinations API)
 - **LLM**: Ollama + `qwen3:8b` via the native endpoint `http://127.0.0.1:11434/api/chat`. `generateText` must pass `think: false` — qwen3 otherwise emits a long <think> block that the OpenAI-compatible `/v1/chat/completions` endpoint returns in a separate `reasoning` field, leaving `content` empty after burning the entire token budget. Neither `chat_template_kwargs.enable_thinking` nor a `/no_think` suffix suppresses it on `/v1`; only the native endpoint's `think: false` works (~12s → ~1s per call). Previous: `qwen2.5:7b-instruct-q4_K_M`
 - **Images**: 3-model rotation — SDXL base (`~/ai/sdxl`), LEOSAM HelloWorld v7 (`~/ai/leosam`),
-  RealVisXL V5 (`~/ai/realvis`) — one picked randomly per image in `~/ai/generate_image.py`
-  and `~/ai/render_batch.py` (Euler A scheduler, CFG 7). Model choice is compared/tested via
+  RealVisXL V5 (`~/ai/realvis`) — one picked randomly per image in `ai/generate_image.py`
+  and `ai/render_batch.py` (Euler A scheduler, CFG 7). Model choice is compared/tested via
   `~/ai/compare/` (contact sheets). Unused-but-installed: BigASP v2 (`~/ai/bigasp`).
 - **Long prompts (CLIP 77-token window)**: generated image prompts run 90–116 CLIP tokens, so
   diffusers silently truncated ~25% of every one — the tail, which is exactly where
@@ -72,7 +72,7 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   - Both text encoders return different types: `text_encoder` is a plain `CLIPTextModel`
     (`pooler_output`), `text_encoder_2` has the projection (`text_embeds`). Only encoder 2's
     pooled vector is used for SDXL.
-- **Entry point**: `~/ai/love-ai.sh text|image ...` — see `~/ai/README.md`
+- **Entry point**: `ai/love-ai.sh text|image ...` — see `ai/README.md`
 - **CLI app**: `node love-cli.mjs [--post] [--skip-image] [--batch N]` — runs the full
   LoveEngine pipeline locally (state in `.love-state.json`, credentials in gitignored `.env`).
   `--batch N` queues N texts, renders all images in one warm SDXL session (~2.4x faster),
@@ -93,7 +93,13 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   hang waits forever — this is what wedged a continuous run in 2026-09-27.
 
 ## Repo layout: local image scripts
-- `ai/generate_image.py`, `ai/render_batch.py`, `ai/long_prompt.py` are versioned in this repo.
-  Model weights (~25GB across `sdxl`/`leosam`/`realvis`) and the `imgenv` venv are NOT — they
-  live in `~/ai` and are located via `LOVE_AI_HOME` (defaults to `~/ai`). `love-cli.mjs` invokes
-  the repo copies using that venv.
+- `ai/generate_image.py`, `ai/render_batch.py`, `ai/long_prompt.py`, `ai/love-ai.sh`,
+  `ai/memdiag.py` and `ai/README.md` are versioned in this repo.
+  Model weights (~25GB across `sdxl`/`leosam`/`realvis`), the `imgenv` venv and the Ollama
+  install are NOT — they live in `~/ai` and are located via `LOVE_AI_HOME` (defaults to
+  `~/ai`). `love-cli.mjs` invokes the repo copies using that venv, and `love-ai.sh` resolves
+  the scripts beside itself, so neither hardcodes a checkout path. Earlier copies of the
+  Python scripts and of `love-ai.sh` sat in `~/ai` next to the weights and are now deleted —
+  an unversioned second copy is how the CLIP truncation fix nearly got bypassed.
+- `ai/memdiag.py` prints VRAM per render stage. Run it first when a render OOMs on the 6GB
+  card: resident text encoders mean something took the hooked GPU path instead of the CPU one.

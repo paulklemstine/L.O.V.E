@@ -4,7 +4,7 @@
  *
  * Runs the same LoveEngine pipeline (love-engine.js) but backed by:
  *   - Local LLM: Ollama (OpenAI-compatible endpoint on 127.0.0.1:11434)
- *   - Local image: SDXL via ~/ai/generate_image.py
+ *   - Local image: SDXL via ai/generate_image.py and ai/render_batch.py
  *   - Bluesky posting via bluesky.js
  *
  * Usage:
