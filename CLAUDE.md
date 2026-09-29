@@ -49,6 +49,23 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   RealVisXL V5 (`~/ai/realvis`) — one picked randomly per image in `~/ai/generate_image.py`
   and `~/ai/render_batch.py` (Euler A scheduler, CFG 7). Model choice is compared/tested via
   `~/ai/compare/` (contact sheets). Unused-but-installed: BigASP v2 (`~/ai/bigasp`).
+- **Long prompts (CLIP 77-token window)**: generated image prompts run 90–116 CLIP tokens, so
+  diffusers silently truncated ~25% of every one — the tail, which is exactly where
+  `_generateImagePrompt` puts the palette and composition slot (3 of 13 composition markers were
+  being dropped). `~/ai/long_prompt.py` splits the prompt into 75-token chunks, encodes each, and
+  concatenates the `last_hidden_state` sequences, so a 115-token prompt yields 154 cross-attention
+  tokens instead of 77. Wired into both `generate_image.py` and `render_batch.py`.
+  - 77 is a learned position-embedding table (`max_position_embeddings: 77` in both text encoder
+    configs), not a setting — raising it in config without retraining just breaks the shape.
+  - The negative prompt is padded with EOS-filled chunks to match the positive side's chunk count;
+    classifier-free guidance requires both embeddings to share a sequence length.
+  - **Encoding must run on CPU**, bypassing accelerate's offload hook via the module's
+    `_old_forward`. Calling the encoders directly lets `model_cpu_offload` pull them onto the GPU
+    and leave ~2GB resident; a production render already peaks at ~5.6GB of 6GB, so that alone
+    OOMs the card. The CPU path costs a couple of seconds against a multi-minute render.
+  - Both text encoders return different types: `text_encoder` is a plain `CLIPTextModel`
+    (`pooler_output`), `text_encoder_2` has the projection (`text_embeds`). Only encoder 2's
+    pooled vector is used for SDXL.
 - **Entry point**: `~/ai/love-ai.sh text|image ...` — see `~/ai/README.md`
 - **CLI app**: `node love-cli.mjs [--post] [--skip-image] [--batch N]` — runs the full
   LoveEngine pipeline locally (state in `.love-state.json`, credentials in gitignored `.env`).
