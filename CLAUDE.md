@@ -45,6 +45,13 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
 
 ## Local AI Stack (replaces Pollinations API)
 - **LLM**: Ollama + `qwen3:8b` via the native endpoint `http://127.0.0.1:11434/api/chat`. `generateText` must pass `think: false` — qwen3 otherwise emits a long <think> block that the OpenAI-compatible `/v1/chat/completions` endpoint returns in a separate `reasoning` field, leaving `content` empty after burning the entire token budget. Neither `chat_template_kwargs.enable_thinking` nor a `/no_think` suffix suppresses it on `/v1`; only the native endpoint's `think: false` works (~12s → ~1s per call). Previous: `qwen2.5:7b-instruct-q4_K_M`
+- **Ollama runs as a systemd *user* service** (`~/.config/systemd/user/ollama.service`, `systemctl
+  --user`), not a system service and not a bare background process. `Linger=yes` is already set on
+  this account, so it starts at boot with no login. It sets `OLLAMA_MODELS=/home/raver1975/ai/ollama-models`
+  and that line is load-bearing: Ollama otherwise defaults to `~/.ollama/models`, which is **empty**
+  on this box, so it comes up healthy on `/api/version` and then answers every request with
+  `model 'qwen3:8b' not found` (the serve log says `total blobs: 0`). If the model store ever moves,
+  the unit is the thing to update.
 - **Images**: 3-model rotation — SDXL base (`~/ai/sdxl`), LEOSAM HelloWorld v7 (`~/ai/leosam`),
   RealVisXL V5 (`~/ai/realvis`) — one picked randomly per image in `ai/generate_image.py`
   and `ai/render_batch.py` (Euler A scheduler, CFG 7). Model choice is compared/tested via
@@ -112,6 +119,32 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   A PIL compositing fallback exists (`~/ai/overlay_text.py`) but is disabled by design.
 
 ## Robustness notes
+- **A CUDA driver mismatch silently CPU-falls-back Ollama and looks like an LLM bug.** On 2026-09-29
+  an `apt` run cycled `nvidia-driver-570` → purge → reinstall → purge → `install nvidia-driver-535`,
+  and every attempt re-pulled the 580 packages as automatic dependencies. The result was a kernel
+  module of 535.309.01 (loaded at the last boot) against 580.178.04 userspace libraries, with no
+  `libcuda.so.535*` on disk at all. Nothing errored loudly: `nvidia-smi` reported an NVML mismatch,
+  PyTorch raised `Error 804` with `torch.cuda.is_available() == False`, and **Ollama just fell back to
+  the CPU** — a 2-token reply took 83.9s (0.54 tok/s prompt eval) instead of ~1s. Every LLM call then
+  blew the 120s `AbortSignal.timeout` in `love-cli.mjs:83`, and posts 25–36 were lost while the backoff
+  climbed to 900s. The tell is `llama-server` pegged at ~860% CPU with the model resident in RAM.
+  **Fix:** reboot — `dkms` had already built the 580 module, so booting it matched the userspace with
+  no package surgery. Afterwards the 535 branch was purged and the 580 stack marked
+  `apt-mark manual`; that marking is what stops the next `apt upgrade` from reinstalling 535 userspace
+  over the 580 ones and repeating the whole thing. Note that purging 535 makes apt consider the *entire*
+  580 stack orphaned (it entered as an automatic dependency of 535) and offer to delete
+  `nvidia-dkms-580` — never run `apt autoremove` before the `apt-mark manual`.
+- **The `Xs elapsed` in the `ready` line is cumulative, not per-post.** `t0` is declared at
+  `love-cli.mjs:280`, *outside* the post loop, so the number grows by one post-time per post and reads
+  like a per-post timer. A steady ~290s/post shows up as 275.6 → 567.5 → 855.0 → 1157.4s. The real
+  per-post cost is flat, confirmed three ways: the cumulative deltas (275.6/291.9/287.5/302.4), the
+  `output/transmission-N.png` mtime intervals (+292/+287/+302), and a phase trace (text ~94s + render
+  ~181s). Don't diagnose a slowdown from that field without differencing it first.
+- **`love-run.log` is shared by every run and full of `\r`.** tqdm writes carriage returns to stderr
+  alongside node's `console.error`, so `grep -E '^\[seq\]'` silently misses lines that got glued to a
+  progress bar, and `awk` ranges match *earlier* runs' identically-numbered posts. Scope to the run
+  you care about first: `tr '\r' '\n' < love-run.log | awk '/starting continuous mode/{n=NR} {l[NR]=$0} END{for(i=n;i<=NR;i++) print l[i]}'`.
+  For per-post durations prefer the PNG mtimes, which are immune to all of this.
 - qwen3 occasionally emits off-schema JSON at high LFO temperatures: the creative seed
   falls back to default fields, and generation retries a post once before skipping
   (a single bad generation never kills a run).

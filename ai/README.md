@@ -12,6 +12,14 @@ The scripts in this directory are versioned in the repo. The weights and the
   `http://127.0.0.1:11434/v1/chat/completions` (drop-in for `generateText`; no thinking-mode
   pollution via /v1). Also pulled for comparison: qwen2.5:7b, gemma3:4b, llama3.1:8b,
   gemma4:e2b (delete unused ones from `ollama rm <model>` to reclaim ~15GB).
+- **Ollama is a systemd user service**: `~/.config/systemd/user/ollama.service`, controlled with
+  `systemctl --user start|stop|status ollama` and already enabled, so it comes up at boot
+  (`Linger=yes` is set on this account). Its `OLLAMA_MODELS=/home/raver1975/ai/ollama-models` is
+  mandatory — the default `~/.ollama/models` is empty, and a server started without it looks
+  healthy on `/api/version` but answers every request with `model 'qwen3:8b' not found`.
+  If generation has suddenly become very slow, check `nvidia-smi` before blaming the model: a
+  kernel-module/userspace version mismatch makes Ollama fall back to CPU *silently* (see the
+  driver note in `../CLAUDE.md`).
 - **Images (rotation)**: SDXL base (`~/ai/sdxl`), LEOSAM HelloWorld v7 (`~/ai/leosam`),
   RealVisXL V5 (`~/ai/realvis`) — one picked randomly per image in `generate_image.py`
   and `render_batch.py` (Euler A scheduler, CFG 7, fp16).
