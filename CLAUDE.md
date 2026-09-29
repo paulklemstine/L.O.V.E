@@ -52,17 +52,23 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
 - **Long prompts (CLIP 77-token window)**: generated image prompts run 90–116 CLIP tokens, so
   diffusers silently truncated ~25% of every one — the tail, which is exactly where
   `_generateImagePrompt` puts the palette and composition slot (3 of 13 composition markers were
-  being dropped). `~/ai/long_prompt.py` splits the prompt into 75-token chunks, encodes each, and
+  being dropped). `ai/long_prompt.py` splits the prompt into 75-token chunks, encodes each, and
   concatenates the `last_hidden_state` sequences, so a 115-token prompt yields 154 cross-attention
   tokens instead of 77. Wired into both `generate_image.py` and `render_batch.py`.
   - 77 is a learned position-embedding table (`max_position_embeddings: 77` in both text encoder
     configs), not a setting — raising it in config without retraining just breaks the shape.
   - The negative prompt is padded with EOS-filled chunks to match the positive side's chunk count;
     classifier-free guidance requires both embeddings to share a sequence length.
-  - **Encoding must run on CPU**, bypassing accelerate's offload hook via the module's
-    `_old_forward`. Calling the encoders directly lets `model_cpu_offload` pull them onto the GPU
-    and leave ~2GB resident; a production render already peaks at ~5.6GB of 6GB, so that alone
-    OOMs the card. The CPU path costs a couple of seconds against a multi-minute render.
+  - **Every prompt encodes on CPU**, short ones included, bypassing accelerate's offload hook via
+    the module's `_old_forward`. The encoders left resident by the hook cost ~1.9GB (encoder 2
+    alone is 1325MB) and the UNet needs 3744MB, so together they overrun a 6GB card. Short-circuiting
+    single-window prompts to `pipe.encode_prompt` for speed looks harmless but OOMs: under
+    `model_cpu_offload` the hook only returns components to CPU in `maybe_free_model_hooks()` at the
+    end of a full `pipe(...)` call, and a standalone `encode_prompt` never triggers it. That is how
+    a 6-token prompt died at 1890MB resident while a 107-token one rendered fine at 1MB — the long
+    production prompts hid it. The CPU path costs a couple of seconds against a multi-minute render.
+  - The negative needs its own pooled vector from encoder 2 (SDXL's unconditional branch); reusing
+    the positive one conditions the negative branch on the prompt it is meant to steer away from.
   - Both text encoders return different types: `text_encoder` is a plain `CLIPTextModel`
     (`pooler_output`), `text_encoder_2` has the projection (`text_embeds`). Only encoder 2's
     pooled vector is used for SDXL.

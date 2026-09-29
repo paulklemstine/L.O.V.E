@@ -102,20 +102,21 @@ def encode_long_prompt(prompt, negative, pipe, device, chunk=75):
     Returns (prompt_embeds, negative_prompt_embeds, pooled, negative_pooled),
     ready to pass straight to pipe(prompt_embeds=...).
 
-    Falls back to the pipeline's own encoding when the prompt already fits in
-    one window, so short prompts keep the stock code path.
+    Every prompt goes through the CPU encoder path, including short ones. An
+    earlier version short-circuited single-window prompts to `pipe.encode_prompt`
+    for speed, but that runs the encoders through accelerate's offload hook, and
+    the hook only returns them to CPU in `maybe_free_model_hooks()` at the end of
+    a full `pipe(...)` call. Called standalone it left text_encoder_2 resident
+    (1325MB measured), and the UNet's 3744MB no longer fit alongside it on a
+    6GB card -- so any prompt under the 77-token window died with a CUDA OOM
+    while longer ones rendered fine. The uniform path costs a couple of seconds
+    and cannot hit that.
     """
     tok1, tok2 = pipe.tokenizer, pipe.tokenizer_2
     te1, te2 = pipe.text_encoder, pipe.text_encoder_2
 
     n = num_chunks(tok1, prompt, chunk)
     neg_n = num_chunks(tok1, negative, chunk) if negative else 1
-    if n == 1 and neg_n == 1:
-        pe, npe, pp, npp = pipe.encode_prompt(
-            prompt=prompt, negative_prompt=negative, device=device,
-            do_classifier_free_guidance=True,
-        )
-        return pe, npe, pp, npp
 
     # Pad the negative up to the positive side's chunk count so CFG can
     # concatenate them; both encoders use the same target count.
@@ -134,10 +135,14 @@ def encode_long_prompt(prompt, negative, pipe, device, chunk=75):
         s1, _ = _encode_chunks(pos1, tok1, te1, chunk, want_pooled=False)
         s2, pooled = _encode_chunks(pos2, tok2, te2, chunk, want_pooled=True)
         ns1, _ = _encode_chunks(neg1, tok1, te1, chunk, want_pooled=False)
-        ns2, _ = _encode_chunks(neg2, tok2, te2, chunk, want_pooled=False)
+        # encoder 2's pooled vector drives SDXL's unconditional branch, so the
+        # negative needs its own. Reusing the positive one conditioned the
+        # negative branch on the prompt it is meant to steer away from.
+        ns2, npooled = _encode_chunks(neg2, tok2, te2, chunk, want_pooled=True)
 
     dtype = pipe.unet.dtype
     pe = torch.cat([s1, s2], dim=-1).to(device, dtype)
     npe = torch.cat([ns1, ns2], dim=-1).to(device, dtype)
     pp = pooled.to(device, dtype)
-    return pe, npe, pp, pp
+    npp = npooled.to(device, dtype) if npooled is not None else pp
+    return pe, npe, pp, npp
