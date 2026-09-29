@@ -42,6 +42,29 @@ text encoders show up as resident after encoding, something ran them through
 accelerate's offload hook instead of the CPU path — see the notes in
 `long_prompt.py` and `../CLAUDE.md`.
 
+Host RAM is the other axis, and it fails *differently*: the kernel kills the
+process outright, so there is no Python traceback, just the render stopping.
+Check `/var/log/kern.log` for `Out of memory: Killed process`. A tell-tale sign
+of a host-RAM kill (as opposed to a crash or a closed terminal) is that
+`love-run.sh` never logs its `=== batch N done (exit N) ===` line.
+
+## Benign warnings
+Two warnings show up on every render and mean nothing. Do not go hunting for
+a bug when you see them:
+
+- `Token indices sequence length is longer than the specified maximum sequence
+  length for this model (90 > 77)` — raised by transformers at *tokenization*
+  time, not inference. `long_prompt._chunk_ids` tokenizes with
+  `truncation=False` purely to count tokens before splitting them into
+  75-token chunks, so every prompt over CLIP's 77-token window trips it. The
+  full sequence never reaches an encoder, so the indexing errors the message
+  predicts never happen. Sanity check on the render line: `tokens=90
+  embeds=(1, 154, 2048)` is 2 chunks x 77, which is the intended result.
+- `FutureWarning: torch_dtype is deprecated and will be removed in version
+  1.0.0. Please use dtype instead.` — diffusers 0.40 retiring the
+  `torch_dtype=` argument in `from_pretrained`. Harmless now; the call sites in
+  `render_batch.py` and `generate_image.py` need `dtype=` before diffusers 1.0.
+
 ## Performance measured
 - LLM post text: ~8-17s (16 tok/s, split CPU/GPU on the 6GB card)
 - Image: ~54s at 768px/25 steps warm; ~3.5 min at 1024px/28 steps

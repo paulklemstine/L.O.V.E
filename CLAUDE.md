@@ -67,6 +67,14 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
     end of a full `pipe(...)` call, and a standalone `encode_prompt` never triggers it. That is how
     a 6-token prompt died at 1890MB resident while a 107-token one rendered fine at 1MB — the long
     production prompts hid it. The CPU path costs a couple of seconds against a multi-minute render.
+  - **The `Token indices sequence length is longer ... (90 > 77)` warning is expected, not a
+    failure.** transformers raises it at *tokenization* time, not inference: it fires whenever
+    `len(ids) > model_max_length` and no `max_length` was passed, and `_chunk_ids`/`num_chunks` call
+    the tokenizer precisely to count tokens without truncating — so every prompt over 77 tokens
+    trips it. The 90-id sequence is then split into 75-token chunks and never reaches an encoder, so
+    the indexing errors it predicts cannot occur. Confirm from the render line: `tokens=90
+    embeds=(1, 154, 2048)` is 2 chunks x 77, exactly as designed. It prints twice per prompt because
+    SDXL has two tokenizers and the warning is once per tokenizer instance.
   - The negative needs its own pooled vector from encoder 2 (SDXL's unconditional branch); reusing
     the positive one conditions the negative branch on the prompt it is meant to steer away from.
   - Both text encoders return different types: `text_encoder` is a plain `CLIPTextModel`
@@ -91,6 +99,13 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
 - Every LLM call is capped (`num_predict`) and bounded by an `AbortSignal.timeout`. Without
   the timeout a stalled request never rejects, so the retry loop only ever sees errors and a
   hang waits forever — this is what wedged a continuous run in 2026-09-27.
+- A render can also die with *no* traceback at all: no `BATCH_DONE`, no `=== batch N done (exit N) ===`
+  line from `love-run.sh`, and no kernel OOM record. On 2026-09-28 a batch stopped at step 11/28 exactly
+  that way — `love-run.sh` runs `node` under `tee` in a plain shell with no `nohup`/`setsid`, so
+  closing the terminal takes the whole tree down. Start long runs detached (`setsid nohup ./love-run.sh &`).
+  Distinguish the two causes by checking `/var/log/kern.log` for `Out of memory: Killed process` first —
+  this box OOM-killed a python process at 18:34 (29GB RSS) and another at 19:28 (15GB RSS) that same
+  day, so a genuine host-RAM kill is a real possibility here, not a hypothetical.
 
 ## Repo layout: local image scripts
 - `ai/generate_image.py`, `ai/render_batch.py`, `ai/long_prompt.py`, `ai/love-ai.sh`,
