@@ -26,6 +26,9 @@ The scripts in this directory are versioned in the repo. The weights and the
 
 ## Usage
 Run from the repo root; `love-ai.sh` resolves the scripts next to itself.
+`love-cli.mjs` renders one image per post via `generate_image.py` and no longer uses
+`render_batch.py` — the batch line below is a manual recovery tool for re-rendering
+a `jobs.json` written before that change.
 ```bash
 ai/love-ai.sh text  "system prompt here" "user prompt here"   # -> text on stdout
 ai/love-ai.sh image --prompt "..." --out out.png [--w N --h N --steps N --seed N --negative "..."]
@@ -68,7 +71,12 @@ a bug when you see them:
 ## Performance measured
 - LLM post text: ~8-17s (16 tok/s, split CPU/GPU on the 6GB card)
 - Image: ~54s at 768px/25 steps warm; ~3.5 min at 1024px/28 steps
-- Batch of 10 posts (10 texts + warm image renders + posts): ~50 min end-to-end
+- Batch of 10 posts, warm batch render (the old three-phase path): ~50 min end-to-end
+- 10 posts, sequential (current path): **not yet measured.** Each post now pays a full SDXL
+  model load plus an Ollama unload/reload between its text and its image, so expect it to be
+  slower than the figure above. The trade is that posts go live one at a time instead of all
+  10 arriving ~50 min after the run started, and a mid-render failure costs one post rather
+  than the whole batch. Record the real number here after the first full run.
 
 ## Reinstall notes
 Everything lives in `~/ai` (~38GB: three image models + bigasp, ollama + 5 models, venv).

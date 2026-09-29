@@ -83,8 +83,17 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
 - **Entry point**: `ai/love-ai.sh text|image ...` — see `ai/README.md`
 - **CLI app**: `node love-cli.mjs [--post] [--skip-image] [--batch N]` — runs the full
   LoveEngine pipeline locally (state in `.love-state.json`, credentials in gitignored `.env`).
-  `--batch N` queues N texts, renders all images in one warm SDXL session (~2.4x faster),
-  then posts in a burst. Re-encodes oversized PNGs to JPEG (Bluesky 2MB blob cap).
+  **Strictly sequential: one post at a time — text → image → published → next.** `--batch N` is
+  N sequential posts, not a batch, and single-post mode shares the same path. This replaced a
+  three-phase design that queued N texts, rendered them in one warm SDXL session, then posted in
+  a burst; that one stalled ~50 min before anything reached Bluesky and lost every render in the
+  batch when a process died mid-render. The cost of going sequential is a full SDXL model load per
+  image plus an Ollama unload/reload between each post's text and image — the warm-session version
+  measured ~2.4x faster, so expect a slower run in exchange for posts going live immediately and a
+  failure that costs one post instead of ten. A failed post is caught and the loop continues.
+  Re-encodes oversized PNGs to JPEG (Bluesky 2MB blob cap).
+  `ai/render_batch.py` is no longer spawned by the CLI; it survives as the manual recovery tool for
+  re-rendering a `jobs.json` written before this change.
   Scheduled runs: `./love-run.sh [batches] [batch_size]` (logs to `love-run.log`).
 - **GPU sharing**: the LLM (Ollama) and SDXL cannot share the 6GB VRAM; `love-ai.sh image` and `love-cli.mjs` unload the Ollama model first. The SRBMiner miner (`~/epic-mining/start_epic_ubuntu.sh`) also holds ~2GB VRAM and auto-respawns — stop the wrapper script, not just the miner.
 - **Local-mode gaps**: video, TTS, and music throw — only text + image posts are supported.

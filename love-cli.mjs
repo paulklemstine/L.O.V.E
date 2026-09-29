@@ -7,9 +7,13 @@
  *   - Local image: SDXL via ai/generate_image.py and ai/render_batch.py
  *   - Bluesky posting via bluesky.js
  *
+ * Strictly sequential: one post at a time, text → image → published → next.
+ * `--batch N` runs N of those in a row; it no longer batches renders.
+ *
  * Usage:
  *   node love-cli.mjs                 # dry run: generate, save image to ./output, print
  *   node love-cli.mjs --post          # generate AND publish to Bluesky
+ *   node love-cli.mjs --batch 10      # 10 sequential posts (same per-post flow)
  *   node love-cli.mjs --skip-image    # text-only generation (fast)
  *
  * Credentials: read from .env (BLUESKY_HANDLE, BLUESKY_APP_PASSWORD) or env vars.
@@ -245,107 +249,77 @@ async function postOne(bsky, text, imagePath) {
     console.log(`posted: ${res.uri}`);
 }
 
-if (batchSize > 0) {
-    // ── Phase 1: queue N texts (LLM only, image requests recorded) ──
-    const client = new LocalClient(true);
-    const engine = new LoveEngine(client);
-    const batch = [];
-    const t0 = Date.now();
-    for (let i = 1; i <= batchSize; i++) {
-        console.error(`[batch] === text ${i}/${batchSize} ===`);
-        let result = null;
-        for (let attempt = 1; attempt <= 2 && !result; attempt++) {
-            try {
-                result = await engine.generatePost(
-                    (msg) => console.error(`[love] ${msg}`), {}
-                );
-            } catch (err) {
-                console.error(`[batch] text ${i} attempt ${attempt} failed: ${err.message}`);
-            }
-        }
-        if (!result) { console.error(`[batch] text ${i} skipped after retries`); continue; }
-        const imgReq = client.queue[client.queue.length - 1];
-        batch.push({
-            text: result.text,
-            subliminal: result.subliminal,
-            transmissionNumber: result.transmissionNumber,
-            image: imgReq ? { ...imgReq, out: path.join(OUTPUT_DIR, `transmission-${result.transmissionNumber}.png`) } : null,
-        });
-        console.error(`[batch] queued #${result.transmissionNumber}: ${result.text.slice(0, 50)}...`);
-    }
-    const queueFile = path.join(OUTPUT_DIR, `batch-${Date.now()}.json`);
-    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-    fs.writeFileSync(queueFile, JSON.stringify(batch, null, 2));
-    console.error(`[batch] queued ${batch.length} texts in ${((Date.now() - t0) / 1000).toFixed(0)}s -> ${queueFile}`);
+// ── Sequential pipeline: text → image → post, one post at a time ────────
+// One post is in flight at a time. Each post's image is rendered before the
+// next post's text is generated, and is posted before the loop moves on.
+//
+// This replaces a three-phase design that queued N texts, rendered them all
+// in one warm SDXL session, then posted in a burst. That version stalled
+// ~50 min before anything reached Bluesky, and lost every render in the
+// batch when a process died mid-render. `--batch N` now means "N sequential
+// posts" rather than "a batch of N".
+//
+// The trade is a full SDXL model load per image, plus an Ollama
+// unload/reload between each post's text and image — CLAUDE.md measured the
+// warm-session version at ~2.4x faster. `--batch N` and single-post mode now
+// share this one path, so there is a single code path to reason about.
+//
+// ai/render_batch.py is still the manual recovery tool for re-rendering a
+// jobs.json produced before this change; nothing here spawns it.
+const total = batchSize > 0 ? batchSize : 1;
+const client = new LocalClient();
+const engine = new LoveEngine(client);
+let bsky = null; // logged into on the first post that needs it, then reused
+const loginOnce = async () => (bsky ??= await getBsky());
 
-    // ── Phase 2: render all images in one warm SDXL session ──
-    const jobs = batch.filter((b) => b.image).map((b) => ({
-        prompt: b.image.prompt, negative: b.image.negative,
-        w: b.image.w, h: b.image.h, seed: b.image.seed, out: b.image.out,
-    }));
-    if (jobs.length > 0) {
-        await fetch(`${OLLAMA_URL}/api/generate`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ model: OLLAMA_MODEL, keep_alive: 0 }),
-        }).catch(() => {});
-        console.error(`[batch] rendering ${jobs.length} images (one model load)...`);
-        const jobsFile = queueFile.replace(/\.json$/, "-jobs.json");
-        fs.writeFileSync(jobsFile, JSON.stringify(jobs));
-        await new Promise((resolve, reject) => {
-            const proc = spawn(IMG_PY, [path.join(AI_SCRIPTS, "render_batch.py"), jobsFile],
-                { stdio: "inherit" });
-            proc.on("error", reject);
-            proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`render batch exited ${code}`))));
-        });
+const t0 = Date.now();
+let posted = 0;
 
-    }
-
-    // ── Phase 3: post everything ──
-    if (doPost) {
-        const bsky = await getBsky();
-        for (const b of batch) {
-            if (!b.image) { await bsky.createPost(b.text); continue; }
-            try {
-                await postOne(bsky, b.text, b.image.out);
-            } catch (err) {
-                console.error(`[batch] post #${b.transmissionNumber} failed: ${err.message}`);
-            }
+for (let i = 1; i <= total; i++) {
+    console.error(`[seq] === post ${i}/${total} ===`);
+    let result = null;
+    for (let attempt = 1; attempt <= 2 && !result; attempt++) {
+        try {
+            result = await engine.generatePost((msg) => console.error(`[love] ${msg}`), { skipImage });
+        } catch (err) {
+            console.error(`[seq] post ${i} attempt ${attempt} failed: ${err.message}`);
         }
     }
-    console.error(`[batch] done`);
-} else {
-    const client = new LocalClient();
-    const engine = new LoveEngine(client);
+    if (!result) { console.error(`[seq] post ${i} skipped after retries`); continue; }
 
-    const t0 = Date.now();
-    const result = await engine.generatePost((msg) => console.error(`[love] ${msg}`), { skipImage });
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+    console.error(
+        `[seq] #${result.transmissionNumber} ready — ${elapsed}s elapsed, ` +
+        `mode ${result.mode}, ${result.callLog.length} llm calls, ` +
+        `vibe "${result.vibe}"`
+    );
+    console.error(`[seq] ${result.text.slice(0, 80).replace(/\n/g, " ")}`);
 
-    console.log("═".repeat(60));
-    console.log(`TRANSMISSION #${result.transmissionNumber}  (${elapsed}s, mode: ${result.mode})`);
-    console.log(`vibe: ${result.vibe} | subliminal: "${result.subliminal}"`);
-    console.log("─".repeat(60));
-    console.log(result.text);
+    // generateImage already wrote a timestamped copy under output/; this is the
+    // one named after the transmission, matching the existing files there.
+    let imgPath = null;
     if (result.imageBlob) {
         fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-        const imgPath = path.join(OUTPUT_DIR, `transmission-${result.transmissionNumber}.png`);
+        imgPath = path.join(OUTPUT_DIR, `transmission-${result.transmissionNumber}.png`);
         fs.writeFileSync(imgPath, Buffer.from(await result.imageBlob.arrayBuffer()));
-        result.imageBlob = new Blob([fs.readFileSync(imgPath)], { type: "image/png" });
-        console.log("─".repeat(60));
-        console.log(`image: ${imgPath}`);
     }
-    console.log(`llm calls: ${result.callLog.length}`);
 
     if (doPost) {
-        const bsky = await getBsky();
-        if (result.imageBlob) {
-            fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-            const imgPath = path.join(OUTPUT_DIR, `transmission-${result.transmissionNumber}.png`);
-            fs.writeFileSync(imgPath, Buffer.from(await result.imageBlob.arrayBuffer()));
-            await postOne(bsky, result.text, imgPath);
-        } else {
-            const res = await bsky.createPost(result.text);
-            console.log(`posted: ${res.uri}`);
+        try {
+            const b = await loginOnce();
+            if (imgPath) {
+                await postOne(b, result.text, imgPath);
+            } else {
+                const res = await b.createPost(result.text);
+                console.log(`posted: ${res.uri}`);
+            }
+            posted++;
+        } catch (err) {
+            // A failed post must not take the run down: the image is on disk and
+            // the transmission number is spent, so carry on with the next post.
+            console.error(`[seq] post #${result.transmissionNumber} failed: ${err.message}`);
         }
     }
+    console.error(`[seq] post ${i}/${total} complete`);
 }
+console.error(`[seq] done — ${posted} posted of ${total} in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
