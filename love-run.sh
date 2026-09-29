@@ -1,10 +1,8 @@
 #!/bin/bash
-# love-run.sh — continuous batch posting on the fully local pipeline
-# Usage: love-run.sh [batches] [batch_size]
-#   No [batches] argument -> runs continuously (loop forever)
+# love-run.sh — continuous posting on the fully local pipeline
+# Usage: love-run.sh [extra love-cli.mjs flags]
+#   Runs forever, one post at a time; love-cli.mjs owns the loop.
 cd "$(dirname "$0")"
-BATCHES="${1:-0}"
-SIZE="${2:-10}"
 LOG="love-run.log"
 LOCK="$PWD/.love-run.lock"
 
@@ -38,29 +36,14 @@ echo $$ > "$LOCK"
 # the pid inside is only read to phrase the refusal.
 
 # A lock held only by this shell is the point: an inherited fd would keep the
-# flock alive in every child. Without 9>&- below, a `sleep 60` outliving a
-# Ctrl-C (or `node` mid-render) holds the lock for minutes after the script
-# is gone, and the next launch is refused against a run that no longer exists.
-# Every child spawned below closes it explicitly.
-
-run_batch () {
-  local i="$1"
-  log "=== batch $i ($SIZE posts) ==="
-  node love-cli.mjs --batch "$SIZE" --post 9>&- 2>&1 | tee -a "$LOG" 9>&-
-  log "=== batch $i done (exit ${PIPESTATUS[0]}) ==="
-}
-
-if [ "$BATCHES" -gt 0 ] 2>/dev/null; then
-  for i in $(seq 1 "$BATCHES"); do
-    run_batch "$i/$BATCHES"
-  done
-  log "all $BATCHES batches complete"
-else
-  log "starting continuous mode ($SIZE posts per batch, Ctrl-C to stop)"
-  i=1
-  while true; do
-    run_batch "$i"
-    i=$((i + 1))
-    sleep 60 9>&-
-  done
-fi
+# flock alive in every child. Without 9>&- below, a `node` process outliving a
+# Ctrl-C holds the lock for minutes after the script is gone, and the next
+# launch is refused against a run that no longer exists. The child closes it.
+#
+# Deliberately not `exec`: in a pipeline, exec would replace the subshell
+# running node and this script would fall straight through and exit, releasing
+# the lock while node was still posting. As a plain pipeline the script blocks
+# for the life of the process, so the lock is held for exactly as long as the run.
+log "starting continuous mode (one post at a time, Ctrl-C to stop)"
+node love-cli.mjs --post "$@" 9>&- 2>&1 | tee -a "$LOG" 9>&-
+log "=== stopped (exit ${PIPESTATUS[0]}) ==="

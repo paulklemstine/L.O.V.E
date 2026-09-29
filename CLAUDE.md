@@ -81,10 +81,11 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
     (`pooler_output`), `text_encoder_2` has the projection (`text_embeds`). Only encoder 2's
     pooled vector is used for SDXL.
 - **Entry point**: `ai/love-ai.sh text|image ...` — see `ai/README.md`
-- **CLI app**: `node love-cli.mjs [--post] [--skip-image] [--batch N]` — runs the full
+- **CLI app**: `node love-cli.mjs [--post] [--skip-image] [--once]` — runs the full
   LoveEngine pipeline locally (state in `.love-state.json`, credentials in gitignored `.env`).
-  **Strictly sequential: one post at a time — text → image → published → next.** `--batch N` is
-  N sequential posts, not a batch, and single-post mode shares the same path. This replaced a
+  **Strictly sequential: one post at a time — text → image → published → next, forever.** The
+  loop runs until interrupted; `--once` stops after a single post. There is **no pause between
+  successful posts** — the ~6 minute SDXL render is the natural spacing. This replaced a
   three-phase design that queued N texts, rendered them in one warm SDXL session, then posted in
   a burst; that one stalled ~50 min before anything reached Bluesky and lost every render in the
   batch when a process died mid-render. The cost of going sequential is a full SDXL model load per
@@ -94,10 +95,16 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   entirely diffusion steps, so the ~35s model load is a small fraction of it. In exchange, posts go
   live immediately and a failure costs one post instead of ten. A failed post is caught and the
   loop continues.
+  **Failure backoff** (`loop.mjs`): no pause on success, but consecutive failures wait
+  60s → 120s → 240s … capped at 15 minutes, and any success resets the streak. Without it, two
+  fast failures in a row (bad credentials, a throw before the first network call) would retry
+  immediately in a tight loop. Note a failing *post* still costs ~35s before the backoff starts,
+  because `generateText` retries 3x internally (5s, 10s) inside the outer loop's 2 attempts.
   Re-encodes oversized PNGs to JPEG (Bluesky 2MB blob cap).
   `ai/render_batch.py` is no longer spawned by the CLI; it survives as the manual recovery tool for
   re-rendering a `jobs.json` written before this change.
-  Scheduled runs: `./love-run.sh [batches] [batch_size]` (logs to `love-run.log`).
+  Scheduled runs: `./love-run.sh [extra flags]` — takes the single-instance lock, tees output to
+  `love-run.log`, and runs `love-cli.mjs --post` forever. A second launch refuses to start.
 - **GPU sharing**: the LLM (Ollama) and SDXL cannot share the 6GB VRAM; `love-ai.sh image` and `love-cli.mjs` unload the Ollama model first. The SRBMiner miner (`~/epic-mining/start_epic_ubuntu.sh`) also holds ~2GB VRAM and auto-respawns — stop the wrapper script, not just the miner.
 - **Local-mode gaps**: video, TTS, and music throw — only text + image posts are supported.
 - **Subliminal text in images**: NOT rendered locally. The webapp prompted gpt-image (cloud)
@@ -106,12 +113,19 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
 
 ## Robustness notes
 - qwen3 occasionally emits off-schema JSON at high LFO temperatures: the creative seed
-  falls back to default fields, and batch generation retries a post once before skipping
-  (a single bad generation never kills a batch).
+  falls back to default fields, and generation retries a post once before skipping
+  (a single bad generation never kills a run).
 - Every LLM call is capped (`num_predict`) and bounded by an `AbortSignal.timeout`. Without
   the timeout a stalled request never rejects, so the retry loop only ever sees errors and a
   hang waits forever — this is what wedged a continuous run in 2026-09-27.
-- A render can also die with *no* traceback at all: no `BATCH_DONE`, no `=== batch N done (exit N) ===`
+- `love-run.sh` holds an exclusive `flock` on `.love-run.lock` and refuses to start a second run.
+  Two concurrent runs collide on the 6GB card: the loser gets `failed to allocate Vulkan0 buffer`
+  and an Ollama 500 (2026-09-29). Three details are load-bearing — the fd is opened `>>` so a
+  refused launch does not truncate the pid it is about to report; every child closes it with `9>&-`
+  so an inherited fd cannot keep the lock alive in an orphaned `node`; and the file is never
+  unlinked, because `flock` locks the inode rather than the path, so removing it would let two
+  launchers each hold "the lock" on different inodes.
+- A render can also die with *no* traceback at all: no `BATCH_DONE`, no `=== stopped (exit N) ===`
   line from `love-run.sh`, and no kernel OOM record. On 2026-09-28 a batch stopped at step 11/28 exactly
   that way — `love-run.sh` runs `node` under `tee` in a plain shell with no `nohup`/`setsid`, so
   closing the terminal takes the whole tree down. Start long runs detached (`setsid nohup ./love-run.sh &`).

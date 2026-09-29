@@ -7,13 +7,14 @@
  *   - Local image: SDXL via ai/generate_image.py and ai/render_batch.py
  *   - Bluesky posting via bluesky.js
  *
- * Strictly sequential: one post at a time, text → image → published → next.
- * `--batch N` runs N of those in a row; it no longer batches renders.
+ * Strictly sequential: one post at a time, text → image → published → next,
+ * repeating forever until interrupted. There is no pause between successful
+ * posts -- the SDXL render is the natural spacing between them.
  *
  * Usage:
  *   node love-cli.mjs                 # dry run: generate, save image to ./output, print
- *   node love-cli.mjs --post          # generate AND publish to Bluesky
- *   node love-cli.mjs --batch 10      # 10 sequential posts (same per-post flow)
+ *   node love-cli.mjs --post          # generate AND publish to Bluesky, forever
+ *   node love-cli.mjs --post --once   # a single post, then exit
  *   node love-cli.mjs --skip-image    # text-only generation (fast)
  *
  * Credentials: read from .env (BLUESKY_HANDLE, BLUESKY_APP_PASSWORD) or env vars.
@@ -24,6 +25,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { LoveEngine } from "./public/js/love-engine.js";
 import { BlueskyClient } from "./public/js/bluesky.js";
+import { Backoff } from "./loop.mjs";
 
 // ─── localStorage shim (file-backed, same keys as the webapp) ───────────
 const STATE_FILE = path.join(import.meta.dirname, ".love-state.json");
@@ -204,8 +206,7 @@ async function ensureOllama() {
 const args = process.argv.slice(2);
 const doPost = args.includes("--post");
 const skipImage = args.includes("--skip-image");
-const batchArg = args.indexOf("--batch");
-const batchSize = batchArg !== -1 ? parseInt(args[batchArg + 1], 10) || 10 : 0;
+const runOnce = args.includes("--once");
 
 await ensureOllama();
 
@@ -249,36 +250,42 @@ async function postOne(bsky, text, imagePath) {
     console.log(`posted: ${res.uri}`);
 }
 
-// ── Sequential pipeline: text → image → post, one post at a time ────────
+// ── Sequential pipeline: text → image → post, one post at a time, forever ──
 // One post is in flight at a time. Each post's image is rendered before the
 // next post's text is generated, and is posted before the loop moves on.
 //
 // This replaces a three-phase design that queued N texts, rendered them all
 // in one warm SDXL session, then posted in a burst. That version stalled
 // ~50 min before anything reached Bluesky, and lost every render in the
-// batch when a process died mid-render. `--batch N` now means "N sequential
-// posts" rather than "a batch of N".
+// batch when a process died mid-render.
 //
 // The trade is a full SDXL model load per image, plus an Ollama unload/reload
 // between each post's text and image. Measured cost: 3477s for 10 posts
 // (~348s each) against ~50 min for the warm-session batch — about 16% slower,
 // not the 2.4x an earlier note here claimed. A render is almost entirely
 // diffusion steps, so the ~35s model load is a small fraction of it.
-// `--batch N` and single-post mode share this one path.
+//
+// The loop runs until interrupted; there is no batch count. `--once` stops
+// after a single post. Consecutive failures back off exponentially (see
+// loop.mjs) so a persistent fault -- bad credentials, Ollama down -- retries
+// at a sane rate instead of spinning; any success resets that streak.
 //
 // ai/render_batch.py is still the manual recovery tool for re-rendering a
 // jobs.json produced before this change; nothing here spawns it.
-const total = batchSize > 0 ? batchSize : 1;
 const client = new LocalClient();
 const engine = new LoveEngine(client);
 let bsky = null; // logged into on the first post that needs it, then reused
 const loginOnce = async () => (bsky ??= await getBsky());
 
 const t0 = Date.now();
+const backoff = new Backoff();
 let posted = 0;
+let attempts = 0;
 
-for (let i = 1; i <= total; i++) {
-    console.error(`[seq] === post ${i}/${total} ===`);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+for (let i = 1; ; i++) {
+    console.error(`[seq] === post ${i} ===`);
     let result = null;
     for (let attempt = 1; attempt <= 2 && !result; attempt++) {
         try {
@@ -287,7 +294,21 @@ for (let i = 1; i <= total; i++) {
             console.error(`[seq] post ${i} attempt ${attempt} failed: ${err.message}`);
         }
     }
-    if (!result) { console.error(`[seq] post ${i} skipped after retries`); continue; }
+
+    if (!result) {
+        console.error(`[seq] post ${i} skipped after retries`);
+        const wait = backoff.fail();
+        attempts++;
+        console.error(`[seq] retrying post ${i + 1} in ${Math.round(wait / 1000)}s (${attempts} consecutive failures)`);
+        await sleep(wait);
+        if (runOnce) break;
+        continue;
+    }
+
+    // A post that generated is a healthy round: clear the failure streak so a
+    // later failure starts from the base delay again.
+    backoff.reset();
+    attempts = 0;
 
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     console.error(
@@ -322,6 +343,8 @@ for (let i = 1; i <= total; i++) {
             console.error(`[seq] post #${result.transmissionNumber} failed: ${err.message}`);
         }
     }
-    console.error(`[seq] post ${i}/${total} complete`);
+    console.error(`[seq] post ${i} complete — ${posted} posted so far`);
+
+    if (runOnce) break;
 }
-console.error(`[seq] done — ${posted} posted of ${total} in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+console.error(`[seq] done — ${posted} posted in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
