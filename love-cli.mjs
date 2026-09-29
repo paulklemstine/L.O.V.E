@@ -45,8 +45,12 @@ if (fs.existsSync(ENV_FILE)) {
 
 const OLLAMA_URL = "http://127.0.0.1:11434";
 const OLLAMA_MODEL = "qwen3:8b";
-const IMG_PY = path.join(process.env.HOME, "ai", "imgenv", "bin", "python");
-const IMG_SCRIPT = path.join(process.env.HOME, "ai", "generate_image.py");
+// Image scripts are versioned in this repo (ai/); the venv and model weights
+// (~25GB) stay in ~/ai and are located via LOVE_AI_HOME.
+const AI_HOME = process.env.LOVE_AI_HOME || path.join(process.env.HOME, "ai");
+const AI_SCRIPTS = path.join(import.meta.dirname, "ai");
+const IMG_PY = path.join(AI_HOME, "imgenv", "bin", "python");
+const IMG_SCRIPT = path.join(AI_SCRIPTS, "generate_image.py");
 const OUTPUT_DIR = path.join(import.meta.dirname, "output");
 
 // ─── Local client: same interface as PollinationsClient ─────────────────
@@ -288,8 +292,7 @@ if (batchSize > 0) {
         const jobsFile = queueFile.replace(/\.json$/, "-jobs.json");
         fs.writeFileSync(jobsFile, JSON.stringify(jobs));
         await new Promise((resolve, reject) => {
-            const proc = spawn(path.join(process.env.HOME, "ai", "imgenv", "bin", "python"),
-                [path.join(process.env.HOME, "ai", "render_batch.py"), jobsFile],
+            const proc = spawn(IMG_PY, [path.join(AI_SCRIPTS, "render_batch.py"), jobsFile],
                 { stdio: "inherit" });
             proc.on("error", reject);
             proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`render batch exited ${code}`))));

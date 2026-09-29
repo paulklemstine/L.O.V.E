@@ -85,3 +85,9 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
 - Every LLM call is capped (`num_predict`) and bounded by an `AbortSignal.timeout`. Without
   the timeout a stalled request never rejects, so the retry loop only ever sees errors and a
   hang waits forever — this is what wedged a continuous run in 2026-09-27.
+
+## Repo layout: local image scripts
+- `ai/generate_image.py`, `ai/render_batch.py`, `ai/long_prompt.py` are versioned in this repo.
+  Model weights (~25GB across `sdxl`/`leosam`/`realvis`) and the `imgenv` venv are NOT — they
+  live in `~/ai` and are located via `LOVE_AI_HOME` (defaults to `~/ai`). `love-cli.mjs` invokes
+  the repo copies using that venv.

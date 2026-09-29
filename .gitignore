@@ -4,3 +4,7 @@
 .love-state.json
 output/
 love-run.log
+
+# Python bytecode from ai/
+__pycache__/
+*.pyc
