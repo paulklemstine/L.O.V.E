@@ -2442,7 +2442,7 @@ Return ONLY valid JSON (all string values):
                         LoveEngine.TONE_NAMES.length
                 ];
 
-            const prompt = `Write a post that makes someone STOP scrolling… feel warmth spread through their chest… and want to send it to someone they care about immediately.
+            const prompt = `Write a post that makes someone STOP scrolling… feel warmth spread through their chest… and leave something behind that stays.
 
 This should feel intimate, magnetic, and unforgettable — like a message that somehow found them at exactly the right moment.
 
