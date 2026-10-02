@@ -112,6 +112,16 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   re-rendering a `jobs.json` written before this change.
   Scheduled runs: `./love-run.sh [extra flags]` — takes the single-instance lock, tees output to
   `love-run.log`, and runs `love-cli.mjs --post` forever. A second launch refuses to start.
+- **Follow-back + welcome** (`doFollowBack()` in `love-cli.mjs`): one scan per post cycle, run at the
+  END of the iteration so a bad scan can never cost a post. It follows back anyone not followed, and
+  sends a welcome post (`generateWelcome()` = 1 LLM call + a full SDXL render). Budget is **one
+  welcome per scan**; the rest queue in `love_pending_welcomes`. The queue is load-bearing — following
+  someone removes them from `getUnfollowedFollowers()`, so a deferred welcome would otherwise never be
+  seen again. The first scan only follows back and records without posting (mirroring the webapp's
+  `isFirstFollowScan`), so shipping this doesn't spam welcomes at the existing backlog. Welcomed/
+  followed records reuse `engine.interactions`, which works headless because the CLI shims
+  `localStorage` to `.love-state.json`. Everything logs under `[follow]`. The webapp's
+  `doFollowBack()` only ran while the dashboard tab was open, so a headless CLI run followed nobody.
 - **GPU sharing**: the LLM (Ollama) and SDXL cannot share the 6GB VRAM; `love-ai.sh image` and `love-cli.mjs` unload the Ollama model first. The SRBMiner miner (`~/epic-mining/start_epic_ubuntu.sh`) also holds ~2GB VRAM and auto-respawns — stop the wrapper script, not just the miner.
 - **Local-mode gaps**: video, TTS, and music throw — only text + image posts are supported.
 - **Subliminal text in images**: NOT rendered locally. The webapp prompted gpt-image (cloud)
@@ -145,6 +155,20 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   progress bar, and `awk` ranges match *earlier* runs' identically-numbered posts. Scope to the run
   you care about first: `tr '\r' '\n' < love-run.log | awk '/starting continuous mode/{n=NR} {l[NR]=$0} END{for(i=n;i<=NR;i++) print l[i]}'`.
   For per-post durations prefer the PNG mtimes, which are immune to all of this.
+- **`app.bsky.graph.*` endpoints cap at 100 per page and return no total — always paginate.**
+  `getUnfollowedFollowers()` originally diffed `getFollowers` against `getFollows` with `limit=100`
+  on each and was silently wrong once this account passed 100 on either side (207 followers, 244
+  following). Comparing the first 100 of each list is a diff of two unrelated windows: it reported
+  **12 people we already followed** as unfollowed and **zero** real ones. Because the caller follows
+  the returned list and queues welcome posts for it, that would have spammed welcomes at people who
+  followed months ago. Fixed with `_fetchAllPages()`, which cursor-walks both endpoints to exhaustion
+  under a runaway `cap` (there is no total to bound against). Any future graph query here needs the
+  same treatment — and remember that a single-page read of this account looks like 87/98 when the
+  truth is 207/244.
+- `love-run.sh` does **not** reap its SDXL child. Killing the run mid-render orphans a
+  `generate_image.py` that keeps holding ~5.8GB of VRAM at 100% util, so the next run fails to
+  allocate. Check `pgrep -f generate_image.py` after stopping a run (mind that the pattern matches
+  your own shell — use the PID from `ps` rather than `pkill -f`).
 - qwen3 occasionally emits off-schema JSON at high LFO temperatures: the creative seed
   falls back to default fields, and generation retries a post once before skipping
   (a single bad generation never kills a run).

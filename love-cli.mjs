@@ -250,6 +250,142 @@ async function postOne(bsky, text, imagePath) {
     console.log(`posted: ${res.uri}`);
 }
 
+// ─── Follow-back + welcome ───────────────────────────────────────────────
+// One scan per post cycle, at the end of the iteration, so a bad scan can
+// never disturb the main cadence. This mirrors the webapp's doFollowBack()
+// but runs headless -- the browser version only ever runs while the Firebase
+// dashboard is open, which meant a continuously-running CLI never followed
+// anybody back at all.
+//
+// Budget is ONE welcome per scan. Each welcome is an LLM call plus a full SDXL
+// render (~3-6 min), so an uncapped burst of new followers would block the
+// main loop for the length of the whole batch.
+//
+// Follows are deliberately NOT tracked locally: getUnfollowedFollowers() diffs
+// followers against following server-side, so the API stays authoritative and a
+// follow that fails simply retries on the next scan. The welcomed record reuses
+// engine.interactions, which persists through the localStorage shim above -- no
+// second bookkeeping structure to keep in sync.
+//
+// The pending queue is load-bearing. Following someone back removes them from
+// getUnfollowedFollowers(), so a follower whose welcome is deferred by the
+// budget would never be seen by a later scan. The queue is what remembers them.
+const FOLLOW_BASELINE_KEY = "love_follow_baselined";
+const FOLLOW_PENDING_KEY = "love_pending_welcomes";
+const FOLLOW_HEARTBEAT_MS = 60 * 60 * 1000;
+let lastFollowHeartbeat = 0;
+
+function getPendingWelcomes() {
+    try {
+        const raw = localStorage.getItem(FOLLOW_PENDING_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+    } catch {
+        return [];
+    }
+}
+
+async function doFollowBack(bsky, engine, { skipImage = false } = {}) {
+    const firstScan = localStorage.getItem(FOLLOW_BASELINE_KEY) !== "true";
+
+    let unfollowed;
+    try {
+        unfollowed = await bsky.getUnfollowedFollowers();
+    } catch (err) {
+        console.error(`[follow] scan failed: ${err.message}`);
+        return;
+    }
+
+    // First run: follow the existing backlog but never welcome it. Posting a
+    // welcome to everyone who ever followed, the first time this feature runs,
+    // is exactly the burst the webapp guards against with isFirstFollowScan.
+    // They are recorded as welcomed so later scans leave them alone.
+    if (firstScan) {
+        console.error(`[follow] first scan — ${unfollowed.length} follower(s) to follow back (no welcomes this run)`);
+        for (const f of unfollowed) {
+            try {
+                await bsky.followUser(f.did);
+                engine.interactions.recordFollow(f.handle);
+                engine.interactions.recordWelcome(f.handle);
+                console.error(`[follow] baseline: followed @${f.handle} (recorded, not welcomed)`);
+                await sleep(5000);
+            } catch (err) {
+                console.error(`[follow] baseline follow failed for @${f.handle}: ${err.message}`);
+            }
+        }
+        localStorage.setItem(FOLLOW_BASELINE_KEY, "true");
+        console.error(`[follow] baseline complete — welcomes begin with the next genuinely new follower`);
+        return;
+    }
+
+    // Steady state: follow everyone back, queue the ones not yet welcomed.
+    const pending = getPendingWelcomes();
+    for (const f of unfollowed) {
+        try {
+            await bsky.followUser(f.did);
+            engine.interactions.recordFollow(f.handle);
+            console.error(`[follow] followed back @${f.handle}`);
+            if (!engine.interactions.hasWelcomed(f.handle) && !pending.includes(f.handle)) {
+                pending.push(f.handle);
+                console.error(`[follow] queued welcome for @${f.handle}`);
+            }
+            await sleep(5000);
+        } catch (err) {
+            console.error(`[follow] follow failed for @${f.handle}: ${err.message}`);
+        }
+    }
+    localStorage.setItem(FOLLOW_PENDING_KEY, JSON.stringify(pending));
+
+    // Drain at most one welcome, if the queue has anything on it. The drain is
+    // driven by the queue, not by `unfollowed`: by this point everyone in the
+    // queue has already been followed back and so no longer appears in the scan.
+    if (pending.length > 0) {
+        const handle = pending[0];
+        const rest = pending.slice(1);
+        try {
+            console.error(`[follow] welcoming @${handle}...`);
+            const welcome = await engine.generateWelcome(handle, (s) => console.error(`[follow] ${s}`));
+            if (welcome?.imageBlob && !skipImage) {
+                const safe = handle.replace(/[^\w.-]/g, "_");
+                const tmp = path.join(OUTPUT_DIR, `welcome-${safe}.png`);
+                fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+                fs.writeFileSync(tmp, Buffer.from(await welcome.imageBlob.arrayBuffer()));
+                await postOne(bsky, welcome.text, tmp);
+            } else if (welcome) {
+                const res = await bsky.createPost(welcome.text);
+                console.log(`posted: ${res.uri}`);
+            }
+            engine.interactions.recordWelcome(handle);
+            localStorage.setItem(FOLLOW_PENDING_KEY, JSON.stringify(rest));
+            if (welcome) {
+                console.error(`[follow] welcome posted for @${handle} [Signal: "${welcome.subliminal}"]`);
+            } else {
+                // generateWelcome returns null for the creator's own handle.
+                console.error(`[follow] no welcome generated for @${handle} (excluded by generateWelcome)`);
+            }
+            if (rest.length > 0) {
+                console.error(`[follow] ${rest.length} welcome(s) still queued — one per scan`);
+            }
+        } catch (err) {
+            // The handle stays queued so the next scan retries it.
+            console.error(`[follow] welcome failed for @${handle}: ${err.message}`);
+            return;
+        }
+    } else if (unfollowed.length === 0) {
+        // Logging this every scan would add a line every ~5 minutes forever.
+        const now = Date.now();
+        if (now - lastFollowHeartbeat > FOLLOW_HEARTBEAT_MS) {
+            lastFollowHeartbeat = now;
+            console.error(`[follow] scan: nothing to do`);
+        }
+    }
+
+    // generateWelcome calls resetCallLog() on the SHARED engine and overwrites
+    // lastSubliminalPhrase. Without this reset the next post's "N llm calls"
+    // count would be silently wrong.
+    engine.ai.resetCallLog();
+}
+
 // ── Sequential pipeline: text → image → post, one post at a time, forever ──
 // One post is in flight at a time. Each post's image is rendered before the
 // next post's text is generated, and is posted before the loop moves on.
@@ -344,6 +480,17 @@ for (let i = 1; ; i++) {
         }
     }
     console.error(`[seq] post ${i} complete — ${posted} posted so far`);
+
+    // Follow-back runs after the post lands, never before it: the SDXL render
+    // and the Bluesky upload are the important work, and a scan that throws
+    // must not be able to cost us a post.
+    if (doPost) {
+        try {
+            await doFollowBack(await loginOnce(), engine, { skipImage });
+        } catch (err) {
+            console.error(`[follow] scan error: ${err.message}`);
+        }
+    }
 
     if (runOnce) break;
 }

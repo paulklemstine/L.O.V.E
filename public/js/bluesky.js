@@ -486,22 +486,48 @@ export class BlueskyClient {
    * Returns array of { did, handle, displayName }.
    */
   async getUnfollowedFollowers() {
-    // Get our followers
-    const followersRes = await this._fetch(
-      `app.bsky.graph.getFollowers?actor=${this.session.did}&limit=100`
+    // BOTH sides must be paginated to the end. The graph endpoints cap at 100
+    // per request and return no total count, so a single page silently
+    // truncates. This account has 244 following and 207 followers: comparing
+    // only the first 100 of each is a diff of two unrelated windows, which on
+    // 2026-10-02 reported 12 followers we had *already* followed as "not
+    // followed back" and missed zero real ones. That is not a harmless
+    // inaccuracy -- the caller follows the returned list and queues welcome
+    // posts for it, so the truncation would have spammed welcomes at people
+    // who followed months ago.
+    const followers = await this._fetchAllPages(
+      `app.bsky.graph.getFollowers?actor=${encodeURIComponent(this.session.did)}`,
+      'followers'
     );
-    const followers = (followersRes.followers || []).map(f => ({
-      did: f.did, handle: f.handle, displayName: f.displayName || ''
-    }));
+    const follows = await this._fetchAllPages(
+      `app.bsky.graph.getFollows?actor=${encodeURIComponent(this.session.did)}`,
+      'follows'
+    );
 
-    // Get who we follow
-    const followsRes = await this._fetch(
-      `app.bsky.graph.getFollows?actor=${this.session.did}&limit=100`
-    );
-    const followingDids = new Set((followsRes.follows || []).map(f => f.did));
+    const followingDids = new Set(follows.map(f => f.did));
 
     // Return followers we don't follow back (skip invalid handles)
-    return followers.filter(f => !followingDids.has(f.did) && f.handle !== 'handle.invalid');
+    return followers
+      .filter(f => !followingDids.has(f.did) && f.handle !== 'handle.invalid')
+      .map(f => ({ did: f.did, handle: f.handle, displayName: f.displayName || '' }));
+  }
+
+  /**
+   * Walk a cursor-paginated graph endpoint to exhaustion.
+   * `cap` is a runaway guard: the endpoints return no total, so a cursor that
+   * never advances would otherwise loop forever.
+   */
+  async _fetchAllPages(endpoint, key, cap = 2000) {
+    const out = [];
+    let cursor = null;
+    do {
+      const sep = endpoint.includes('?') ? '&' : '?';
+      const url = `${endpoint}${sep}limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
+      const res = await this._fetch(url);
+      out.push(...(res[key] || []));
+      cursor = res.cursor || null;
+    } while (cursor && out.length < cap);
+    return out;
   }
 
   /**
