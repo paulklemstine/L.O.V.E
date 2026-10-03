@@ -3078,6 +3078,10 @@ Return nothing else.`;
         // the lighting/palette fields, so nothing is lost by dropping them here.
         "warm", "warmth", "cool", "feeling", "feel", "emotion", "love", "hope",
         "joy", "peace", "calm", "serenity", "awe", "longing", "yearning",
+        // EDGE_VOCABULARY has "breathless" but not "breath" itself, which is how
+        // "sunlight, breath" shipped as a brief. Breathing is a felt state, not a
+        // thing with a surface, and the scene has no figures to breathe.
+        "breath", "breathing", "breathe", "breathtaking", "sigh", "inhale",
     ];
 
     // Compare on stems: EDGE_VOCABULARY lists "wrists" and "lips" but the model
