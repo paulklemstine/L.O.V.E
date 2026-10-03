@@ -3039,8 +3039,13 @@ Return nothing else.`;
                 anchors.push(clean);
                 if (anchors.length >= 4) break;
             }
-            if (anchors.length < 2) {
-                console.log(`[love] visual brief: only ${anchors.length} usable anchor(s), skipped`);
+            // One anchor is worth more than none. The bar used to be 2, which was
+            // a quality choice, but skipping means the image gets no grounding at
+            // all and the post falls back to exactly the pre-fix behaviour. Since
+            // the filter now drops feeling-words and body parts, a surviving
+            // single anchor is usually a real, photographable thing.
+            if (anchors.length < 1) {
+                console.log(`[love] visual brief: no usable anchors, skipped`);
                 return null;
             }
 
