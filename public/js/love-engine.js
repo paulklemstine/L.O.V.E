@@ -998,6 +998,44 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
         return false;
     }
 
+    // Reuse of SHORT fragments (2+ words). _repeatsSentenceFromRing needs 3+ words
+    // because 2-word matches are not uniformly bad — "a breath" opens most posts,
+    // so rejecting on it would starve generation. But the fragments that DO repeat
+    // ("just breathe" x5) are the dominant repetition source once the 3+ word
+    // guard is in place.
+    //
+    // This feeds RANKING only, never rejection. Treating it as a hard reject is
+    // what would brick the loop; treating it as a ranking signal lets the engine
+    // prefer posts that lean on novel phrasing while remaining able to produce a
+    // post at all.
+    _fragmentReuseScore(newText) {
+        const norm = (s) =>
+            String(s)
+                .toLowerCase()
+                .replace(/[’']/g, "")
+                .replace(/[^a-z\s]/g, " ")
+                .replace(/\s+/g, " ")
+                .trim();
+        const ring = this.recentPosts.map(norm);
+        if (ring.length === 0) return 0;
+
+        const frags = new Set();
+        for (const raw of String(newText).split(/[.!?…\n]+/)) {
+            const w = norm(raw).split(" ").filter(Boolean);
+            for (let i = 0; i + 1 < w.length; i++) frags.add(`${w[i]} ${w[i + 1]}`);
+        }
+        if (frags.size === 0) return 0;
+        let reused = 0;
+        for (const f of frags) if (ring.some((r) => r.includes(f))) reused += 1;
+        return reused / frags.size;
+    }
+
+    // Combined cost used to rank competing candidates: the hard-guard metric
+    // plus a discounted fragment-reuse term.
+    _repetitionCost(newText) {
+        return this._similarityScore(newText) + 0.5 * this._fragmentReuseScore(newText);
+    }
+
     _isTextTooSimilar(newText, threshold = 0.25) {
         return this._similarityScore(newText) > threshold || this._repeatsSentenceFromRing(newText);
     }
@@ -2794,7 +2832,7 @@ Return ONLY valid JSON:
             // Rank every validation-passing candidate, including the final one.
             // Scoring the last attempt too costs nothing and means the fallback
             // below can actually beat it.
-            const sim = this._similarityScore(story);
+            const sim = this._repetitionCost(story);
             if (sim < bestScore) {
                 bestScore = sim;
                 bestStory = story;
@@ -2826,7 +2864,7 @@ Return ONLY valid JSON:
         // This matters most on the final attempt, which is the one the similarity
         // guard is not allowed to reject — without this the last attempt wins by
         // default, and that is exactly how the cliché loop above was reached.
-        if (bestStory && this._similarityScore(story) > bestScore) {
+        if (bestStory && this._repetitionCost(story) > bestScore) {
             story = bestStory;
         }
         return story;

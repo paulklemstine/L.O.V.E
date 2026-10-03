@@ -216,6 +216,19 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
 - `_loadVarietyMemory` parses a missing key as `"[]"` and assigns it, so any list that must ship with
   seed content (the beat pool does) gets its seeds discarded on a fresh install and has to be
   normalised back after load.
+- **Repetition has two guards, and they are not interchangeable.** `_wordTrigrams` strips stopwords
+  before forming windows, so a short stock phrase ("you're already glowing", "just breathe") yields
+  fewer than three content words and contributes *no trigrams* — the Jaccard critic is structurally
+  blind to the phrases that repeat most. `_repeatsSentenceFromRing` covers that with a direct
+  ≥3-word sentence comparison (leave-one-out over the ring: 13 of 20 posts shared a sentence).
+  Short fragments are handled differently on purpose: 2-word matches cannot be a hard reject,
+  because "a breath" opens most posts and rejecting it would starve generation. They instead feed
+  `_repetitionCost`, which ranks candidates (hard-guard score + 0.5 × fragment reuse) so the engine
+  prefers novel phrasing while remaining able to produce a post at all.
+- **The content loop ranks candidates instead of returning the last attempt.** The trigram guard and
+  the boredom critic are both skipped on the final attempt (`attempt < MAX_RETRIES - 1`), so when the
+  critic rejects three attempts for cliché the fourth is accepted unchecked — and "you're already
+  glowing" is itself the cliché being chased. Ranking is what closes that.
 - qwen3 occasionally emits off-schema JSON at high LFO temperatures: the creative seed
   falls back to default fields, and generation retries a post once before skipping
   (a single bad generation never kills a run).
