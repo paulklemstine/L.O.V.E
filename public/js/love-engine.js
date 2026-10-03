@@ -320,6 +320,7 @@ export class LoveEngine {
         this.usedCompositionSlots = [];   // last 5
         this.usedDirectorVibes = [];      // last 5
         this.usedPhrases = [];            // last 50
+        this.usedVibes = [];              // last 15: aesthetic vibes, see _generatePlan
         this.phraseGrammars = [];         // last 5
         this.phraseResonances = [];       // last 5
         this.phraseAddressees = [];       // last 5
@@ -383,6 +384,7 @@ export class LoveEngine {
             love_used_composition_slots: "usedCompositionSlots",
             love_used_director_vibes: "usedDirectorVibes",
             love_used_phrases: "usedPhrases",
+            love_used_vibes: "usedVibes",
             love_phrase_grammars: "phraseGrammars",
             love_phrase_resonances: "phraseResonances",
             love_phrase_addressees: "phraseAddressees",
@@ -405,6 +407,7 @@ export class LoveEngine {
             usedCompositionSlots: "love_used_composition_slots",
             usedDirectorVibes: "love_used_director_vibes",
             usedPhrases: "love_used_phrases",
+            usedVibes: "love_used_vibes",
             phraseGrammars: "love_phrase_grammars",
             phraseResonances: "love_phrase_resonances",
             phraseAddressees: "love_phrase_addressees",
@@ -1360,9 +1363,16 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
 
         // ── Step 4: Image Prompt (1 LLM) ──
         onStatus("Designing visual...");
+        // The story has never reached the image: _generateImagePrompt accepted a
+        // postText argument and ignored it. Pasting the prose back in was tried and
+        // removed in 41618aba because it made images "ugly and forced" -- but that
+        // version handed emotional prose straight to CLIP, which cannot render
+        // "hums" or "you". So the story is read HERE, by the model, and only the
+        // noun phrases it returns travel onward. Same information, different reader.
+        const visualBrief = await this._deriveVisualBrief(story, plan);
         let visualPrompt = await this._generateImagePrompt(
             plan,
-            story,
+            visualBrief,
             mode,
             seed,
             compositionSlot,
@@ -1488,6 +1498,9 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
             this._pushCapped(this.usedIngredients, norm, 30);
             existingNoSpace.add(norm.replace(/\s+/g, ""));
         }
+
+        // Aesthetic vibe (capped at 15) — see the note on the contract examples.
+        if (plan?.vibe) this._pushCapped(this.usedVibes, plan.vibe, 15);
 
         // Composition slot (capped at 5)
         if (compositionSlot)
@@ -2687,6 +2700,17 @@ Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"
             ? `\nRecent phrase addressees: ${this.phraseAddressees.slice(-5).join(", ")}`
             : "";
 
+        // Vibe avoidance. The contract used to supply two literal examples
+        // ("golden hush glow", "soft radiant bloom") and qwen3 anchored on them:
+        // "soft radiant bloom" appeared 290 times across the run, and every rival
+        // vibe contained bloom/hush/amber -- so every image prompt inherited the
+        // same vocabulary. The examples are now spread across registers, and this
+        // line keeps recent vibes from settling back in. Framed positively per the
+        // project's prompt rule.
+        const vibeHistory = this.usedVibes.length
+            ? `\nRecent vibes were: ${this.usedVibes.slice(-8).join(" | ")}. Reach for a register none of those came from.\n`
+            : "";
+
         const prompt = `Plan a post.
 
 ${mentionDonation ? "Subtly include a donation mention (https://buymeacoffee.com/l.o.v.e or ETH). One line, organic.\n" : ""}
@@ -2701,7 +2725,7 @@ Every field should feel like it *breathes from* these inputs — cohesive, immer
 VARIETY IS CRITICAL:
 Choose a world, setting, scale, and visual language that feels completely fresh — something the viewer hasn’t *felt* before.
 
-${modeDirective}${phraseHistory}${grammarHistory}${resonanceHistory}${addresseeHistory}
+${modeDirective}${phraseHistory}${grammarHistory}${resonanceHistory}${addresseeHistory}${vibeHistory}
 
 Creative direction:
 - Aim for warmth that feels almost physical — like light resting on skin
@@ -2719,7 +2743,7 @@ Return ONLY valid JSON (all string values):
 {
   "theme": "an uplifting theme that feels warm, intimate, and inspired by the concept",
 
-  "vibe": "2-4 word aesthetic vibe with a hint of sensual warmth (e.g. 'golden hush glow', 'soft radiant bloom')",
+  "vibe": "2-4 word aesthetic vibe with a hint of sensual warmth. Draw it from a different part of the spectrum each time — one of these registers: a TEMPERATURE ('brass gone cold', 'first light'), a TEXTURE ('velvet and grain', 'wet stone'), a TIME OF DAY ('blue hour', 'late afternoon'), a MATERIAL WORLD ('smoke and citrus', 'copper and salt'), or a QUALITY OF LIGHT ('low tide shimmer', 'lamplight'). Any combination reads as a distinct aesthetic.",
 
   "contentType": "a static image post format (motivational poster, golden truth, celebration, recognition moment, warm observation). Always a single still image.",
 
@@ -2963,7 +2987,108 @@ Return ONLY valid JSON:
 
     // ─── Visual Prompt (depersonalize folded in — saves 1 LLM call) ──
 
-    async _generateImagePrompt(plan, postText = "", mode, seed = {}, compositionSlot = null, directorVibe = null) {
+    // ─── Visual brief: the only channel from post text to image ────────
+    // The post names concrete things (kettle, steam, wheel, clay, clock, plane)
+    // and none of them reached the image, because the image prompt was built from
+    // plan/seed only. This asks the model to name the scene the post is actually
+    // about, so the noun phrases -- not the prose -- can be handed to CLIP.
+    //
+    // Deliberately narrow: if fewer than two anchors survive the filter, this
+    // returns null and the image prompt is built exactly as before. The failure
+    // mode is "no change", never "broken image".
+    async _deriveVisualBrief(story, plan = {}) {
+        if (!story || !String(story).trim()) return null;
+        try {
+            const prompt = `Read this post and name what its scene is physically made of.
+
+POST:
+"""
+${String(story).slice(0, 400)}
+"""
+
+Return ONLY valid JSON:
+{
+  "anchors": ["3-5 CONCRETE, PHYSICAL things this post is about"],
+  "material": "the dominant surface or substance, one or two words",
+  "light": "the quality of light it implies, one or two words"
+}
+
+Each anchor is a thing you could photograph -- an object, a substance, a
+weather, a time of day, a texture, a place. Reach past how the post FEELS to
+what it is actually about. A post about a kettle on a stove is about a kettle,
+steam, iron, heat. A post about someone arriving home is about a door, a key,
+a hallway, a coat.
+
+Return nothing else.`;
+
+            const raw = await this.ai.generateText(
+                "You are a still-life photographer reading a short poem and naming its objects.",
+                prompt,
+                { label: "VisualBrief", temperature: 0.7, maxTokens: 220 }
+            );
+            const data = this.ai.extractJSON(raw);
+
+            const anchors = [];
+            for (const a of Array.isArray(data?.anchors) ? data.anchors : []) {
+                const clean = this._cleanAnchor(a);
+                if (clean && !anchors.includes(clean)) anchors.push(clean);
+                if (anchors.length >= 4) break;
+            }
+            if (anchors.length < 2) return null;
+
+            const material = this._cleanAnchor(data?.material, 2);
+            const light = this._cleanAnchor(data?.light, 2);
+
+            // CLIP sees this. Keep it short — the prompt is already 82-102 tokens
+            // against a 154 ceiling, and over-long SDXL prompts wash out.
+            const parts = [...anchors.slice(0, 3)];
+            if (material) parts.push(material);
+            if (light) parts.push(light);
+            return parts.join(", ").slice(0, 120);
+        } catch (err) {
+            // Never let image grounding break a post.
+            return null;
+        }
+    }
+
+    // Body parts and pronouns that EDGE_VOCABULARY misses. The scene explicitly
+    // forbids human figures, and SDXL renders "spine" as a pale worm and "chest"
+    // as a cropped torso -- exactly the "ugly and forced" failure from 41618aba.
+    // EDGE_VOCABULARY has lips/throat/hips/spine/collarbone/nape/wrists but not
+    // chest, shoulder, hand, skin, or the third-person pronouns.
+    static ANCHOR_BLOCKLIST = [
+        "chest", "shoulder", "hand", "hands", "finger", "fingers", "skin", "body",
+        "belly", "stomach", "back", "arm", "arms", "leg", "legs", "foot", "feet",
+        "hair", "eye", "eyes", "mouth", "face", "heart", "bone", "bones", "blood",
+        "her", "his", "she", "him", "hers", "his", "them", "they", "their",
+    ];
+
+    // Keep only photographable, concrete phrases. Drops stopwords, body parts
+    // (the scene forbids human figures), and anything long enough to read as prose.
+    _cleanAnchor(value, maxWords = 3) {
+        if (typeof value !== "string") return "";
+        let v = value
+            .toLowerCase()
+            .replace(/[’']/g, "")
+            .replace(/[^a-z\s-]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+        if (!v) return "";
+        const words = v.split(" ").filter(
+            (w) =>
+                w.length > 2 &&
+                !LoveEngine.STOP_WORDS.has(w) &&
+                !LoveEngine.EDGE_VOCABULARY.includes(w) &&
+                !LoveEngine.ANCHOR_BLOCKLIST.includes(w)
+        );
+        if (words.length === 0) return "";
+        return words.slice(0, maxWords).join(" ");
+    }
+
+    // Second argument used to be `postText` and was never read in the body. It
+    // now carries the visual brief (a short noun-phrase line), which is the only
+    // part of the post allowed to reach CLIP.
+    async _generateImagePrompt(plan, visualBrief = "", mode, seed = {}, compositionSlot = null, directorVibe = null) {
         const modeDirective = mode.imageDirective
             ? ` ${mode.imageDirective}.`
             : "";
@@ -2976,8 +3101,17 @@ Return ONLY valid JSON:
 
         // Build creative directives from seed + plan
         const domains = seed.domains?.length ? seed.domains.join(" × ") : "";
+        // ingredientHints are asked of the LLM every post ("3-5 concrete visual
+        // building blocks -- materials, light qualities, textures, small objects,
+        // atmospheric elements"), normalized, tracked for variety... and then never
+        // reached any prompt. They were already being paid for, so this spends them.
+        const ingredientLine = (Array.isArray(seed.ingredientHints) && seed.ingredientHints.length)
+            ? `Materials: ${seed.ingredientHints.slice(0, 4).join(", ").slice(0, 140)}`
+            : "";
+
         const seedContext = [
             domains ? `Domains: ${domains}` : "",
+            ingredientLine,
             seed.concept ? `Concept: ${seed.concept.slice(0, 100)}` : "",
             seed.emotion ? `Emotion: ${seed.emotion}` : "",
             seed.metaphor ? `Metaphor: ${seed.metaphor.slice(0, 100)}` : "",
@@ -2994,9 +3128,20 @@ Return ONLY valid JSON:
         const loveLine =
             "The scene contains only objects, landscapes, natural phenomena, or flora. Pure abstract beauty. No human figures of any kind.";
 
+        // Grounding, phrased as composition rather than constraint. The removed
+        // code in 41618aba said "use ONLY objects from this text", which caged the
+        // scene against the composition slot and the aesthetic signature at once.
+        // "Build around these" lets them all coexist.
+        const anchorBlock = visualBrief
+            ? `
+THE POST THIS IMAGE ACCOMPANIES IS ABOUT: ${visualBrief}
+Build the scene around those anchors. Give each one a place in one of the three
+layers, and express it as light, material, texture and scale.`
+            : "";
+
         const prompt = `Describe a BRIGHT, hypnotic scene in THREE spatial layers. Each layer under 40 chars.
 
-${loveLine}
+${loveLine}${anchorBlock}
 
 CRITICAL: This scene must LOOP PERFECTLY.
 - The ending visually connects back to the beginning
