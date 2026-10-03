@@ -268,7 +268,10 @@ im.save("${dst}", quality=88)
 
 // Bluesky caps alt text at 3000 chars; image prompts run a few hundred, but
 // generateWelcome clamps its prompt at 4000, so trim rather than risk a reject.
-const ALT_MAX = 1000;
+// Bluesky rejects alt text over 3000 characters. generateWelcome clamps its
+// own prompt at 4000, so trim here rather than let an oversized prompt fail
+// the upload after the render has already been paid for.
+const ALT_MAX = 3000;
 const altFor = (s) => (s ? String(s).slice(0, ALT_MAX) : "");
 
 async function postOne(bsky, text, imagePath, altText = "") {
@@ -451,7 +454,13 @@ const engine = new LoveEngine(client);
 let bsky = null; // logged into on the first post that needs it, then reused
 const loginOnce = async () => (bsky ??= await getBsky());
 
-const t0 = Date.now();
+// Wall clock for the whole run, reported once at the end. The per-post timer
+// is t0 below, which is deliberately INSIDE the loop: with a single t0 hoisted
+// out here, `Xs elapsed` in the ready line accumulated one post-time per post
+// and read like a per-post timer. A steady ~290s/post was logged as
+// 275.6 -> 567.5 -> 855.0 -> 1157.4s, which looks exactly like runaway growth
+// and cost real time to diagnose before the PNG mtimes gave it away.
+const runStart = Date.now();
 const backoff = new Backoff();
 let posted = 0;
 let attempts = 0;
@@ -459,6 +468,7 @@ let attempts = 0;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 for (let i = 1; ; i++) {
+    const t0 = Date.now();
     console.error(`[seq] === post ${i} ===`);
     let result = null;
     for (let attempt = 1; attempt <= 2 && !result; attempt++) {
@@ -532,4 +542,4 @@ for (let i = 1; ; i++) {
 
     if (runOnce) break;
 }
-console.error(`[seq] done — ${posted} posted in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+console.error(`[seq] done — ${posted} posted in ${((Date.now() - runStart) / 1000).toFixed(0)}s`);

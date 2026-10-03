@@ -152,12 +152,11 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   over the 580 ones and repeating the whole thing. Note that purging 535 makes apt consider the *entire*
   580 stack orphaned (it entered as an automatic dependency of 535) and offer to delete
   `nvidia-dkms-580` — never run `apt autoremove` before the `apt-mark manual`.
-- **The `Xs elapsed` in the `ready` line is cumulative, not per-post.** `t0` is declared at
-  `love-cli.mjs:280`, *outside* the post loop, so the number grows by one post-time per post and reads
-  like a per-post timer. A steady ~290s/post shows up as 275.6 → 567.5 → 855.0 → 1157.4s. The real
-  per-post cost is flat, confirmed three ways: the cumulative deltas (275.6/291.9/287.5/302.4), the
-  `output/transmission-N.png` mtime intervals (+292/+287/+302), and a phase trace (text ~94s + render
-  ~181s). Don't diagnose a slowdown from that field without differencing it first.
+- **The `Xs elapsed` in the `ready` line is per-post**, measured from a `t0` declared *inside* the
+  post loop. It used to be declared outside, so the number grew by one post-time per post and read
+  like a runaway: a steady ~290s/post logged as 275.6 → 567.5 → 855.0 → 1157.4s. The end-of-run
+  summary keeps its own `runStart` for the cumulative total. If the per-post figure ever looks like
+  growth again, confirm against the `output/transmission-N.png` mtime intervals before believing it.
 - **`love-run.log` is shared by every run and full of `\r`.** tqdm writes carriage returns to stderr
   alongside node's `console.error`, so `grep -E '^\[seq\]'` silently misses lines that got glued to a
   progress bar, and `awk` ranges match *earlier* runs' identically-numbered posts. Scope to the run
@@ -177,6 +176,10 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   `generate_image.py` that keeps holding ~5.8GB of VRAM at 100% util, so the next run fails to
   allocate. Check `pgrep -f generate_image.py` after stopping a run (mind that the pattern matches
   your own shell — use the PID from `ps` rather than `pkill -f`).
+- **Alt text is the image prompt, capped at 3000** (Bluesky's limit). `postOne()` takes it and
+  passes it to `createPost()`; without it, `createPost` falls back to `text.slice(0, 100)` and every
+  image ships with the post body as its description. `generateWelcome` clamps its own prompt at
+  4000, so the trim has to happen here or an oversized welcome fails the upload after the render.
 - qwen3 occasionally emits off-schema JSON at high LFO temperatures: the creative seed
   falls back to default fields, and generation retries a post once before skipping
   (a single bad generation never kills a run).
