@@ -1153,6 +1153,26 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
 
     // Director vibes: pure aesthetic signatures (no name-dropping).
     // LLM leans into the vibe as a starting palette for the seed.
+    // Plan vibes are CURATED and picked, not generated. qwen3 cannot be asked to
+    // avoid a word: the plan contract once supplied two literal examples and the
+    // model produced "soft radiant bloom" 290 times; after diversifying the examples
+    // it moved to "copper", landing in 3 of 5 vibes while an avoidance line named
+    // "copper" outright. Three separate mechanisms (this, the fragment cap, and the
+    // beat pool) showed the same thing -- prompt-level avoidance makes this model
+    // converge on the word it is shown. The beat pool's hard cap fixed it, so this
+    // does the same: a fixed pool, sampled with anti-repetition weighting, which
+    // makes variety structural instead of requested.
+    // Spread across registers on purpose -- temperature, texture, time, material,
+    // light -- so consecutive picks do not rhyme.
+    static PLAN_VIBES = [
+        "smoke and heat", "brass gone cold", "wet stone", "late afternoon",
+        "copper and salt", "blue hour", "velvet and grain", "first light",
+        "linen and lamplight", "deep water", "polished silver", "steam and iron",
+        "moss after rain", "low tide shimmer", "raw silk", "dusk through glass",
+        "salt on skin", "cold porcelain", "amber and ash", "green shade",
+        "burnished oak", "still water", "dust in sunlight", "winter light",
+    ];
+
     static DIRECTOR_VIBES = [
         "liquid light",
         "frozen mist",
@@ -2704,31 +2724,6 @@ Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"
             ? `\nRecent phrase addressees: ${this.phraseAddressees.slice(-5).join(", ")}`
             : "";
 
-        // Vibe avoidance. The contract used to supply two literal examples
-        // ("golden hush glow", "soft radiant bloom") and qwen3 anchored on them:
-        // "soft radiant bloom" appeared 290 times across the run, and every rival
-        // vibe contained bloom/hush/amber -- so every image prompt inherited the
-        // same vocabulary. The examples are now spread across registers, and this
-        // line keeps recent vibes from settling back in. Framed positively per the
-        // project's prompt rule.
-        // Whole vibes AND their distinctive words. The ring stopped exact repeats
-        // but vocabulary still clustered -- "copper dusk and velvet heat" then
-        // "copper dawn and slow heat" put copper in 2 of 3, and "slow heat" twice.
-        const vibeWords = [
-            ...new Set(
-                this.usedVibes
-                    .slice(-8)
-                    .flatMap((v) => String(v).toLowerCase().split(/\s+/))
-                    .filter((w) => w.length > 3 && !LoveEngine.STOP_WORDS.has(w))
-            ),
-        ].slice(0, 14);
-        const vibeHistory = this.usedVibes.length
-            ? `\nRecent vibes were: ${this.usedVibes.slice(-6).join(" | ")}.\n` +
-              (vibeWords.length
-                  ? `Their vocabulary drew on: ${vibeWords.join(", ")}. Reach for materials and qualities none of those named.\n`
-                  : "")
-            : "";
-
         const prompt = `Plan a post.
 
 ${mentionDonation ? "Subtly include a donation mention (https://buymeacoffee.com/l.o.v.e or ETH). One line, organic.\n" : ""}
@@ -2743,7 +2738,7 @@ Every field should feel like it *breathes from* these inputs — cohesive, immer
 VARIETY IS CRITICAL:
 Choose a world, setting, scale, and visual language that feels completely fresh — something the viewer hasn’t *felt* before.
 
-${modeDirective}${phraseHistory}${grammarHistory}${resonanceHistory}${addresseeHistory}${vibeHistory}
+${modeDirective}${phraseHistory}${grammarHistory}${resonanceHistory}${addresseeHistory}
 
 Creative direction:
 - Aim for warmth that feels almost physical — like light resting on skin
@@ -2760,8 +2755,6 @@ Return ONLY valid JSON (all string values):
 
 {
   "theme": "an uplifting theme that feels warm, intimate, and inspired by the concept",
-
-  "vibe": "2-4 word aesthetic vibe with a hint of sensual warmth. Draw it from a different part of the spectrum each time — one of these registers: a TEMPERATURE ('brass gone cold', 'first light'), a TEXTURE ('velvet and grain', 'wet stone'), a TIME OF DAY ('blue hour', 'late afternoon'), a MATERIAL WORLD ('smoke and citrus', 'copper and salt'), or a QUALITY OF LIGHT ('low tide shimmer', 'lamplight'). Any combination reads as a distinct aesthetic.",
 
   "contentType": "a static image post format (motivational poster, golden truth, celebration, recognition moment, warm observation). Always a single still image.",
 
@@ -2798,7 +2791,7 @@ Return ONLY valid JSON (all string values):
         if (!data) {
             return {
                 theme: "signal",
-                vibe: "drift",
+                vibe: this._pickPlanVibe(),
                 contentType: "transmission",
                 constraint: "under 250 chars",
                 intensity: "5",
@@ -2808,7 +2801,13 @@ Return ONLY valid JSON (all string values):
                 phraseAddressee: "noun",
             };
         }
+        data.vibe = this._pickPlanVibe();
         return data;
+    }
+
+    // Weighted against recently used vibes, so a short list cannot settle in.
+    _pickPlanVibe() {
+        return this._pickWeighted(LoveEngine.PLAN_VIBES, this.usedVibes);
     }
 
     // ─── Content Generation (Story only) ───────────────────────────────
