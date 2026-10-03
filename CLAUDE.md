@@ -229,6 +229,27 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   the boredom critic are both skipped on the final attempt (`attempt < MAX_RETRIES - 1`), so when the
   critic rejects three attempts for cliché the fourth is accepted unchecked — and "you're already
   glowing" is itself the cliché being chased. Ranking is what closes that.
+- **Measured effect of the repetition guards (2026-10-03).** A full 20-post ring was snapshotted
+  pre-fix, then the ring was allowed to refill completely and compared like for like:
+
+  | metric | pre-fix | post-fix |
+  |---|---|---|
+  | `just breathe` | 5/20 (25%) | **0/20** |
+  | ≥3-word sentence repeats (leave-one-out) | 13/20 (65%) | **6/20 (30%)** |
+  | ≥2-word sentence repeats | 15/20 (75%) | 9/20 (45%) |
+  | any use of "breathe" | 8/20 (40%) | 1/20 (5%) |
+  | most-repeated 2-word fragment | `just breathe` ×5 (25%) | `you're here` ×4 (20%) |
+
+  The ≥3-word guard does real work: verbatim sentence reuse more than halved and the target phrase
+  is gone. **The fragment ranking does not bound repetition, it redistributes it.** The leading
+  short fragment moved from `just breathe` to `you're here` at a comparable rate, and a new cliché
+  appeared (`you are already enough`, 0/20 → 2/20). Half weight is too weak to stop migration. If
+  this is to be fixed rather than observed, the beat pool already contains the pattern that works —
+  a hard cap on how many entries may share a property — applied as a fragment-frequency cap over
+  the ring. The risk is starvation: `a breath` opens 30–40% of posts, so a cap that rejects it
+  outright would leave the engine unable to write a post. Measure against a full ring before
+  trusting any such cap. One full refill is a single sample at one temperature; it shows the
+  mechanism moves the metric, not that the new equilibrium holds over days.
 - qwen3 occasionally emits off-schema JSON at high LFO temperatures: the creative seed
   falls back to default fields, and generation retries a post once before skipping
   (a single bad generation never kills a run).
