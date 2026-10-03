@@ -207,6 +207,13 @@ const args = process.argv.slice(2);
 const doPost = args.includes("--post");
 const skipImage = args.includes("--skip-image");
 const runOnce = args.includes("--once");
+// Pause welcome posts without pausing follow-back. While set, new followers are
+// followed back but never queued for a welcome, so re-enabling applies only to
+// people who follow afterwards -- no backlog dumps itself when it comes back on.
+const noWelcome = args.includes("--no-welcome");
+if (noWelcome && doPost) {
+    console.error("[follow] --no-welcome set — following back, but sending no welcome posts");
+}
 
 await ensureOllama();
 
@@ -285,7 +292,7 @@ function getPendingWelcomes() {
     }
 }
 
-async function doFollowBack(bsky, engine, { skipImage = false } = {}) {
+async function doFollowBack(bsky, engine, { skipImage = false, noWelcome = false } = {}) {
     const firstScan = localStorage.getItem(FOLLOW_BASELINE_KEY) !== "true";
 
     let unfollowed;
@@ -326,8 +333,15 @@ async function doFollowBack(bsky, engine, { skipImage = false } = {}) {
             engine.interactions.recordFollow(f.handle);
             console.error(`[follow] followed back @${f.handle}`);
             if (!engine.interactions.hasWelcomed(f.handle) && !pending.includes(f.handle)) {
-                pending.push(f.handle);
-                console.error(`[follow] queued welcome for @${f.handle}`);
+                if (noWelcome) {
+                    // Followed back, but deliberately not queued: re-enabling later
+                    // applies to people who follow from then on, and nothing
+                    // accumulates to dump itself on the next scan.
+                    console.error(`[follow] welcome suppressed for @${f.handle} (--no-welcome)`);
+                } else {
+                    pending.push(f.handle);
+                    console.error(`[follow] queued welcome for @${f.handle}`);
+                }
             }
             await sleep(5000);
         } catch (err) {
@@ -339,7 +353,9 @@ async function doFollowBack(bsky, engine, { skipImage = false } = {}) {
     // Drain at most one welcome, if the queue has anything on it. The drain is
     // driven by the queue, not by `unfollowed`: by this point everyone in the
     // queue has already been followed back and so no longer appears in the scan.
-    if (pending.length > 0) {
+    if (pending.length > 0 && noWelcome) {
+        console.error(`[follow] ${pending.length} welcome(s) waiting; held by --no-welcome`);
+    } else if (pending.length > 0) {
         const handle = pending[0];
         const rest = pending.slice(1);
         try {
@@ -486,7 +502,7 @@ for (let i = 1; ; i++) {
     // must not be able to cost us a post.
     if (doPost) {
         try {
-            await doFollowBack(await loginOnce(), engine, { skipImage });
+            await doFollowBack(await loginOnce(), engine, { skipImage, noWelcome });
         } catch (err) {
             console.error(`[follow] scan error: ${err.message}`);
         }

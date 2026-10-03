@@ -122,6 +122,8 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   followed records reuse `engine.interactions`, which works headless because the CLI shims
   `localStorage` to `.love-state.json`. Everything logs under `[follow]`. The webapp's
   `doFollowBack()` only ran while the dashboard tab was open, so a headless CLI run followed nobody.
+  `--no-welcome` pauses welcome posts without pausing follow-back: people are still followed, but not
+  queued, so re-enabling applies only to later arrivals and no backlog dumps itself on resume.
 - **GPU sharing**: the LLM (Ollama) and SDXL cannot share the 6GB VRAM; `love-ai.sh image` and `love-cli.mjs` unload the Ollama model first. The SRBMiner miner (`~/epic-mining/start_epic_ubuntu.sh`) also holds ~2GB VRAM and auto-respawns — stop the wrapper script, not just the miner.
 - **Local-mode gaps**: video, TTS, and music throw — only text + image posts are supported.
 - **Subliminal text in images**: NOT rendered locally. The webapp prompted gpt-image (cloud)
