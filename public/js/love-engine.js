@@ -492,18 +492,45 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
             const data = this.ai.extractJSON(raw);
             const candidates = Array.isArray(data?.beats) ? data.beats : [];
 
-            const added = [];
-            for (const c of candidates) {
-                const beat = this._normalizeBeat(c);
-                if (!beat) continue;
-                // Reject anything close to what we already have, by trigram
-                // overlap — a pool of five reworded variants rotates correctly
-                // and still reads as stuck.
-                if (existing.some((b) => this._tooSimilar(b, beat))) continue;
-                if (this._beatPool.includes(beat)) continue;
+            // Hard cap on how many pool entries may open with the same main verb. Prompt
+            // control was tried and is not sufficient: even with a form assigned to
+            // each line, "let" still landed in 1-2 of every 4 generated. This is the
+            // reliable gate. Note it guards VERB diversity only — the forwarding-CTA
+            // guard is still prompt-only, by choice.
+            const BEAT_VERB_CAP = 3;
+
+            const tryAdd = (raw, enforceVerbCap) => {
+                const beat = this._normalizeBeat(raw);
+                if (!beat) return false;
+                // Reject anything close to what we already have, by trigram overlap
+                // — a pool of five reworded variants rotates correctly and still
+                // reads as stuck. Checked against the LIVE pool, not the pre-run
+                // snapshot, so the fallback pass below still sees earlier additions.
+                if (this.postBeats.some((b) => this._tooSimilar(b, beat))) return false;
+                if (this.postBeats.includes(beat)) return false;
+                if (enforceVerbCap) {
+                    const v = this._beatMainVerb(beat);
+                    if (v && this._countVerb(this.postBeats, v) >= BEAT_VERB_CAP) return false;
+                }
                 this._pushCapped(this.postBeats, beat, BEAT_POOL_CAP);
-                added.push(beat);
+                return true;
+            };
+
+            const added = [];
+            for (const c of candidates) if (tryAdd(c, true)) added.push(c);
+
+            // Starvation guard: if the verb cap rejected every candidate, the pool
+            // would stop growing and the closure would lock onto whatever is
+            // already there. Relax only the verb cap — dedupe still applies — so
+            // growth degrades to "samey" rather than to "frozen".
+            const relaxed = [];
+            if (added.length === 0) {
+                for (const c of candidates) if (tryAdd(c, false)) relaxed.push(c);
+                if (relaxed.length) {
+                    console.log(`[love] beat pool verb cap hit — accepted ${relaxed.length} over-represented`);
+                }
             }
+            added.push(...relaxed);
 
             if (added.length) {
                 this._saveVarietyMemory();
@@ -514,6 +541,19 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
             // Never let variety generation break a post.
             console.log(`[love] beat extension skipped: ${err.message}`);
         }
+    }
+
+    // Which verb a beat opens with, or "" if it doesn't match the "...and <verb>"
+    // shape. Used both to enforce BEAT_VERB_CAP and to report the tally.
+    _beatMainVerb(beat) {
+        const m = String(beat || "").toLowerCase().match(/\.\.\.and\s+([a-z]+)/);
+        return m ? m[1] : "";
+    }
+
+    _countVerb(beats, verb) {
+        let n = 0;
+        for (const b of beats) if (this._beatMainVerb(b) === verb) n += 1;
+        return n;
     }
 
     // Which verb each existing beat opens with, with counts, most-used first.

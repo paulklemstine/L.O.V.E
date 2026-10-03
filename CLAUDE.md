@@ -187,17 +187,22 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   image ships with the post body as its description. `generateWelcome` clamps its own prompt at
   4000, so the trim has to happen here or an oversized welcome fails the upload after the render.
 - **Closing-beat pool** (`_maybeExtendLists()` → `_pickBeat()`): every 5th transmission the LLM adds
-  up to 6 beats, rejecting near-duplicates by trigram overlap, capped at 24, persisted as
-  `love_beat_pool`. **Additive and non-destructive by construction** — a failed, empty, or
-  all-duplicate response leaves the pool untouched, so generation can never make a post worse than
-  not having tried. Two things to know before trusting it:
-  - The CTA guard is **prompt-only**, by deliberate choice. The generation prompt describes what a
-    beat should name; there is no code filter dropping forwarding verbs. If beats start closing on
-    "send it to someone" again, add the filter — generation drifts, filtering doesn't.
-  - **qwen3 clusters on leading verbs.** Measured on the first real pool: 20 beats, 0 containing a
-    forwarding verb (good), but 12 of the last 14 generated opened with "let". Trigram dedupe does
-    not catch this because the *clauses* differ enough — only the main verb repeats. If posts start
-    feeling samey in a new way, that is why, and a main-verb diversity check is the fix.
+  up to 6 beats, rejecting near-duplicates by trigram overlap and by over-used main verb, capped at
+  24, persisted as `love_beat_pool`. **Additive and non-destructive by construction** — a failed,
+  empty, or all-duplicate response leaves the pool untouched, so generation can never make a post
+  worse than not having tried. The cap evicts oldest-first, so once the pool is full the curated
+  seeds are replaced by generated beats over time. Two things to know before trusting it:
+  - **Verb diversity is enforced in code** (`BEAT_VERB_CAP = 3`): a beat whose main verb already
+    opens three pool entries is rejected. Prompt-level control was tried first and is not
+    sufficient — naming "let" as the verb to avoid took it from 7 to 13, because telling a model
+    which word to move away from primes it, and feeding the live verb tally back did the same more
+    weakly (7 → 10) since a high count reads as a suggestion. Assigning a form per line helped
+    (1 → 3-4 distinct verbs per 4 beats) but did not close it. If every candidate is rejected, the
+    verb cap relaxes for one pass so the pool degrades to "samey" rather than freezing; dedupe
+    still applies.
+  - **The CTA guard is prompt-only**, by deliberate choice. There is no code filter dropping
+    forwarding verbs. Measured across every pool built so far: zero beats have contained one. If
+    that changes, add the filter — generation drifts, filtering doesn't.
 - **`_pickWeighted` returns a single item, not an array.** It is easy to write `[0]` on the result
   and silently get the first *character* — which for any string starting `"..."` is always `.`.
 - `_loadVarietyMemory` parses a missing key as `"[]"` and assigns it, so any list that must ship with
