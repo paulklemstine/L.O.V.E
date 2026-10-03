@@ -321,6 +321,7 @@ export class LoveEngine {
         this.usedDirectorVibes = [];      // last 5
         this.usedPhrases = [];            // last 50
         this.usedVibes = [];              // last 15: aesthetic vibes, see _generatePlan
+        this.usedOpeningForms = [];       // last 8: opening constructions assigned
         this.phraseGrammars = [];         // last 5
         this.phraseResonances = [];       // last 5
         this.phraseAddressees = [];       // last 5
@@ -385,6 +386,7 @@ export class LoveEngine {
             love_used_director_vibes: "usedDirectorVibes",
             love_used_phrases: "usedPhrases",
             love_used_vibes: "usedVibes",
+            love_used_opening_forms: "usedOpeningForms",
             love_phrase_grammars: "phraseGrammars",
             love_phrase_resonances: "phraseResonances",
             love_phrase_addressees: "phraseAddressees",
@@ -408,6 +410,7 @@ export class LoveEngine {
             usedDirectorVibes: "love_used_director_vibes",
             usedPhrases: "love_used_phrases",
             usedVibes: "love_used_vibes",
+            usedOpeningForms: "love_used_opening_forms",
             phraseGrammars: "love_phrase_grammars",
             phraseResonances: "love_phrase_resonances",
             phraseAddressees: "love_phrase_addressees",
@@ -708,14 +711,18 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
         } catch {}
     }
 
+    // Assigned construction for this post. Weighted against recent picks so a
+    // short list cannot settle in, and phrased as what TO do rather than what to
+    // avoid -- naming a banned opening primes it, which is the whole reason the
+    // old "the first word MUST NOT be you" hint was worse than nothing.
+    _pickOpeningForm() {
+        return this._pickWeighted(LoveEngine.OPENING_FORMS, this.usedOpeningForms);
+    }
+
     _getOpeningVarietyHint() {
-        if (this.recentOpenings.length < 2) return "";
-        const last5 = this.recentOpenings.slice(-5);
-        const youCount = last5.filter((o) => o.startsWith("you")).length;
-        if (youCount >= 1) {
-            return `\nRECENT POSTS ALL STARTED WITH "You..." — MANDATORY: open with something completely different. Use a scene description, a question, a command, a metaphor, a sound, a single noun, a fragment, an action. The first word MUST NOT be "you" or "your."\n`;
-        }
-        return "";
+        const form = this._pickOpeningForm();
+        this._currentOpeningForm = form;
+        return `\nOPENING: this post begins with ${form}. The first line is exactly that shape.\n`;
     }
 
     // ─── Key Noun Extraction ──────────────────────────────────────
@@ -1173,6 +1180,27 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
         "burnished oak", "still water", "dust in sunlight", "winter light",
     ];
 
+    // Opening constructions, ASSIGNED per post rather than chosen. The model
+    // reuses its opening ("You're already ...") across every retry no matter how
+    // the rejection is phrased -- quoting the phrase made it worse, describing it
+    // without quoting changed nothing -- because asking a model to vary is not
+    // the same as removing its choice. Assigning the construction is what worked
+    // for beat verbs (1/4 distinct -> 4/4) and for the plan vibe.
+    static OPENING_FORMS = [
+        "an object first -- name one thing, then what it does",
+        "a time -- open on when this happened",
+        "a question that needs no answer",
+        "a sound first -- open on something heard",
+        "a place -- open on where this is",
+        "a physical sensation in the body",
+        "a small instruction to the reader",
+        "direct address to the reader",
+        "a flat statement, plain and unadorned",
+        "something in motion",
+        "a fragment -- two or three words, punctuated",
+        "weather -- open on the air or the sky",
+    ];
+
     static DIRECTOR_VIBES = [
         "liquid light",
         "frozen mist",
@@ -1524,6 +1552,11 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
         // 15-cap ring and made the history line list the same vibe twice.
         if (plan?.vibe && !this.usedVibes.includes(plan.vibe)) {
             this._pushCapped(this.usedVibes, plan.vibe, 15);
+        }
+
+        // Opening construction assigned for this post.
+        if (this._currentOpeningForm) {
+            this._pushCapped(this.usedOpeningForms, this._currentOpeningForm, 8);
         }
 
         // Composition slot (capped at 5)
