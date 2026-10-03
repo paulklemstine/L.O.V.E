@@ -1500,7 +1500,11 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
         }
 
         // Aesthetic vibe (capped at 15) — see the note on the contract examples.
-        if (plan?.vibe) this._pushCapped(this.usedVibes, plan.vibe, 15);
+        // Deduped: _pushCapped appends blindly, so a repeat burned a slot on the
+        // 15-cap ring and made the history line list the same vibe twice.
+        if (plan?.vibe && !this.usedVibes.includes(plan.vibe)) {
+            this._pushCapped(this.usedVibes, plan.vibe, 15);
+        }
 
         // Composition slot (capped at 5)
         if (compositionSlot)
@@ -2943,10 +2947,18 @@ Return ONLY valid JSON:
             // candidate rather than looping forever or accepting nothing.
             const overused = this._fragmentOverused(story);
             if (overused) {
+                // Describe the repetition WITHOUT quoting the phrase back. Quoting it
+                // measurably made it worse: while this feedback named "you're already",
+                // that fragment climbed 25% -> 35% -> 40% of the ring across 22
+                // rejections. Same failure as the beat pool's "let", which went
+                // 7 -> 13 once the prompt named it as the word to avoid. The model
+                // converges on a word it is shown. Point at the repetition without
+                // reproducing it.
                 feedback =
-                    `YOUR OUTPUT: "${story}"\n"${overused.frag}" already appears in ` +
-                    `${Math.round(overused.share * 100)}% of your recent posts. Write a post ` +
-                    `that reaches the same feeling through different words entirely.`;
+                    `YOUR OUTPUT: "${story}"\nThis opens the way your last several posts ` +
+                    `opened -- that phrasing is now the most over-used in your recent work. ` +
+                    `Reach the same feeling through a different opening construction, and ` +
+                    `different vocabulary in the first line.`;
                 if (attempt < MAX_RETRIES - 1) {
                     console.log(
                         `[love] fragment cap: rejected "${overused.frag}" ` +
