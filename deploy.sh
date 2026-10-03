@@ -20,7 +20,12 @@ BUILD=$(( file_build > html_build ? file_build : html_build ))
 NEW_BUILD=$((BUILD + 1))
 
 python3 -c "import json; json.dump({'build': $NEW_BUILD}, open('$VERSION_FILE', 'w'))"
-sed -i "s/build #<span id=\"build-version\">[0-9]*<\/span>/build #<span id=\"build-version\">$NEW_BUILD<\/span>/" "$INDEX_FILE"
+# Rewrite only the digits INSIDE the span, never a whole-tag pattern. The markup
+# wraps between "build #<span" and "id="build-version"" onto two lines and uses
+# CRLF endings, so the original single-line sed never matched — which is exactly
+# why version.json and index.html had drifted. Matching the span contents alone
+# is line-local and leaves the \r untouched.
+sed -i "s/id=\"build-version\">[0-9]*/id=\"build-version\">$NEW_BUILD/" "$INDEX_FILE"
 
 if [ "$file_build" != "$html_build" ]; then
     echo "Note: version.json ($file_build) and index.html ($html_build) had drifted; reconciled to $NEW_BUILD."
