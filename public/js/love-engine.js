@@ -1024,6 +1024,38 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
         return false;
     }
 
+    // ─── Pipeline instrumentation ────────────────────────────────────────
+    // Logs anchor survival at each stage of the image-prompt pipeline, because
+    // two further LLM calls rewrite the prompt wholesale after the brief is
+    // injected into it.
+    //
+    // MEASURED: anchors survive. Nine stage transitions across three posts, no
+    // loss -- _amplifyPrompt and _sensualAmplify both preserve them (one expands
+    // the prompt 361->459 chars, the other barely touches it). An earlier claim
+    // that they were being deleted was wrong: it came from pairing a brief with
+    // a separately-fetched post, and those did not belong to each other.
+    //
+    // The real defect was upstream of this: the anchors were being distributed
+    // across the three layers instead of defining the main subject, so the model
+    // filled the subject slot with generic beauty. That is fixed in the anchor
+    // block. Kept because the next change here is otherwise unmeasurable.
+    _traceStage(stage, prompt, anchors) {
+        const text = String(prompt || "");
+        const words = [...new Set(
+            String(anchors || "")
+                .toLowerCase()
+                .split(/[\s,]+/)
+                .map((w) => w.trim())
+                .filter((w) => w.length > 2 && !LoveEngine.STOP_WORDS.has(w))
+        )];
+        const kept = words.filter((w) => text.toLowerCase().includes(w));
+        console.log(
+            `[trace] ${stage}: ${kept.length}/${words.length} anchor words kept` +
+                (kept.length ? ` [${kept.join(", ")}]` : "") +
+                ` | ${text.length} chars | ${text.slice(0, 160)}`
+        );
+    }
+
     // Reuse of SHORT fragments (2+ words). _repeatsSentenceFromRing needs 3+ words
     // because 2-word matches are not uniformly bad — "a breath" opens most posts,
     // so rejecting on it would starve generation. But the fragments that DO repeat
@@ -1431,8 +1463,11 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
         );
 
         // ── Step 5: Director's Amplify (4th LLM call) ──
+        this._traceStage("1 after _generateImagePrompt", visualPrompt, visualBrief);
+
         onStatus("Amplifying visual...");
         visualPrompt = await this._amplifyPrompt(visualPrompt, seed, plan);
+        this._traceStage("2 after _amplifyPrompt", visualPrompt, visualBrief);
 
         // ── Step 5b: Sensual Amplify (5th + 6th LLM calls, two-pass) ──
         // Catalog → Apply. The catalog pass writes a brief naming the
@@ -1464,6 +1499,7 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
                     appliedPhrase = applied.phrase;
                     appliedText = applied.text;
                     visualPrompt = applied.imagePrompt;
+                    this._traceStage("3 after _sensualAmplify", visualPrompt, visualBrief);
                 }
             }
         } catch (err) {
@@ -3241,9 +3277,18 @@ Return nothing else.`;
         // "Build around these" lets them all coexist.
         const anchorBlock = visualBrief
             ? `
-THE POST THIS IMAGE ACCOMPANIES IS ABOUT: ${visualBrief}
-Build the scene around those anchors. Give each one a place in one of the three
-layers, and express it as light, material, texture and scale.`
+THE MAIN SUBJECT OF THIS SCENE IS: ${visualBrief}
+
+That is what this image is OF. All three layers describe that one subject from
+different distances -- the foreground is its closest detail, the midground is
+its body, the background is the air or space around it. Express it as light,
+material, texture and scale.`
+        // The previous wording said "give each one a place in one of the three
+        // layers", which distributed the anchors across the slots and left the
+        // main-subject slot free. The model then filled that slot with whatever
+        // generic beauty it reached for first, and the post's nouns became
+        // background dressing behind a stranger's favourite visual. Measured on
+        // three consecutive prompts: anchors led in two, lost in one.
             : "";
 
         const prompt = `Describe a BRIGHT, hypnotic scene in THREE spatial layers. Each layer under 40 chars.
