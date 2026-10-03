@@ -434,6 +434,26 @@ export class LoveEngine {
         if ((this.transmissionNumber || 0) % 5 !== 0) return;
 
         const existing = this._beatPool;
+
+        // Assign a form to each slot instead of asking the model to vary. Asking
+        // for variety fails here: told to spread itself across shapes, qwen3 still
+        // returned 7 lines opening "let..." out of 20. Naming "let" as the thing to
+        // avoid made it WORSE (7 -> 13) -- naming a word primes it. Prescribing a
+        // form per line removes the discretion that produces the clustering, which
+        // is the part the model was actually getting wrong.
+        const FORMS = [
+            "declarative — states what is already true for them",
+            "imperative — a small instruction they give themselves",
+            "question — open, with no answer needed",
+            "image-led — ends on a picture rather than a claim",
+            "time-shifted — still true an hour, a day, a year from now",
+            "comparative — something more than they expected",
+            "sensory — ends on a physical detail of their own body",
+            "second-person plural — shifts to \"we\" or \"you and I\"",
+        ];
+        const forms = this._pickRandom(FORMS, BEATS_PER_EXTENSION);
+        const beatForms = forms.map((f, i) => `  ${i + 1}. ${f}`).join("\n");
+
         const prompt = `You are widening the closing lines for a warm, intimate social post.
 
 A post has three beats:
@@ -449,14 +469,15 @@ Each must:
 - be written as a statement about their inner state.
 - read as warm and quietly glad.
 
-Vary the SHAPE between them, not just the wording. Spread these forms across the set:
-  declarative — states what is true now
-  imperative — a small instruction to themselves
-  question — an open question with no answer needed
-  image-led — ends on a picture rather than a claim
-  time-shifted — something still true later
+Vary the SHAPE between them, not just the wording. These are the forms, and each
+line is given one below:
 
 Give each a different main verb. No two lines should share one.
+
+Each line below has a FORM already assigned to it. Write that specific form —
+the assignment is the whole point, so work inside it rather than defaulting to
+the phrasing that comes most easily in this register:
+${beatForms}
 
 Existing lines, for reference (write something that does NOT overlap these):
 ${existing.map((b) => `- ${b}`).join("\n")}
@@ -486,12 +507,30 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
 
             if (added.length) {
                 this._saveVarietyMemory();
-                console.log(`[love] beat pool +${added.length} → ${this.postBeats.length}`);
+                console.log(`[love] beat pool ${existing.length} → ${this.postBeats.length}` +
+                    ` (${added.length} accepted) | verbs: ${this._beatVerbTally(this.postBeats)}`);
             }
         } catch (err) {
             // Never let variety generation break a post.
             console.log(`[love] beat extension skipped: ${err.message}`);
         }
+    }
+
+    // Which verb each existing beat opens with, with counts, most-used first.
+    // Reported in the extension log line so clustering stays visible over time.
+    // Deliberately NOT fed back into the generator prompt — an earlier version
+    // did that, and showing the model a word with a high count acted as a
+    // suggestion rather than a warning (measured: "let" 7 -> 10).
+    _beatVerbTally(beats) {
+        const counts = new Map();
+        for (const b of beats) {
+            const m = String(b).toLowerCase().match(/\.\.\.and\s+([a-z]+)/);
+            if (m) counts.set(m[1], (counts.get(m[1]) || 0) + 1);
+        }
+        return [...counts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .map(([v, n]) => `${v}×${n}`)
+            .join(", ");
     }
 
     _normalizeBeat(s) {
