@@ -186,6 +186,19 @@ const SYSTEM_PROMPT = SOCIAL_POST_PROMPT;
 const BEATS_PER_EXTENSION = 6;
 const BEAT_POOL_CAP = 24;
 
+// Share of the recent ring that may already contain a given DISTINCTIVE 2-word
+// fragment before a new post using it is rejected.
+//
+// Chosen by measurement, not taste. Leave-one-out over a real 20-post ring:
+//   cap 30% ->  0/20 rejected  (inert; a healthy ring never trips it)
+//   cap 20% ->  5/20 rejected  (all "you're already" — the recurring cliché)
+//   cap 15% -> 11/20 rejected  (starts rejecting "the dark" — natural imagery)
+//
+// 20% blocks precisely the cliché family and leaves ordinary imagery alone.
+// Function-word pairs ("in your", "like a", "you are") are excluded entirely by
+// _isDistinctiveFragment, so they can never trip this.
+const FRAGMENT_FREQ_CAP = 0.20;
+
 // ═══════════════════════════════════════════════════════════════════
 // INTERACTION LOG - Prevents spamming followers/replies
 // ═══════════════════════════════════════════════════════════════════
@@ -1008,26 +1021,75 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
     // what would brick the loop; treating it as a ranking signal lets the engine
     // prefer posts that lean on novel phrasing while remaining able to produce a
     // post at all.
-    _fragmentReuseScore(newText) {
-        const norm = (s) =>
-            String(s)
-                .toLowerCase()
-                .replace(/[’']/g, "")
-                .replace(/[^a-z\s]/g, " ")
-                .replace(/\s+/g, " ")
-                .trim();
-        const ring = this.recentPosts.map(norm);
-        if (ring.length === 0) return 0;
+    _normProse(s) {
+        return String(s)
+            .toLowerCase()
+            .replace(/[’']/g, "")
+            .replace(/[^a-z\s]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+    }
 
+    // Distinctive 2-word windows in a post.
+    _fragments(newText) {
         const frags = new Set();
         for (const raw of String(newText).split(/[.!?…\n]+/)) {
-            const w = norm(raw).split(" ").filter(Boolean);
+            const w = this._normProse(raw).split(" ").filter(Boolean);
             for (let i = 0; i + 1 < w.length; i++) frags.add(`${w[i]} ${w[i + 1]}`);
         }
+        return frags;
+    }
+
+    _fragmentReuseScore(newText) {
+        const ring = this.recentPosts.map((p) => this._normProse(p));
+        if (ring.length === 0) return 0;
+        const frags = this._fragments(newText);
         if (frags.size === 0) return 0;
         let reused = 0;
         for (const f of frags) if (ring.some((r) => r.includes(f))) reused += 1;
         return reused / frags.size;
+    }
+
+    // HARD cap on how much of the ring may already contain a given fragment.
+    // Ranking alone was measured to redistribute repetition rather than reduce
+    // it: "just breathe" (25% of the ring) simply became "you're here" (20%).
+    // This is the lever that worked for the beat pool's main verb — a cap on how
+    // many entries may share a property — applied per fragment.
+    //
+    // The threshold is a fraction of the ring, not a raw count, so it scales as
+    // the ring fills. `_fragmentReuseScore` is a share of the POST's fragments;
+    // this is a share of the RING's posts per fragment, which is the frequency
+    // that actually indicates overuse.
+    // A fragment counts toward the cap only if at least one of its two words is a
+    // content word. Measured over a live ring, the most-repeated 2-word windows
+    // were things like "in your", "like a", "the dark" and "you are" — function
+    // pairs that are just English, not repetition. Capping those would reject
+    // most posts and starve generation; it is exactly the failure mode the
+    // earlier "minWords=2 is too aggressive" note warned about, arriving by a
+    // different route. "already glowing" or "just breathe" have a content word
+    // and are tracked; "in your" is ignored.
+    _isDistinctiveFragment(frag) {
+        const words = frag.split(" ");
+        return words.some((w) => !LoveEngine.STOP_WORDS.has(w));
+    }
+
+    _fragmentOverused(newText, cap = FRAGMENT_FREQ_CAP) {
+        const ring = this.recentPosts.map((p) => this._normProse(p));
+        // Too little history to judge frequency fairly; stay silent rather than
+        // reject a good post off a 3-post sample.
+        if (ring.length < 10) return null;
+        const worst = { frag: null, share: 0 };
+        for (const f of this._fragments(newText)) {
+            if (!this._isDistinctiveFragment(f)) continue;
+            let n = 0;
+            for (const r of ring) if (r.includes(f)) n += 1;
+            const share = n / ring.length;
+            if (share > worst.share) {
+                worst.share = share;
+                worst.frag = f;
+            }
+        }
+        return worst.share >= cap ? worst : null;
     }
 
     // Combined cost used to rank competing candidates: the hard-guard metric
@@ -2836,6 +2898,23 @@ Return ONLY valid JSON:
             if (sim < bestScore) {
                 bestScore = sim;
                 bestStory = story;
+            }
+
+            // Fragment frequency cap. Rejecting is only safe because of the escape at the
+            // bottom: if every attempt trips it, we fall back to the best earlier
+            // candidate rather than looping forever or accepting nothing.
+            const overused = this._fragmentOverused(story);
+            if (overused) {
+                feedback =
+                    `YOUR OUTPUT: "${story}"\n"${overused.frag}" already appears in ` +
+                    `${Math.round(overused.share * 100)}% of your recent posts. Write a post ` +
+                    `that reaches the same feeling through different words entirely.`;
+                if (attempt < MAX_RETRIES - 1) continue;
+                // Last attempt: prefer an earlier candidate that doesn't trip it.
+                if (bestStory && !this._fragmentOverused(bestStory)) {
+                    story = bestStory;
+                }
+                break;
             }
 
             // N-gram Jaccard guard (zero-cost, runs before critic LLM call)

@@ -216,15 +216,18 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
 - `_loadVarietyMemory` parses a missing key as `"[]"` and assigns it, so any list that must ship with
   seed content (the beat pool does) gets its seeds discarded on a fresh install and has to be
   normalised back after load.
-- **Repetition has two guards, and they are not interchangeable.** `_wordTrigrams` strips stopwords
-  before forming windows, so a short stock phrase ("you're already glowing", "just breathe") yields
-  fewer than three content words and contributes *no trigrams* — the Jaccard critic is structurally
-  blind to the phrases that repeat most. `_repeatsSentenceFromRing` covers that with a direct
-  ≥3-word sentence comparison (leave-one-out over the ring: 13 of 20 posts shared a sentence).
-  Short fragments are handled differently on purpose: 2-word matches cannot be a hard reject,
-  because "a breath" opens most posts and rejecting it would starve generation. They instead feed
-  `_repetitionCost`, which ranks candidates (hard-guard score + 0.5 × fragment reuse) so the engine
-  prefers novel phrasing while remaining able to produce a post at all.
+- **Repetition has three layers, and they are not interchangeable.** `_wordTrigrams` takes raw
+  3-word windows (it does *not* strip stopwords — an earlier note here said it did; that was wrong).
+  A repeated sentence does produce trigrams, so the original critic's miss was never about token
+  density: its aggregate test is `reused / size(newTrigrams) > 0.4`, a **whole-post ratio**. One
+  repeated sentence is ~2 trigrams out of ~26 — 8%, far under the threshold. A two-word phrase like
+  "just breathe" produces no trigram at all. Hence:
+  - `_repeatsSentenceFromRing` — direct ≥3-word sentence comparison, catches the diluted case.
+  - `_fragmentOverused` — a **frequency cap** (`FRAGMENT_FREQ_CAP = 0.20`): if a distinctive 2-word
+    fragment is already in ≥20% of the ring, a post using it is rejected. Only fragments containing
+    a content word count (`_isDistinctiveFragment`); "in your", "like a", "you are" are excluded, or
+    the cap would reject most posts and starve generation. Cap value was measured, not guessed.
+  - `_repetitionCost` — soft ranking, so the loop prefers novel phrasing and can always fall back.
 - **The content loop ranks candidates instead of returning the last attempt.** The trigram guard and
   the boredom critic are both skipped on the final attempt (`attempt < MAX_RETRIES - 1`), so when the
   critic rejects three attempts for cliché the fourth is accepted unchecked — and "you're already
