@@ -722,6 +722,9 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
     _getOpeningVarietyHint() {
         const form = this._pickOpeningForm();
         this._currentOpeningForm = form;
+        // Logged because the hint otherwise only exists inside the prompt, where
+        // it cannot be verified. An invisible mechanism is not a mechanism.
+        console.log(`[love] opening form: ${form}`);
         return `\nOPENING: this post begins with ${form}. The first line is exactly that shape.\n`;
     }
 
