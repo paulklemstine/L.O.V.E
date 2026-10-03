@@ -207,12 +207,27 @@ const args = process.argv.slice(2);
 const doPost = args.includes("--post");
 const skipImage = args.includes("--skip-image");
 const runOnce = args.includes("--once");
-// Pause welcome posts without pausing follow-back. While set, new followers are
-// followed back but never queued for a welcome, so re-enabling applies only to
-// people who follow afterwards -- no backlog dumps itself when it comes back on.
-const noWelcome = args.includes("--no-welcome");
-if (noWelcome && doPost) {
-    console.error("[follow] --no-welcome set — following back, but sending no welcome posts");
+// Welcome posts are OFF by default; --welcome opts back in. Follow-back always
+// runs, so this only gates the welcome. It defaults off because the welcome
+// render is the expensive half of a follower interaction (one LLM call plus a
+// full SDXL render) and its output carries a real cosmetic risk: the welcome
+// prompt asks for the subliminal phrase to be "rendered in the scene", and
+// SDXL renders that as legible-looking nonsense -- the first real welcome came
+// back as "YS / YOU / A PME" in place of the signal "YOU ARE HOME".
+//
+// While off, new followers are followed back but never queued, so turning it
+// back on later applies only to people who follow from then on; nothing
+// accumulates to dump itself on resume.
+//
+// --no-welcome is still accepted as an explicit spelling of the default, so an
+// existing scripted invocation does not break.
+const sendWelcome = args.includes("--welcome") && !args.includes("--no-welcome");
+if (doPost) {
+    console.error(
+        sendWelcome
+            ? "[follow] welcomes ENABLED — new followers get a welcome post"
+            : "[follow] welcome posts off (default) — following back only; pass --welcome to enable"
+    );
 }
 
 await ensureOllama();
@@ -251,9 +266,16 @@ im.save("${dst}", quality=88)
     return { buf, type: "image/png" };
 }
 
-async function postOne(bsky, text, imagePath) {
+// Bluesky caps alt text at 3000 chars; image prompts run a few hundred, but
+// generateWelcome clamps its prompt at 4000, so trim rather than risk a reject.
+const ALT_MAX = 1000;
+const altFor = (s) => (s ? String(s).slice(0, ALT_MAX) : "");
+
+async function postOne(bsky, text, imagePath, altText = "") {
     const { buf, type } = await shrinkForUpload(imagePath);
-    const res = await bsky.createPost(text, new Blob([buf], { type }));
+    // Without this, createPost falls back to text.slice(0, 100) -- the post body
+    // rather than a description of the image, which is not what alt text is for.
+    const res = await bsky.createPost(text, new Blob([buf], { type }), altFor(altText));
     console.log(`posted: ${res.uri}`);
 }
 
@@ -292,7 +314,7 @@ function getPendingWelcomes() {
     }
 }
 
-async function doFollowBack(bsky, engine, { skipImage = false, noWelcome = false } = {}) {
+async function doFollowBack(bsky, engine, { skipImage = false, sendWelcome = false } = {}) {
     const firstScan = localStorage.getItem(FOLLOW_BASELINE_KEY) !== "true";
 
     let unfollowed;
@@ -333,11 +355,11 @@ async function doFollowBack(bsky, engine, { skipImage = false, noWelcome = false
             engine.interactions.recordFollow(f.handle);
             console.error(`[follow] followed back @${f.handle}`);
             if (!engine.interactions.hasWelcomed(f.handle) && !pending.includes(f.handle)) {
-                if (noWelcome) {
-                    // Followed back, but deliberately not queued: re-enabling later
+                if (!sendWelcome) {
+                    // Followed back, but deliberately not queued: enabling later
                     // applies to people who follow from then on, and nothing
                     // accumulates to dump itself on the next scan.
-                    console.error(`[follow] welcome suppressed for @${f.handle} (--no-welcome)`);
+                    console.error(`[follow] welcome suppressed for @${f.handle} (welcomes off)`);
                 } else {
                     pending.push(f.handle);
                     console.error(`[follow] queued welcome for @${f.handle}`);
@@ -353,8 +375,8 @@ async function doFollowBack(bsky, engine, { skipImage = false, noWelcome = false
     // Drain at most one welcome, if the queue has anything on it. The drain is
     // driven by the queue, not by `unfollowed`: by this point everyone in the
     // queue has already been followed back and so no longer appears in the scan.
-    if (pending.length > 0 && noWelcome) {
-        console.error(`[follow] ${pending.length} welcome(s) waiting; held by --no-welcome`);
+    if (pending.length > 0 && !sendWelcome) {
+        console.error(`[follow] ${pending.length} welcome(s) waiting; held (welcomes off)`);
     } else if (pending.length > 0) {
         const handle = pending[0];
         const rest = pending.slice(1);
@@ -366,7 +388,7 @@ async function doFollowBack(bsky, engine, { skipImage = false, noWelcome = false
                 const tmp = path.join(OUTPUT_DIR, `welcome-${safe}.png`);
                 fs.mkdirSync(OUTPUT_DIR, { recursive: true });
                 fs.writeFileSync(tmp, Buffer.from(await welcome.imageBlob.arrayBuffer()));
-                await postOne(bsky, welcome.text, tmp);
+                await postOne(bsky, welcome.text, tmp, welcome.imagePrompt);
             } else if (welcome) {
                 const res = await bsky.createPost(welcome.text);
                 console.log(`posted: ${res.uri}`);
@@ -483,7 +505,7 @@ for (let i = 1; ; i++) {
         try {
             const b = await loginOnce();
             if (imgPath) {
-                await postOne(b, result.text, imgPath);
+                await postOne(b, result.text, imgPath, result.visualPrompt);
             } else {
                 const res = await b.createPost(result.text);
                 console.log(`posted: ${res.uri}`);
@@ -502,7 +524,7 @@ for (let i = 1; ; i++) {
     // must not be able to cost us a post.
     if (doPost) {
         try {
-            await doFollowBack(await loginOnce(), engine, { skipImage, noWelcome });
+            await doFollowBack(await loginOnce(), engine, { skipImage, sendWelcome });
         } catch (err) {
             console.error(`[follow] scan error: ${err.message}`);
         }

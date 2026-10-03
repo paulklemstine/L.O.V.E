@@ -122,8 +122,14 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   followed records reuse `engine.interactions`, which works headless because the CLI shims
   `localStorage` to `.love-state.json`. Everything logs under `[follow]`. The webapp's
   `doFollowBack()` only ran while the dashboard tab was open, so a headless CLI run followed nobody.
-  `--no-welcome` pauses welcome posts without pausing follow-back: people are still followed, but not
-  queued, so re-enabling applies only to later arrivals and no backlog dumps itself on resume.
+  **Welcome posts are OFF by default; `--welcome` opts back in.** Follow-back always runs, so the flag
+  only gates the welcome. While off, people are followed back but not queued, so turning it back on
+  applies only to later arrivals and no backlog dumps itself on resume; anything already queued is
+  held and reported rather than dropped. Off by default because the welcome render is the expensive
+  half of the interaction and the prompt asks for the phrase "rendered in the scene", which SDXL
+  renders as legible-looking nonsense — the first real welcome came back as `YS / YOU / A PME` in
+  place of the signal `YOU ARE HOME`. `--no-welcome` is still accepted as an explicit spelling of
+  the default, so older scripted invocations keep working.
 - **GPU sharing**: the LLM (Ollama) and SDXL cannot share the 6GB VRAM; `love-ai.sh image` and `love-cli.mjs` unload the Ollama model first. The SRBMiner miner (`~/epic-mining/start_epic_ubuntu.sh`) also holds ~2GB VRAM and auto-respawns — stop the wrapper script, not just the miner.
 - **Local-mode gaps**: video, TTS, and music throw — only text + image posts are supported.
 - **Subliminal text in images**: NOT rendered locally. The webapp prompted gpt-image (cloud)
