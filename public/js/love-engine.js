@@ -180,6 +180,12 @@ Return ONLY the spoken script.`;
 // Alias for all social interactions (posts, replies, DMs, welcomes)
 const SYSTEM_PROMPT = SOCIAL_POST_PROMPT;
 
+// Closing-beat pool sizing. The cap is deliberately well above the seed count:
+// enough headroom that a few generations actually accumulate variety rather
+// than evicting each other, small enough that every beat still gets used.
+const BEATS_PER_EXTENSION = 6;
+const BEAT_POOL_CAP = 24;
+
 // ═══════════════════════════════════════════════════════════════════
 // INTERACTION LOG - Prevents spamming followers/replies
 // ═══════════════════════════════════════════════════════════════════
@@ -305,11 +311,23 @@ export class LoveEngine {
         this.phraseResonances = [];       // last 5
         this.phraseAddressees = [];       // last 5
 
+        // Closing-beat pool. Starts from the static seeds and grows by LLM
+        // generation; persisted so the variety survives a restart.
+        this.postBeats = [...LoveEngine.POST_BEATS];
+        this.recentBeats = [];            // last few used, feeds _pickWeighted
+
         this._loadTransmissionNumber();
         this._loadRecentPosts();
         this._loadRecentContext();
         this._loadRecentOpenings();
         this._loadVarietyMemory();
+
+        // _loadVarietyMemory parses a missing key as "[]" and assigns it, which
+        // would discard the seed beats on a fresh install. The other variety
+        // lists legitimately start empty, so normalise only this one.
+        if (!Array.isArray(this.postBeats) || this.postBeats.length === 0) {
+            this.postBeats = [...LoveEngine.POST_BEATS];
+        }
     }
 
     // ─── Post History (localStorage, powers n-gram guard + relative critic) ──
@@ -355,6 +373,7 @@ export class LoveEngine {
             love_phrase_grammars: "phraseGrammars",
             love_phrase_resonances: "phraseResonances",
             love_phrase_addressees: "phraseAddressees",
+            love_beat_pool: "postBeats",
         };
         for (const [key, prop] of Object.entries(keyMap)) {
             try {
@@ -376,6 +395,7 @@ export class LoveEngine {
             phraseGrammars: "love_phrase_grammars",
             phraseResonances: "love_phrase_resonances",
             phraseAddressees: "love_phrase_addressees",
+            postBeats: "love_beat_pool",
         };
         for (const [prop, key] of Object.entries(keyMap)) {
             try {
@@ -387,6 +407,108 @@ export class LoveEngine {
     _pushCapped(arr, value, cap) {
         arr.push(value);
         if (arr.length > cap) arr.splice(0, arr.length - cap);
+    }
+
+    // ─── Closing-beat pool ───────────────────────────────────────────────
+    // Beats currently in play, seeds first so a fresh install has variety.
+    get _beatPool() {
+        if (!Array.isArray(this.postBeats) || this.postBeats.length === 0) {
+            this.postBeats = [...LoveEngine.POST_BEATS];
+        }
+        return this.postBeats;
+    }
+
+    // Weighted so a beat just used is heavily suppressed and unused ones are
+    // favoured — the same anti-repetition shape the phrase pools use.
+    _pickBeat() {
+        // _pickWeighted returns ONE item, not an array.
+        const beat = this._pickWeighted(this._beatPool, this.recentBeats);
+        this._pushCapped(this.recentBeats, beat, 6);
+        return beat;
+    }
+
+    // Grow the beat pool. Additive and non-destructive by construction: a
+    // failed, empty, or all-duplicate response leaves the pool exactly as it
+    // was, so generation can never make the run worse than not having tried.
+    async _maybeExtendLists() {
+        if ((this.transmissionNumber || 0) % 5 !== 0) return;
+
+        const existing = this._beatPool;
+        const prompt = `You are widening the closing lines for a warm, intimate social post.
+
+A post has three beats:
+1. A hook that stops the scroll.
+2. One vivid sensory metaphor.
+3. A closing line, written below, that lands the feeling and ends the post.
+
+Write ${BEATS_PER_EXTENSION} NEW closing lines to add to a set that already exists.
+
+Each must:
+- be a single clause beginning with "...and".
+- name what the reader carries away — the feeling that remains in the moment after.
+- be written as a statement about their inner state.
+- read as warm and quietly glad.
+
+Vary the SHAPE between them, not just the wording. Spread these forms across the set:
+  declarative — states what is true now
+  imperative — a small instruction to themselves
+  question — an open question with no answer needed
+  image-led — ends on a picture rather than a claim
+  time-shifted — something still true later
+
+Give each a different main verb. No two lines should share one.
+
+Existing lines, for reference (write something that does NOT overlap these):
+${existing.map((b) => `- ${b}`).join("\n")}
+
+Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
+
+        try {
+            const raw = await this.ai.generateText(SYSTEM_PROMPT, prompt, {
+                label: "BeatExtension",
+                temperature: 1.0,
+            });
+            const data = this.ai.extractJSON(raw);
+            const candidates = Array.isArray(data?.beats) ? data.beats : [];
+
+            const added = [];
+            for (const c of candidates) {
+                const beat = this._normalizeBeat(c);
+                if (!beat) continue;
+                // Reject anything close to what we already have, by trigram
+                // overlap — a pool of five reworded variants rotates correctly
+                // and still reads as stuck.
+                if (existing.some((b) => this._tooSimilar(b, beat))) continue;
+                if (this._beatPool.includes(beat)) continue;
+                this._pushCapped(this.postBeats, beat, BEAT_POOL_CAP);
+                added.push(beat);
+            }
+
+            if (added.length) {
+                this._saveVarietyMemory();
+                console.log(`[love] beat pool +${added.length} → ${this.postBeats.length}`);
+            }
+        } catch (err) {
+            // Never let variety generation break a post.
+            console.log(`[love] beat extension skipped: ${err.message}`);
+        }
+    }
+
+    _normalizeBeat(s) {
+        if (typeof s !== "string") return null;
+        let v = s.trim().replace(/^["'`]|["'`]$/g, "").replace(/\s+/g, " ").trim();
+        if (!v) return null;
+        if (!v.toLowerCase().startsWith("...")) v = `...and ${v.replace(/^and\s+/i, "")}`;
+        if (!v.toLowerCase().startsWith("...and ")) return null;
+        if (v.length > 120) v = v.slice(0, 117).trim() + "...";
+        return v;
+    }
+
+    _tooSimilar(a, b) {
+        const ta = this._wordTrigrams(String(a).toLowerCase());
+        const tb = this._wordTrigrams(String(b).toLowerCase());
+        if (ta.size === 0 || tb.size === 0) return a === b;
+        return this._jaccardSimilarity(ta, tb) > 0.5;
     }
 
     _fuzzyIngredient(s) {
@@ -850,6 +972,27 @@ export class LoveEngine {
         "noun",  // third-person object ("THE LIGHT", "THE TIDE")
     ];
 
+    // The third beat of the post prompt — the closing wish. This list is a SEED,
+    // not the whole pool: _maybeExtendLists() has the LLM add to it every 5th
+    // post, and _pickWeighted rotates so the same one rarely lands twice running.
+    //
+    // The seeds deliberately differ in SHAPE (declarative / imperative / question
+    // / open / image-led) and share no verb. An earlier version hardcoded a single
+    // clause in the prompt string; the model latched onto it and every post ended
+    // the same way, which is the same failure as the "send it to someone" line
+    // before it. Rotating a pool of five reworded variants would not have helped
+    // either — hence structure, not just wording.
+    static POST_BEATS = [
+        "...and leave something quiet behind.",
+        "...and not need a single word back.",
+        "...and feel it land somewhere soft.",
+        "...and remember this exact moment.",
+        "...and still be warm an hour from now.",
+        "...and wonder what else you've missed.",
+        "...and breathe like nothing is owed to you.",
+        "...and let the quiet be enough.",
+    ];
+
     _pickRandom(arr, n = 1) {
         const shuffled = [...arr].sort(() => Math.random() - 0.5);
         return shuffled.slice(0, Math.min(n, arr.length));
@@ -970,6 +1113,11 @@ export class LoveEngine {
      */
     async generatePost(onStatus = () => {}, options = {}) {
         const { skipImage = false } = options;
+
+        // Widen the closing-beat pool every 5th transmission. Deliberately BEFORE
+        // resetCallLog(): the extension's own LLM call is bookkeeping, not part of
+        // this post, and would otherwise inflate the reported "N llm calls".
+        await this._maybeExtendLists();
 
         this.ai.resetCallLog();
 
@@ -2442,7 +2590,12 @@ Return ONLY valid JSON (all string values):
                         LoveEngine.TONE_NAMES.length
                 ];
 
-            const prompt = `Write a post that makes someone STOP scrolling… feel warmth spread through their chest… and leave something behind that stays.
+            // Third beat comes from the rotating pool rather than a fixed clause. A single
+            // hardcoded ending made every post close the same way — the same failure as
+            // the earlier "send it to someone" line, just with different words.
+            const closingBeat = this._pickBeat();
+
+            const prompt = `Write a post that makes someone STOP scrolling… feel warmth spread through their chest… ${closingBeat}
 
 This should feel intimate, magnetic, and unforgettable — like a message that somehow found them at exactly the right moment.
 

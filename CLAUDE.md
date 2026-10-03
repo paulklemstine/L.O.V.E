@@ -18,13 +18,19 @@ firebase.json            # Firebase hosting config
 
 ### Prompt Engineering
 - **Positive instructions only.** Frame everything as what TO do. Never use "do not", "never", "avoid", "banned" in LLM prompts.
-- **Dynamic arrays for all creative variety.** All creative parameters (tones, examples, phrases, styles) live in static arrays on the LoveEngine class, sampled via `_pickRandom()`, and extended by the LLM every 5th post via `_maybeExtendLists()`. Never hardcode creative content directly into prompt strings.
+- **Dynamic arrays for all creative variety.** All creative parameters (tones, examples, phrases, styles) live in static arrays on the LoveEngine class, sampled via `_pickRandom()`/`_pickWeighted()`, and extended by the LLM every 5th post via `_maybeExtendLists()`. Never hardcode creative content directly into prompt strings.
+- **The closing beat is a pool, not a clause.** The third beat of the post prompt used to be
+  hardcoded, first as "…and want to send it to someone they care about" and then as "…and leave
+  something behind that stays." Both were replaced after the model latched on and every post closed
+  the same way — swapping one fixed phrase for another fixed phrase just moves the monotony. The beat
+  now comes from `POST_BEATS` (8 seeds) grown by `_maybeExtendLists()` to a 24 cap, rotated by
+  `_pickWeighted` against `recentBeats`. See the closing-beat note under Robustness.
 - **Two distinct prompt modes:** `SOCIAL_POST_PROMPT` for text posts/replies/DMs, `VIDEO_VOICEOVER_PROMPT` for video voiceovers. Both share the same tonal rotation system.
 
 ### Content Generation
 - Posts use deterministic tone rotation from `LoveEngine.TONES` array (cycles by transmission number)
 - Subliminal phrases use `PHRASE_TERRITORIES` for emotional variety and `PHRASE_STRUCTURES` for structural variety
-- The `_maybeExtendLists()` system grows all arrays over time via LLM generation + localStorage persistence
+- The `_maybeExtendLists()` system grows all arrays over time via LLM generation + localStorage persistence. It is real as of 2026-10-03 and the closing-beat pool is its first user; the other documented lists still have static contents.
 
 ### Video Pipeline
 - 5-scene production: scenes + voiceover + music generated as one unified brief
@@ -180,6 +186,23 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   passes it to `createPost()`; without it, `createPost` falls back to `text.slice(0, 100)` and every
   image ships with the post body as its description. `generateWelcome` clamps its own prompt at
   4000, so the trim has to happen here or an oversized welcome fails the upload after the render.
+- **Closing-beat pool** (`_maybeExtendLists()` → `_pickBeat()`): every 5th transmission the LLM adds
+  up to 6 beats, rejecting near-duplicates by trigram overlap, capped at 24, persisted as
+  `love_beat_pool`. **Additive and non-destructive by construction** — a failed, empty, or
+  all-duplicate response leaves the pool untouched, so generation can never make a post worse than
+  not having tried. Two things to know before trusting it:
+  - The CTA guard is **prompt-only**, by deliberate choice. The generation prompt describes what a
+    beat should name; there is no code filter dropping forwarding verbs. If beats start closing on
+    "send it to someone" again, add the filter — generation drifts, filtering doesn't.
+  - **qwen3 clusters on leading verbs.** Measured on the first real pool: 20 beats, 0 containing a
+    forwarding verb (good), but 12 of the last 14 generated opened with "let". Trigram dedupe does
+    not catch this because the *clauses* differ enough — only the main verb repeats. If posts start
+    feeling samey in a new way, that is why, and a main-verb diversity check is the fix.
+- **`_pickWeighted` returns a single item, not an array.** It is easy to write `[0]` on the result
+  and silently get the first *character* — which for any string starting `"..."` is always `.`.
+- `_loadVarietyMemory` parses a missing key as `"[]"` and assigns it, so any list that must ship with
+  seed content (the beat pool does) gets its seeds discarded on a fresh install and has to be
+  normalised back after load.
 - qwen3 occasionally emits off-schema JSON at high LFO temperatures: the creative seed
   falls back to default fields, and generation retries a post once before skipping
   (a single bad generation never kills a run).
