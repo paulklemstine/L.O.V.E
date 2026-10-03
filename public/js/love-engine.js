@@ -3031,10 +3031,18 @@ Return nothing else.`;
             const anchors = [];
             for (const a of Array.isArray(data?.anchors) ? data.anchors : []) {
                 const clean = this._cleanAnchor(a);
-                if (clean && !anchors.includes(clean)) anchors.push(clean);
+                if (!clean) continue;
+                // Dedup on words, not whole phrases: the first live brief returned
+                // both "glass candle" and "glass" and shipped the word twice.
+                const words = clean.split(" ");
+                if (words.some((w) => anchors.some((x) => x.split(" ").includes(w)))) continue;
+                anchors.push(clean);
                 if (anchors.length >= 4) break;
             }
-            if (anchors.length < 2) return null;
+            if (anchors.length < 2) {
+                console.log(`[love] visual brief: only ${anchors.length} usable anchor(s), skipped`);
+                return null;
+            }
 
             const material = this._cleanAnchor(data?.material, 2);
             const light = this._cleanAnchor(data?.light, 2);
@@ -3044,7 +3052,11 @@ Return nothing else.`;
             const parts = [...anchors.slice(0, 3)];
             if (material) parts.push(material);
             if (light) parts.push(light);
-            return parts.join(", ").slice(0, 120);
+            const brief = parts.join(", ").slice(0, 120);
+            // Logged because a silent null is indistinguishable from the feature
+            // not existing -- the same invisible-decision trap as the fragment cap.
+            console.log(`[love] visual brief: ${brief}`);
+            return brief;
         } catch (err) {
             // Never let image grounding break a post.
             return null;
@@ -3060,11 +3072,30 @@ Return nothing else.`;
         "chest", "shoulder", "hand", "hands", "finger", "fingers", "skin", "body",
         "belly", "stomach", "back", "arm", "arms", "leg", "legs", "foot", "feet",
         "hair", "eye", "eyes", "mouth", "face", "heart", "bone", "bones", "blood",
-        "her", "his", "she", "him", "hers", "his", "them", "they", "their",
+        "her", "his", "she", "him", "hers", "them", "they", "their",
+        // Feeling-words: these describe the post's mood, not its subject, and are
+        // what "warm" in the first real brief was. Lighting arrives separately via
+        // the lighting/palette fields, so nothing is lost by dropping them here.
+        "warm", "warmth", "cool", "feeling", "feel", "emotion", "love", "hope",
+        "joy", "peace", "calm", "serenity", "awe", "longing", "yearning",
     ];
 
+    // Compare on stems: EDGE_VOCABULARY lists "wrists" and "lips" but the model
+    // writes "wrist", which slipped straight through the exact-match filter on the
+    // first live brief.
+    static _stem(word) {
+        return word.length > 4 && word.endsWith("s") ? word.slice(0, -1) : word;
+    }
+
+    static _blocked(word) {
+        const s = LoveEngine._stem(word);
+        if (LoveEngine.STOP_WORDS.has(word) || LoveEngine.STOP_WORDS.has(s)) return true;
+        if (LoveEngine.ANCHOR_BLOCKLIST.includes(word) || LoveEngine.ANCHOR_BLOCKLIST.includes(s)) return true;
+        return LoveEngine.EDGE_VOCABULARY.some((e) => LoveEngine._stem(e) === s);
+    }
+
     // Keep only photographable, concrete phrases. Drops stopwords, body parts
-    // (the scene forbids human figures), and anything long enough to read as prose.
+    // (the scene forbids human figures), abstractions, and prose-length strings.
     _cleanAnchor(value, maxWords = 3) {
         if (typeof value !== "string") return "";
         let v = value
@@ -3074,13 +3105,7 @@ Return nothing else.`;
             .replace(/\s+/g, " ")
             .trim();
         if (!v) return "";
-        const words = v.split(" ").filter(
-            (w) =>
-                w.length > 2 &&
-                !LoveEngine.STOP_WORDS.has(w) &&
-                !LoveEngine.EDGE_VOCABULARY.includes(w) &&
-                !LoveEngine.ANCHOR_BLOCKLIST.includes(w)
-        );
+        const words = v.split(" ").filter((w) => w.length > 2 && !LoveEngine._blocked(w));
         if (words.length === 0) return "";
         return words.slice(0, maxWords).join(" ");
     }
