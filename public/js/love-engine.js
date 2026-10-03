@@ -2707,8 +2707,22 @@ Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"
         // same vocabulary. The examples are now spread across registers, and this
         // line keeps recent vibes from settling back in. Framed positively per the
         // project's prompt rule.
+        // Whole vibes AND their distinctive words. The ring stopped exact repeats
+        // but vocabulary still clustered -- "copper dusk and velvet heat" then
+        // "copper dawn and slow heat" put copper in 2 of 3, and "slow heat" twice.
+        const vibeWords = [
+            ...new Set(
+                this.usedVibes
+                    .slice(-8)
+                    .flatMap((v) => String(v).toLowerCase().split(/\s+/))
+                    .filter((w) => w.length > 3 && !LoveEngine.STOP_WORDS.has(w))
+            ),
+        ].slice(0, 14);
         const vibeHistory = this.usedVibes.length
-            ? `\nRecent vibes were: ${this.usedVibes.slice(-8).join(" | ")}. Reach for a register none of those came from.\n`
+            ? `\nRecent vibes were: ${this.usedVibes.slice(-6).join(" | ")}.\n` +
+              (vibeWords.length
+                  ? `Their vocabulary drew on: ${vibeWords.join(", ")}. Reach for materials and qualities none of those named.\n`
+                  : "")
             : "";
 
         const prompt = `Plan a post.
@@ -3054,9 +3068,21 @@ Return nothing else.`;
 
             // CLIP sees this. Keep it short — the prompt is already 82-102 tokens
             // against a 154 ceiling, and over-long SDXL prompts wash out.
-            const parts = [...anchors.slice(0, 3)];
-            if (material) parts.push(material);
-            if (light) parts.push(light);
+            // material/light are appended after the anchor dedup, so they can
+            // repeat a word the brief already used -- "dawn, air, air" shipped
+            // exactly that way. Check them against the anchors too.
+            const chosen = anchors.slice(0, 3);
+            const chosenWords = new Set(chosen.flatMap((x) => x.split(" ")));
+            const fresh = (t) => {
+                if (!t) return "";
+                const w = t.split(" ");
+                return w.some((x) => chosenWords.has(x)) ? "" : t;
+            };
+            const parts = [...chosen];
+            const m = fresh(material);
+            const l = fresh(light);
+            if (m) { parts.push(m); m.split(" ").forEach((x) => chosenWords.add(x)); }
+            if (l && !l.split(" ").some((x) => chosenWords.has(x))) parts.push(l);
             const brief = parts.join(", ").slice(0, 120);
             // Logged because a silent null is indistinguishable from the feature
             // not existing -- the same invisible-decision trap as the fragment cap.
