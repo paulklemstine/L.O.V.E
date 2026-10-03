@@ -434,6 +434,10 @@ export class LoveEngine {
         if ((this.transmissionNumber || 0) % 5 !== 0) return;
 
         const existing = this._beatPool;
+        // _beatPool hands back the LIVE array, not a copy, so `existing` is an
+        // alias: reading existing.length after the pushes below reports the final
+        // size and the log always says "20 → 20". Snapshot the number now.
+        const poolBefore = existing.length;
 
         // Assign a form to each slot instead of asking the model to vary. Asking
         // for variety fails here: told to spread itself across shapes, qwen3 still
@@ -534,7 +538,7 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
 
             if (added.length) {
                 this._saveVarietyMemory();
-                console.log(`[love] beat pool ${existing.length} → ${this.postBeats.length}` +
+                console.log(`[love] beat pool ${poolBefore} → ${this.postBeats.length}` +
                     ` (${added.length} accepted) | verbs: ${this._beatVerbTally(this.postBeats)}`);
             }
         } catch (err) {
@@ -940,20 +944,21 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
         return union === 0 ? 0 : intersection / union;
     }
 
-    _isTextTooSimilar(newText, threshold = 0.25) {
+    // How repetitive is this text, as a number? 0 = entirely novel, 1 = every
+    // trigram already appears in the recent ring. Split out of _isTextTooSimilar
+    // so the caller can rank competing candidates rather than only pass/fail.
+    _similarityScore(newText) {
         const newGrams = this._wordTrigrams(newText);
-        if (newGrams.size === 0) return false;
+        if (newGrams.size === 0) return 0;
 
-        // Per-post check (catches direct paraphrases)
+        let worst = 0;
         for (const old of this.recentPosts) {
-            if (
-                this._jaccardSimilarity(newGrams, this._wordTrigrams(old)) >
-                threshold
-            )
-                return true;
+            const s = this._jaccardSimilarity(newGrams, this._wordTrigrams(old));
+            if (s > worst) worst = s;
         }
 
-        // Aggregate pool check — require at least 60% novel trigrams across all recent posts
+        // Aggregate pool check — require at least 60% novel trigrams across all
+        // recent posts
         if (this.recentPosts.length >= 3) {
             const pool = new Set();
             for (const old of this.recentPosts) {
@@ -963,10 +968,38 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
             for (const gram of newGrams) {
                 if (pool.has(gram)) reused++;
             }
-            if (newGrams.size > 0 && reused / newGrams.size > 0.4) return true;
+            const agg = reused / newGrams.size;
+            if (agg > worst) worst = agg;
         }
+        return worst;
+    }
 
+    // Verbatim sentence reuse. _wordTrigrams drops stopwords before forming
+    // windows, so a short stock phrase like "you're already glowing" or "just
+    // breathe" leaves fewer than three content words and contributes NO trigrams
+    // at all — the repetition critic cannot see it. Measured: 10 sentences
+    // repeated verbatim across a 20-post ring, with max whole-post Jaccard at
+    // only 0.11, comfortably under the threshold. This checks the sentences
+    // themselves, independent of trigram density.
+    _repeatsSentenceFromRing(newText, minWords = 3) {
+        const norm = (s) =>
+            String(s)
+                .toLowerCase()
+                .replace(/[’']/g, "")
+                .replace(/[^a-z\s]/g, " ")
+                .replace(/\s+/g, " ")
+                .trim();
+        const ring = this.recentPosts.map(norm);
+        for (const raw of String(newText).split(/[.!?…\n]+/)) {
+            const s = norm(raw);
+            if (s.split(" ").filter(Boolean).length < minWords) continue;
+            if (ring.some((old) => old.includes(s))) return true;
+        }
         return false;
+    }
+
+    _isTextTooSimilar(newText, threshold = 0.25) {
+        return this._similarityScore(newText) > threshold || this._repeatsSentenceFromRing(newText);
     }
 
     // ─── Tone Rotation (minimal inline constant for anti-collapse cycling) ──
@@ -2644,6 +2677,18 @@ Return ONLY valid JSON (all string values):
         let story = "";
         let feedback = "";
         let criticChecked = false;
+        // Best validation-passing candidate seen so far, ranked by repetition.
+        // The loop used to accept whatever the LAST attempt produced, with the
+        // repetition guard disabled on that attempt (`attempt < MAX_RETRIES - 1`).
+        // That interaction was the bug: the boredom critic rejects clichés, which
+        // burns through the early attempts, and the unguarded final attempt is then
+        // free to emit exactly the cliché being chased. Measured, 10 sentences were
+        // reused verbatim across a 20-post ring, including "you're already glowing"
+        // and "just breathe" four times each, while max whole-post Jaccard stayed
+        // at 0.11 — comfortably under the threshold, because a repeated sentence is
+        // a small fraction of a whole post.
+        let bestStory = "";
+        let bestScore = Infinity;
 
         for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
             const mentionDonation = this.shouldMentionDonation();
@@ -2746,6 +2791,15 @@ Return ONLY valid JSON:
                 continue;
             }
 
+            // Rank every validation-passing candidate, including the final one.
+            // Scoring the last attempt too costs nothing and means the fallback
+            // below can actually beat it.
+            const sim = this._similarityScore(story);
+            if (sim < bestScore) {
+                bestScore = sim;
+                bestStory = story;
+            }
+
             // N-gram Jaccard guard (zero-cost, runs before critic LLM call)
             if (attempt < MAX_RETRIES - 1 && this._isTextTooSimilar(story)) {
                 feedback = `YOUR OUTPUT: "${story}"\nTOO SIMILAR to a recent post (trigram overlap > 25%). Write something with completely different vocabulary and structure.`;
@@ -2768,6 +2822,13 @@ Return ONLY valid JSON:
             break;
         }
 
+        // Prefer the least-repetitive candidate over whatever survived the loop.
+        // This matters most on the final attempt, which is the one the similarity
+        // guard is not allowed to reject — without this the last attempt wins by
+        // default, and that is exactly how the cliché loop above was reached.
+        if (bestStory && this._similarityScore(story) > bestScore) {
+            story = bestStory;
+        }
         return story;
     }
 
