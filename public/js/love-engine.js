@@ -2909,11 +2909,23 @@ Return ONLY valid JSON:
                     `YOUR OUTPUT: "${story}"\n"${overused.frag}" already appears in ` +
                     `${Math.round(overused.share * 100)}% of your recent posts. Write a post ` +
                     `that reaches the same feeling through different words entirely.`;
-                if (attempt < MAX_RETRIES - 1) continue;
-                // Last attempt: prefer an earlier candidate that doesn't trip it.
-                if (bestStory && !this._fragmentOverused(bestStory)) {
-                    story = bestStory;
+                if (attempt < MAX_RETRIES - 1) {
+                    console.log(
+                        `[love] fragment cap: rejected "${overused.frag}" ` +
+                            `(${Math.round(overused.share * 100)}% of ring), retrying`
+                    );
+                    continue;
                 }
+                // Last attempt. Prefer the least-repetitive candidate we saw,
+                // which is bestStory by construction. Previously this only
+                // swapped when bestStory was CLEAN, so a run where every attempt
+                // tripped the cap kept the LAST attempt — possibly the worst of
+                // them — and burned four LLM calls to end up no better.
+                console.log(
+                    `[love] fragment cap: every attempt used "${overused.frag}" ` +
+                        `(${Math.round(overused.share * 100)}%); model prior overrode the cap`
+                );
+                if (bestStory) story = bestStory;
                 break;
             }
 
