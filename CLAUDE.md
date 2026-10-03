@@ -40,7 +40,15 @@ firebase.json            # Firebase hosting config
 - 53 GLSL shaders x 20 animations = 1,060 unique caption combinations
 
 ### Deploy
-- `bash deploy.sh` — auto-increments build number, deploys to Firebase
+- `bash deploy.sh` — auto-increments the build number and runs `npx firebase-tools deploy --only hosting`.
+  The script itself was deleted in `d9bd66d8` ("deleted most of L.O.V.E 1") while this section still
+  documented it; restored on 2026-10-03, hardened. It takes the higher of `public/version.json` and
+  the `build-version` stamp in `public/index.html`, because those two had drifted (json said 91 while
+  the page read 94) and the original trusted the json alone — it would have bumped to 92 and stamped
+  the page *backwards*.
+- `firebase-tools` is not installed globally; the script pulls it through `npx`. **Deploying needs
+  `firebase login` first** — there are no stored credentials in `~/.config/configstore`, so the
+  deploy halts at an interactive browser OAuth step that cannot be automated.
 - Always commit + push before deploying
 - Live at https://l-o-v-e.web.app
 
