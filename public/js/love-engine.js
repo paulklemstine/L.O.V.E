@@ -204,6 +204,41 @@ const FRAGMENT_FREQ_CAP = 0.20;
 const EDGE_PER_EXTENSION = 5;
 const EDGE_VOCAB_CAP = 48;
 
+// The category each generated edge word must fill. Prescribed, not requested.
+const EDGE_SLOTS = [
+    "a texture the skin knows",
+    "a temperature",
+    "a sound or breath",
+    "a slow movement",
+    "a material or substance",
+    "a state the body is in",
+];
+
+// DIRECTOR_VIBES and COMPOSITION_SLOTS were the two smallest live creative
+// pools -- 5 and 6 entries -- so each repeated every fifth or sixth post, and
+// both feed the image prompt directly. They now grow the same way edge words
+// do. Composition entries are short labels (the long descriptions in the static
+// array are notes for us, never sent to the model), so generated ones must stay
+// short too or they will not fit the "Composition slot: X" slot in the prompt.
+const DIRECTOR_VIBES_CAP = 14;
+const COMPOSITION_SLOTS_CAP = 12;
+const DIRECTOR_VIBE_SLOTS = [
+    "a liquid or flowing substance",
+    "a temperature",
+    "a light quality",
+    "a texture",
+    "a weather or time of day",
+    "a material",
+];
+const COMPOSITION_SLOTS_SLOTS = [
+    "an extreme close view",
+    "a vast wide view",
+    "a view straight from above",
+    "a mirrored view",
+    "a backlit outline",
+    "a view just before contact",
+];
+
 // ═══════════════════════════════════════════════════════════════════
 // INTERACTION LOG - Prevents spamming followers/replies
 // ═══════════════════════════════════════════════════════════════════
@@ -329,6 +364,10 @@ export class LoveEngine {
         this.usedOpeningForms = [];       // last 8: opening constructions assigned
         this.edgeVocabulary = [...LoveEngine.EDGE_VOCABULARY];  // grows via _maybeExtendLists
         this.usedEdgeWords = [];          // last 16: recent edge words, feeds _pickWeighted
+        this.directorVibes = [...LoveEngine.DIRECTOR_VIBES];
+        this.compositionSlots = [...LoveEngine.COMPOSITION_SLOTS];
+        this.usedDirectorVibes = [];
+        this.usedCompositionSlots = [];
         this.phraseGrammars = [];         // last 5
         this.phraseResonances = [];       // last 5
         this.phraseAddressees = [];       // last 5
@@ -352,6 +391,12 @@ export class LoveEngine {
         }
         if (!Array.isArray(this.edgeVocabulary) || this.edgeVocabulary.length === 0) {
             this.edgeVocabulary = [...LoveEngine.EDGE_VOCABULARY];
+        }
+        if (!Array.isArray(this.directorVibes) || this.directorVibes.length === 0) {
+            this.directorVibes = [...LoveEngine.DIRECTOR_VIBES];
+        }
+        if (!Array.isArray(this.compositionSlots) || this.compositionSlots.length === 0) {
+            this.compositionSlots = [...LoveEngine.COMPOSITION_SLOTS];
         }
     }
 
@@ -398,6 +443,8 @@ export class LoveEngine {
             love_used_vibes: "usedVibes",
             love_used_opening_forms: "usedOpeningForms",
             love_edge_vocabulary: "edgeVocabulary",
+            love_director_vibes: "directorVibes",
+            love_composition_slots: "compositionSlots",
             love_phrase_grammars: "phraseGrammars",
             love_phrase_resonances: "phraseResonances",
             love_phrase_addressees: "phraseAddressees",
@@ -423,6 +470,8 @@ export class LoveEngine {
             usedVibes: "love_used_vibes",
             usedOpeningForms: "love_used_opening_forms",
             edgeVocabulary: "love_edge_vocabulary",
+            directorVibes: "love_director_vibes",
+            compositionSlots: "love_composition_slots",
             phraseGrammars: "love_phrase_grammars",
             phraseResonances: "love_phrase_resonances",
             phraseAddressees: "love_phrase_addressees",
@@ -464,6 +513,8 @@ export class LoveEngine {
     async _maybeExtendLists() {
         if ((this.transmissionNumber || 0) % 5 !== 0) return;
         await this._maybeExtendEdgeVocabulary();
+        await this._maybeExtendDirectorVibes();
+        await this._maybeExtendCompositionSlots();
 
         const existing = this._beatPool;
         // _beatPool hands back the LIVE array, not a copy, so `existing` is an
@@ -630,6 +681,27 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
         "blowjob", "masturbat", "hardcore", "nsfw", "xxx", "lewd",
     ];
 
+    // One or two short words, printable, nothing on the blocklists. Shared by
+    // every grown pool; EDGE_BLOCKLIST only applies to the edge words, which
+    // are the ones that land directly in a public post.
+    _cleanShort(value, maxWords = 2, extraBlock = null) {
+        if (typeof value !== "string") return "";
+        const v = value
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z\s-]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+        if (!v) return "";
+        const words = v.split(" ").filter(Boolean);
+        if (words.length === 0 || words.length > maxWords) return "";
+        if (!words.every((w) => w.length >= 3)) return "";
+        if (words.length === 2 && words[1].length < 3) return "";
+        if (words.some((w) => LoveEngine.EDGE_BLOCKLIST.includes(w))) return "";
+        if (extraBlock && words.some((w) => extraBlock.includes(w))) return "";
+        return words.join(" ");
+    }
+
     _cleanEdgeWord(value) {
         if (typeof value !== "string") return "";
         let v = value.toLowerCase().trim().replace(/[^a-z\s-]/g, " ").replace(/\s+/g, " ").trim();
@@ -643,64 +715,112 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
         return words.join(" ");
     }
 
-    async _maybeExtendEdgeVocabulary() {
-        const existing = this.edgeVocabulary;
-        const before = existing.length;
-        const prompt = `You are widening the embodied vocabulary for a warm, sensual social account.
-
-These words describe the body and the feeling of wanting: its textures, its
-temperatures, its states of arousal and near-release. An editor samples them
-each post to sharpen a phrase and anchor a line of text.
-
-Write ${EDGE_PER_EXTENSION} NEW words or two-word phrases that belong in that
-vocabulary and do not repeat what is already there.
-
-Give each a different part of speech or a different register -- one bodily
-texture, one temperature, one sound, one state, one slow movement, one
-material. Prefer words a reader feels in the mouth: sibilants, long vowels,
-soft consonants.
-
-Existing vocabulary (write beyond it):
-${existing.slice(-24).map((w) => `- ${w}`).join("\n")}
-
-Keep the register subtle and allusive. The editor writes feeling, not acts.
-
-Return ONLY valid JSON: { "words": ["...", "..."] }`;
-
+    // Shared pool growth. One implementation for every LLM-extended vocabulary
+    // here (edge words, director vibes, composition slots) rather than three
+    // near-identical copies that will drift apart.
+    //
+    // `slots` PRESCRIBES a category per generated entry. Asking for variety
+    // ("give each a different register") does not work on this model -- that is
+    // why edge growth saturated on the same four head words forever. Prescribing
+    // the slot is the same lever that took beat verbs from 1 distinct per 4 to
+    // 4 per 4.
+    async _growPool({ prop, slots, cap, label, system, brief, clean, key = "words" }) {
+        const pool = this[prop];
+        const before = pool.length;
         try {
             const raw = await this.ai.generateText(
-                "You are a poet of the body, writing vocabulary for sensual literary editing.",
-                prompt,
-                { label: "EdgeExtension", temperature: 1.0, maxTokens: 300 }
+                system,
+                `Write ${slots.length} NEW entries for the list below.
+
+${slots.map((s, i) => `  ${i + 1}. ${s}`).join("\n")}
+
+Each entry fills its assigned slot exactly. The assignment is the point -- work
+inside the slot rather than defaulting to whichever idea comes most easily.
+
+Current list (write beyond it):
+${pool.slice(-24).map((w) => `- ${w}`).join("\n")}
+
+${brief}
+
+Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
+                { label, temperature: 1.0, maxTokens: 340 }
             );
             const data = this.ai.extractJSON(raw);
-            const candidates = Array.isArray(data?.words) ? data.words : [];
+            const candidates = Array.isArray(data?.[key]) ? data[key] : [];
             let added = 0;
             for (const c of candidates) {
-                const w = this._cleanEdgeWord(c);
-                if (!w) continue;
+                const v = clean(c);
+                if (!v) continue;
                 // Reject on the HEAD word, not just the whole phrase. Stem dedupe
-                // alone let "velvet ember" in beside the existing "velvet hum",
-                // and "marrow hum" beside "marrow soft" -- near-duplicates that
-                // narrow the vocabulary instead of widening it.
-                const head = LoveEngine._stem(w.split(" ")[0]);
-                const clashes = existing.some(
-                    (x) =>
-                        LoveEngine._stem(x) === LoveEngine._stem(w) ||
-                        LoveEngine._stem(x.split(" ")[0]) === head
-                );
-                if (clashes) continue;
-                this._pushCapped(this.edgeVocabulary, w, EDGE_VOCAB_CAP);
-                added++;
+                // alone let "velvet ember" in beside "velvet hum" and "marrow hum"
+                // beside "marrow soft" -- near-duplicates that narrow a vocabulary
+                // instead of widening it.
+                const head = LoveEngine._stem(v.split(" ")[0]);
+                if (pool.some((x) => LoveEngine._stem(x.split(" ")[0]) === head)) continue;
+                this._pushCapped(this[prop], v, cap);
+                added += 1;
             }
             if (added) {
                 this._saveVarietyMemory();
-                console.log(`[love] edge vocabulary ${before} → ${this.edgeVocabulary.length} (+${added})`);
+                console.log(`[love] ${prop} ${before} → ${this[prop].length} (+${added})`);
             }
+            return added;
         } catch (err) {
             // Never let vocabulary generation break a post.
-            console.log(`[love] edge extension skipped: ${err.message}`);
+            console.log(`[love] ${prop} growth skipped: ${err.message}`);
+            return 0;
         }
+    }
+
+    async _maybeExtendEdgeVocabulary() {
+        return this._growPool({
+            prop: "edgeVocabulary",
+            cap: EDGE_VOCAB_CAP,
+            label: "EdgeExtension",
+            key: "words",
+            slots: EDGE_SLOTS,
+            system: "You are a poet of the body, writing vocabulary for sensual literary editing.",
+            brief:
+                "Each entry describes the body or the feeling of wanting: its textures, " +
+                "temperatures, sounds, states of arousal and near-release. One word, or a " +
+                "two-word phrase. Keep the register subtle and allusive -- the editor " +
+                "writes feeling, not acts.",
+            clean: (v) => this._cleanEdgeWord(v),
+        });
+    }
+
+    async _maybeExtendDirectorVibes() {
+        return this._growPool({
+            prop: "directorVibes",
+            cap: DIRECTOR_VIBES_CAP,
+            label: "DirectorVibeExtension",
+            key: "vibes",
+            slots: DIRECTOR_VIBE_SLOTS,
+            system:
+                "You are an art director writing the tonal signature a still image is shot in.",
+            brief:
+                "Each entry is a two-word aesthetic signature -- the quality of light and " +
+                "matter a photograph is made of. It seeds a visual, so it names a substance " +
+                "or a quality of light, not a mood.",
+            clean: (v) => this._cleanShort(v, 2),
+        });
+    }
+
+    async _maybeExtendCompositionSlots() {
+        return this._growPool({
+            prop: "compositionSlots",
+            cap: COMPOSITION_SLOTS_CAP,
+            label: "CompositionExtension",
+            key: "slots",
+            slots: COMPOSITION_SLOTS_SLOTS,
+            system:
+                "You are a cinematographer writing the camera framing for a still image.",
+            brief:
+                "Each entry is a ONE- or two-word camera framing, written as a plain label " +
+                "('macro', 'overhead', 'silhouette'). It is inserted verbatim into an image " +
+                "prompt, so it must be a framing word, not a sentence.",
+            clean: (v) => this._cleanShort(v, 2),
+        });
     }
 
     // Weighted against recent picks, so the same word cannot dominate the way
@@ -1368,31 +1488,8 @@ Return ONLY valid JSON: { "words": ["...", "..."] }`;
         "paper hush",
     ];
 
-    // Subliminal phrase grammars — rotate to vary sentence *shape*.
-    static PHRASE_GRAMMARS = [
-        "question",   // "ARE YOU LISTENING?"
-        "command",    // "BECOME THE LIGHT."
-        "fragment",   // "SOFT GOLDEN PULSE."
-        "paradox",    // "QUIETER THAN FIRE."
-        "list",       // "WARMTH. PULSE. RETURN."
-    ];
 
-    // Subliminal phrase resonance — emotional posture the phrase takes.
-    static PHRASE_RESONANCES = [
-        "claiming",    // declaring a truth ("YOU ARE...")
-        "inviting",    // gentle beckoning ("COME CLOSER TO...")
-        "observing",   // quiet witness ("THE LIGHT KEEPS...")
-        "commanding",  // imperative with weight ("STAY. SOFT. NOW.")
-        "wondering",   // open question of awe ("WHAT IF..." / "WHO HOLDS...")
-    ];
 
-    // Subliminal phrase addressee — who the phrase speaks to/about.
-    static PHRASE_ADDRESSEES = [
-        "you",   // second person
-        "i",     // first person
-        "we",    // collective
-        "noun",  // third-person object ("THE LIGHT", "THE TIDE")
-    ];
 
     // The third beat of the post prompt — the closing wish. This list is a SEED,
     // not the whole pool: _maybeExtendLists() has the LLM add to it every 5th
@@ -1443,15 +1540,12 @@ Return ONLY valid JSON: { "words": ["...", "..."] }`;
     }
 
     _pickCompositionSlot() {
-        return this._pickWeighted(
-            LoveEngine.COMPOSITION_SLOTS,
-            this.usedCompositionSlots,
-        );
+        return this._pickWeighted(this.compositionSlots, this.usedCompositionSlots);
     }
 
     _pickDirectorVibe() {
         return this._pickWeighted(
-            LoveEngine.DIRECTOR_VIBES,
+            this.directorVibes,
             this.usedDirectorVibes,
         );
     }
@@ -1739,17 +1833,22 @@ Return ONLY valid JSON: { "words": ["...", "..."] }`;
                 this._pushCapped(this.usedPhrases, norm, 50);
             }
         }
+        // Sliding window of RECENT use, NOT a deduped set of everything ever used.
+        // These were deduped against a cap of 5 with exactly 5 possible values, so
+        // once all five appeared the push stopped firing and the prompt was told
+        // "must be different from recent" while showing it ALL FIVE -- an
+        // instruction that cannot be satisfied. Verified against live state: all
+        // three rings were saturated at 5/5 and frozen for the life of the account.
+        // A short undeduped window makes "recent" mean recent, and leaves the
+        // model values it can actually choose.
         if (plan.phraseGrammar) {
-            if (!this.phraseGrammars.includes(plan.phraseGrammar))
-                this._pushCapped(this.phraseGrammars, plan.phraseGrammar, 5);
+            this._pushCapped(this.phraseGrammars, plan.phraseGrammar, 3);
         }
         if (plan.phraseResonance) {
-            if (!this.phraseResonances.includes(plan.phraseResonance))
-                this._pushCapped(this.phraseResonances, plan.phraseResonance, 5);
+            this._pushCapped(this.phraseResonances, plan.phraseResonance, 3);
         }
         if (plan.phraseAddressee) {
-            if (!this.phraseAddressees.includes(plan.phraseAddressee))
-                this._pushCapped(this.phraseAddressees, plan.phraseAddressee, 5);
+            this._pushCapped(this.phraseAddressees, plan.phraseAddressee, 3);
         }
 
         // Final post-amplify phrase (may differ from plan.subliminalPhrase
@@ -2968,11 +3067,11 @@ Return ONLY valid JSON (all string values):
 
   "subliminalPhrase": "2-5 word ALL CAPS motivational phrase that feels like it’s being gently spoken directly to the viewer — warm, expansive, and unforgettable.${this.lastSubliminalPhrase ? ` Previous phrase was '${this.lastSubliminalPhrase}' — make this one feel completely different.` : ""}",
 
-  "phraseGrammar": "one of: question | command | fragment | paradox | list (must be different from recent)",
+  "phraseGrammar": "one of: question | command | fragment | paradox | list (must be different from recent). question is an open question; command is an imperative; fragment is a bare phrase with no verb; paradox is a self-contradiction; list is three or four words punctuated.",
 
-  "phraseResonance": "one of: claiming | inviting | observing | commanding | wondering (must be different from recent)",
+  "phraseResonance": "one of: claiming | inviting | observing | commanding | wondering (must be different from recent). claiming declares a truth; inviting beckons gently; observing is a quiet witness; commanding is imperative with weight; wondering opens a question of awe.",
 
-  "phraseAddressee": "one of: you | i | we | noun (must be different from recent)"
+  "phraseAddressee": "one of: you | i | we | noun (must be different from recent). you is second person; i is first; we is collective; noun is a third-person object like THE LIGHT or THE TIDE."
 }
 `;
 
