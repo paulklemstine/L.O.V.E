@@ -199,6 +199,11 @@ const BEAT_POOL_CAP = 24;
 // _isDistinctiveFragment, so they can never trip this.
 const FRAGMENT_FREQ_CAP = 0.20;
 
+// Edge vocabulary growth. 28 seeds, capped at 48 -- enough headroom that
+// generations accumulate range rather than evicting each other.
+const EDGE_PER_EXTENSION = 5;
+const EDGE_VOCAB_CAP = 48;
+
 // ═══════════════════════════════════════════════════════════════════
 // INTERACTION LOG - Prevents spamming followers/replies
 // ═══════════════════════════════════════════════════════════════════
@@ -322,6 +327,8 @@ export class LoveEngine {
         this.usedPhrases = [];            // last 50
         this.usedVibes = [];              // last 15: aesthetic vibes, see _generatePlan
         this.usedOpeningForms = [];       // last 8: opening constructions assigned
+        this.edgeVocabulary = [...LoveEngine.EDGE_VOCABULARY];  // grows via _maybeExtendLists
+        this.usedEdgeWords = [];          // last 16: recent edge words, feeds _pickWeighted
         this.phraseGrammars = [];         // last 5
         this.phraseResonances = [];       // last 5
         this.phraseAddressees = [];       // last 5
@@ -342,6 +349,9 @@ export class LoveEngine {
         // lists legitimately start empty, so normalise only this one.
         if (!Array.isArray(this.postBeats) || this.postBeats.length === 0) {
             this.postBeats = [...LoveEngine.POST_BEATS];
+        }
+        if (!Array.isArray(this.edgeVocabulary) || this.edgeVocabulary.length === 0) {
+            this.edgeVocabulary = [...LoveEngine.EDGE_VOCABULARY];
         }
     }
 
@@ -387,6 +397,7 @@ export class LoveEngine {
             love_used_phrases: "usedPhrases",
             love_used_vibes: "usedVibes",
             love_used_opening_forms: "usedOpeningForms",
+            love_edge_vocabulary: "edgeVocabulary",
             love_phrase_grammars: "phraseGrammars",
             love_phrase_resonances: "phraseResonances",
             love_phrase_addressees: "phraseAddressees",
@@ -411,6 +422,7 @@ export class LoveEngine {
             usedPhrases: "love_used_phrases",
             usedVibes: "love_used_vibes",
             usedOpeningForms: "love_used_opening_forms",
+            edgeVocabulary: "love_edge_vocabulary",
             phraseGrammars: "love_phrase_grammars",
             phraseResonances: "love_phrase_resonances",
             phraseAddressees: "love_phrase_addressees",
@@ -451,6 +463,7 @@ export class LoveEngine {
     // was, so generation can never make the run worse than not having tried.
     async _maybeExtendLists() {
         if ((this.transmissionNumber || 0) % 5 !== 0) return;
+        await this._maybeExtendEdgeVocabulary();
 
         const existing = this._beatPool;
         // _beatPool hands back the LIVE array, not a copy, so `existing` is an
@@ -594,6 +607,117 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
             .sort((a, b) => b[1] - a[1])
             .map(([v, n]) => `${v}×${n}`)
             .join(", ");
+    }
+
+    // ─── Edge vocabulary ─────────────────────────────────────────────────
+    // EDGE_VOCABULARY was the one creative pool in the engine still sampled by
+    // plain _pickRandom with no used-history, so nothing penalised the model for
+    // reaching for "melt" or "pulse" twice in a row -- the same clustering
+    // mechanism that beat verbs, vibes and opening forms all had to be taught
+    // separately. It now grows here and is sampled with _pickWeighted.
+    //
+    // The register is the one the sensual-amplify prompts already use: embodied,
+    // allusive, "you make it felt, never explicit or vulgar". Generated words are
+    // filtered on the way in, because this is the one pool where a bad generation
+    // lands directly in a public post.
+
+    // Defensive filter only -- these never appear in an LLM prompt, so the
+    // project's positive-instruction rule does not apply here.
+    static EDGE_BLOCKLIST = [
+        "fuck", "fucking", "cum", "cumming", "cock", "dick", "pussy", "porn",
+        "naked", "nude", "nudity", "nudes", "sex", "sexy", "sexual", "horny",
+        "aroused", "orgasm", "orgasmic", "erection", "penis", "vagina", "anal",
+        "blowjob", "masturbat", "hardcore", "nsfw", "xxx", "lewd",
+    ];
+
+    _cleanEdgeWord(value) {
+        if (typeof value !== "string") return "";
+        let v = value.toLowerCase().trim().replace(/[^a-z\s-]/g, " ").replace(/\s+/g, " ").trim();
+        if (!v) return "";
+        const words = v.split(" ").filter(Boolean);
+        if (words.length === 0 || words.length > 2) return "";
+        if (words.some((w) => LoveEngine.EDGE_BLOCKLIST.includes(w))) return "";
+        if (!words.every((w) => w.length >= 3)) return "";
+        // single word, or a short two-word phrase with a real second element
+        if (words.length === 2 && words[1].length < 3) return "";
+        return words.join(" ");
+    }
+
+    async _maybeExtendEdgeVocabulary() {
+        const existing = this.edgeVocabulary;
+        const before = existing.length;
+        const prompt = `You are widening the embodied vocabulary for a warm, sensual social account.
+
+These words describe the body and the feeling of wanting: its textures, its
+temperatures, its states of arousal and near-release. An editor samples them
+each post to sharpen a phrase and anchor a line of text.
+
+Write ${EDGE_PER_EXTENSION} NEW words or two-word phrases that belong in that
+vocabulary and do not repeat what is already there.
+
+Give each a different part of speech or a different register -- one bodily
+texture, one temperature, one sound, one state, one slow movement, one
+material. Prefer words a reader feels in the mouth: sibilants, long vowels,
+soft consonants.
+
+Existing vocabulary (write beyond it):
+${existing.slice(-24).map((w) => `- ${w}`).join("\n")}
+
+Keep the register subtle and allusive. The editor writes feeling, not acts.
+
+Return ONLY valid JSON: { "words": ["...", "..."] }`;
+
+        try {
+            const raw = await this.ai.generateText(
+                "You are a poet of the body, writing vocabulary for sensual literary editing.",
+                prompt,
+                { label: "EdgeExtension", temperature: 1.0, maxTokens: 300 }
+            );
+            const data = this.ai.extractJSON(raw);
+            const candidates = Array.isArray(data?.words) ? data.words : [];
+            let added = 0;
+            for (const c of candidates) {
+                const w = this._cleanEdgeWord(c);
+                if (!w) continue;
+                // Reject on the HEAD word, not just the whole phrase. Stem dedupe
+                // alone let "velvet ember" in beside the existing "velvet hum",
+                // and "marrow hum" beside "marrow soft" -- near-duplicates that
+                // narrow the vocabulary instead of widening it.
+                const head = LoveEngine._stem(w.split(" ")[0]);
+                const clashes = existing.some(
+                    (x) =>
+                        LoveEngine._stem(x) === LoveEngine._stem(w) ||
+                        LoveEngine._stem(x.split(" ")[0]) === head
+                );
+                if (clashes) continue;
+                this._pushCapped(this.edgeVocabulary, w, EDGE_VOCAB_CAP);
+                added++;
+            }
+            if (added) {
+                this._saveVarietyMemory();
+                console.log(`[love] edge vocabulary ${before} → ${this.edgeVocabulary.length} (+${added})`);
+            }
+        } catch (err) {
+            // Never let vocabulary generation break a post.
+            console.log(`[love] edge extension skipped: ${err.message}`);
+        }
+    }
+
+    // Weighted against recent picks, so the same word cannot dominate the way
+    // it could when this was a plain shuffle over a fixed 28.
+    // _pickWeighted returns a SINGLE item, not an array (the same trap that made
+    // _pickBeat return "." until it was fixed). Call it n times, tracking what it
+    // has already handed out so one pick cannot fill the whole sample.
+    _pickEdgeSample(n = 8) {
+        const out = [];
+        const recent = [...this.usedEdgeWords];
+        for (let i = 0; i < n && this.edgeVocabulary.length; i++) {
+            const w = this._pickWeighted(this.edgeVocabulary, recent);
+            if (out.includes(w)) break;
+            out.push(w);
+            recent.push(w);
+        }
+        return out;
     }
 
     _normalizeBeat(s) {
@@ -3464,7 +3588,9 @@ Constraints:
     // lexicon, and texture-binding. The brief is narrative, not rigid —
     // the apply pass interprets.
     async _sensualAmplifyCatalog({ phrase, text, imagePrompt, seed, plan, compositionSlot }) {
-        const edgeSample = this._pickRandom(LoveEngine.EDGE_VOCABULARY, 8).join(", ");
+        // Weighted, from the growing pool -- not a shuffle over the static 28.
+        const edgeSample = this._pickEdgeSample(8).join(", ");
+        for (const w of edgeSample.split(", ")) this._pushCapped(this.usedEdgeWords, w, 16);
 
         const systemPrompt =
             "You are a sensuality consultant who specializes in subtle, embodied erotic writing. " +
