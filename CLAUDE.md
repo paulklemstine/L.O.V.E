@@ -297,6 +297,28 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   outright would leave the engine unable to write a post. Measure against a full ring before
   trusting any such cap. One full refill is a single sample at one temperature; it shows the
   mechanism moves the metric, not that the new equilibrium holds over days.
+- **The closing beat is a direction, not a line, and the closing SHAPE is assigned.** The beat pool
+  was contributing nothing to the feed: **0 of the last 20 published closings matched any of its 32
+  entries**, and `you are already enough` appeared 4 times. The cause was placement — the beat was
+  interpolated as the *goal* clause of the prompt (`"Write a post that … ${closingBeat}"`) while
+  `3. THE LINE — End with a sentence under 8 words` told the model to write its own ending. The pool
+  sat in a clause that never asked for it, so the model reached for its default every time. Now a
+  shape is assigned per post from `CLOSING_SHAPES` (mirroring `OPENING_FORMS`, which yields 9/10
+  distinct) and the beat carries the *feeling*: `3. THE LINE — End on one short line that carries
+  this: "${closingBeat}" / Write that ending AS: ${closingShape}`. The sensual-amplify pass owns the
+  final wording and still rewrites the ending freely — it is handed the shape and beat in its
+  catalog brief so it steers toward them rather than being forbidden from touching them. Recent
+  closings are deliberately **not** shown to the model: showing a list gets it echoed back verbatim,
+  which is how the opening-form pool returned all six of its own seeds unchanged.
+  `_noteClosingLine` logs every final closing with a verbatim-repeat count, because no existing guard
+  examines only the last sentence — the trigram and fragment guards measure the whole post, so a
+  repeated four-word ending dilutes below threshold. Judge this change on that count, not on reading
+  twenty posts and forming an impression.
+- **Images stay as they are, deliberately.** The account keeps its no-figures contract (posts about
+  breath and skin cannot be depicted literally, and that is the artistic position), and the image
+  grounding targets *register*, not depiction — brief `plane, gold, metal` → an aircraft wing. Do not
+  thin the technique/palette boilerplate to make anchors dominate: that trades the look, which is
+  the thing worth protecting, for literalness that was tried and rejected in `41618aba`.
 - qwen3 occasionally emits off-schema JSON at high LFO temperatures: the creative seed
   falls back to default fields, and generation retries a post once before skipping
   (a single bad generation never kills a run).

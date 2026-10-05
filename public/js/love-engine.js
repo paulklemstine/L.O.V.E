@@ -409,8 +409,10 @@ export class LoveEngine {
         this.usedPhrases = [];            // last 50
         this.usedVibes = [];              // last 15: aesthetic vibes, see _generatePlan
         this.usedOpeningForms = [];       // last 8: opening constructions assigned
+        this.usedClosingShapes = [];      // last 8: closing shapes assigned
         this.edgeVocabulary = [...LoveEngine.EDGE_VOCABULARY];  // grows via _maybeExtendLists
         this.usedEdgeWords = [];          // last 16: recent edge words, feeds _pickWeighted
+        this.recentClosings = [];         // last 40: closing lines, for repeat counting
         this.directorVibes = [...LoveEngine.DIRECTOR_VIBES];
         this.compositionSlots = [...LoveEngine.COMPOSITION_SLOTS];
         this.planVibes = [...LoveEngine.PLAN_VIBES];
@@ -498,6 +500,7 @@ export class LoveEngine {
             love_used_phrases: "usedPhrases",
             love_used_vibes: "usedVibes",
             love_used_opening_forms: "usedOpeningForms",
+            love_used_closing_shapes: "usedClosingShapes",
             love_edge_vocabulary: "edgeVocabulary",
             love_director_vibes: "directorVibes",
             love_composition_slots: "compositionSlots",
@@ -528,6 +531,7 @@ export class LoveEngine {
             usedPhrases: "love_used_phrases",
             usedVibes: "love_used_vibes",
             usedOpeningForms: "love_used_opening_forms",
+            usedClosingShapes: "love_used_closing_shapes",
             edgeVocabulary: "love_edge_vocabulary",
             directorVibes: "love_director_vibes",
             compositionSlots: "love_composition_slots",
@@ -993,6 +997,37 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
     // _pickWeighted returns a SINGLE item, not an array (the same trap that made
     // _pickBeat return "." until it was fixed). Call it n times, tracking what it
     // has already handed out so one pick cannot fill the whole sample.
+    // Same anti-repetition shape as opening forms: consecutive posts get
+    // different shapes.
+    _pickClosingShape() {
+        const shape = this._pickWeighted(LoveEngine.CLOSING_SHAPES, this.usedClosingShapes);
+        this._pushCapped(this.usedClosingShapes, shape, 8);
+        return shape;
+    }
+
+    // D. Measurement only. The closing line is the one part of the post that no
+    // existing guard examines -- the trigram and fragment guards measure the
+    // whole post, so a repeated four-word ending dilutes below threshold. This
+    // counts verbatim repeats against recent closings so the next check is a
+    // number rather than an opinion.
+    _closingLine(text) {
+        const t = String(text || "")
+            .replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF\uFE0F]/gu, "")
+            .trim();
+        const parts = t.split(/[.!?\u2026]+/).map((x) => x.trim()).filter(Boolean);
+        return (parts.length ? parts[parts.length - 1] : "").toLowerCase().replace(/[^a-z ]/g, "");
+    }
+
+    _noteClosingLine(text) {
+        const closing = this._closingLine(text);
+        if (!closing) return;
+        const seen = (this.recentClosings || []).filter((c) => c === closing).length;
+        this._pushCapped(this.recentClosings, closing, 40);
+        console.log(
+            `[love] closing: "${closing.slice(0, 52)}"${seen ? `  (repeat x${seen})` : ""}`
+        );
+    }
+
     _pickEdgeSample(n = 8) {
         const out = [];
         const recent = [...this.usedEdgeWords];
@@ -1633,6 +1668,27 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
     // without quoting changed nothing -- because asking a model to vary is not
     // the same as removing its choice. Assigning the construction is what worked
     // for beat verbs (1/4 distinct -> 4/4) and for the plan vibe.
+    // Closing-line SHAPES, assigned per post the way opening forms are. The beat
+    // pool was contributing nothing to the feed: 0 of the last 20 published
+    // closings matched any of its 32 entries, because the beat was interpolated
+    // as the GOAL clause of the prompt ("a post that ... ${closingBeat}") while
+    // "3. THE LINE - End with a sentence under 8 words" told the model to write
+    // its own ending. So it reached for its own default every time, which is
+    // where "you are already enough" x4 came from. Asking for variety fails on
+    // this model; prescribing a shape is what works (9/10 distinct openings).
+    static CLOSING_SHAPES = [
+        "a flat statement, plain and certain",
+        "a question that needs no answer",
+        "an imperative addressed to the reader",
+        "a fragment of three words or fewer",
+        "one that begins with when",
+        "one that begins with a place",
+        "one that begins with a sound",
+        "one set later than now",
+        "a comparison to something ordinary",
+        "one naming a single object",
+    ];
+
     static OPENING_FORMS = [
         "an object first -- name one thing, then what it does",
         "a time -- open on when this happened",
@@ -1870,9 +1926,12 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
                 seed,
                 plan,
                 compositionSlot,
+                closingShape,
+                closingBeat,
             });
             if (brief) {
                 const applied = await this._sensualAmplifyApply({
+                    closingShape,
                     phrase: plan.subliminalPhrase,
                     text: story,
                     imagePrompt: visualPrompt,
@@ -1918,6 +1977,7 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
         this.lastSubliminalPhrase = appliedPhrase || this.lastSubliminalPhrase;
         this.recentVisuals.push(visualPrompt);
         if (this.recentVisuals.length > 10) this.recentVisuals.shift();
+        this._noteClosingLine(appliedText);
         this._saveRecentPost(appliedText);
         this._saveRecentOpening(appliedText);
         this._saveRecentContext(seed, plan, appliedText);
@@ -3322,6 +3382,7 @@ Return ONLY valid JSON (all string values):
             // hardcoded ending made every post close the same way — the same failure as
             // the earlier "send it to someone" line, just with different words.
             const closingBeat = this._pickBeat();
+            const closingShape = this._pickClosingShape();
 
             const prompt = `Write a post that makes someone STOP scrolling… feel warmth spread through their chest… ${closingBeat}
 
@@ -3344,7 +3405,9 @@ Something that makes them feel *seen in a way that lingers*.
 Simple, grounded, but felt — like warmth, light, breath, gravity.
 The reader isn’t becoming powerful… they already are. Let them feel it.
 
-3. THE LINE — End with a sentence under 8 words.
+3. THE LINE — End on one short line that carries this: "${closingBeat}"
+Write that ending AS: ${closingShape}.
+The shape is fixed for this post — write inside it, in your own words.
 Clean. Certain. Something that *stays with them*. Period.
 
 TONE MATCHING:
@@ -3898,7 +3961,7 @@ Constraints:
     // somatic body map, anticipatory interruption, phonetic (sibilant)
     // lexicon, and texture-binding. The brief is narrative, not rigid —
     // the apply pass interprets.
-    async _sensualAmplifyCatalog({ phrase, text, imagePrompt, seed, plan, compositionSlot }) {
+    async _sensualAmplifyCatalog({ phrase, text, imagePrompt, seed, plan, compositionSlot, closingShape, closingBeat }) {
         // Weighted, from the growing pool -- not a shuffle over the static 28.
         const edgeSample = this._pickEdgeSample(8).join(", ");
         for (const w of edgeSample.split(", ")) this._pushCapped(this.usedEdgeWords, w, 16);
@@ -3926,7 +3989,8 @@ Write an ~80-word editorial brief covering:
 1. PHRASE DECISION: Does the current phrase already carry edge vocabulary? If not, REPLACE it with a 2-4 word ALL CAPS strong-edge phrase (sibilant-heavy, body-anchored). If it does but reads soft, AUGMENT it (add one more edge word). If already strong, KEEP and focus on text + image.
 2. SOMATIC BODY MAP: Name 2-3 specific body locations the rewritten text should anchor to (chest, breath, fingertips, pulse, skin, throat, nape, spine, hips, wrists, collarbone).
 3. ANTICIPATORY INTERRUPTION: Identify what the image currently *arrives at* (a bloom fully open, light that has reached, motion that has resolved). Specify a way the loop can *interrupt* the contact just before completion.
-4. PHONETIC + TEXTURE: Suggest 2 sibilant/rounded-vowel words to add (hush, glow, shimmer, soft, drift, ease, breath). Suggest one texture-binding — the material the phrase should be rendered in (silk, warm honey, frosted glass, soft metal, candle-warmed wax).`;
+4. THE ENDING: The post's last line must be freshly written in this shape -- ${closingShape || "a flat statement"} -- carrying this feeling: "${closingBeat || "the warmth that stays"}". This ending is new to the post; it is written from scratch here rather than carried over.
+5. PHONETIC + TEXTURE: Suggest 2 sibilant/rounded-vowel words to add (hush, glow, shimmer, soft, drift, ease, breath). Suggest one texture-binding — the material the phrase should be rendered in (silk, warm honey, frosted glass, soft metal, candle-warmed wax).`;
 
         const raw = await this.ai.generateText(systemPrompt, userPrompt, {
             temperature: 0.8,
@@ -3943,7 +4007,7 @@ Write an ~80-word editorial brief covering:
     // version of all three (phrase, text, imagePrompt) as a single JSON.
     // Preserves all structural rules: no people, no hands, loop-ability,
     // composition slot. Only modulates the language.
-    async _sensualAmplifyApply({ phrase, text, imagePrompt, seed, plan, compositionSlot, brief }) {
+    async _sensualAmplifyApply({ phrase, text, imagePrompt, seed, plan, compositionSlot, brief, closingShape }) {
         if (!brief) return null;
 
         const systemPrompt =
@@ -3970,7 +4034,7 @@ PLAN VIBE: ${plan.vibe || ""}
 Return ONLY valid JSON (all string values, under the character limits below):
 {
   "phrase": "2-5 word ALL CAPS strong-edge subliminal phrase (sibilant-heavy, body-anchored). If the brief says REPLACE, write a new phrase. If AUGMENT, add one edge word. If KEEP, rewrite only if it sharpens further.",
-  "text": "the post text, rewritten per the brief. Under 280 chars, 1-2 emojis max, same overall structure (question/answer/fragments/single line) as the current text.",
+  "text": "the post text, rewritten per the brief. Under 280 chars, 1-2 emojis max, same overall structure (question/answer/fragments/single line) as the current text. Its last line is written fresh per the brief's THE ENDING item, in this shape: ${closingShape || "a flat statement"}.",
   "imagePrompt": "the image prompt, rewritten per the brief. PRESERVE: scene structure, composition slot (${compositionSlot || "wide"}), loop-ability, no people/hands, no human figures. Same length or shorter. The phrase "${phrase}" should still appear in the scene (in the new wording if REPLACED)."
 }`;
 
