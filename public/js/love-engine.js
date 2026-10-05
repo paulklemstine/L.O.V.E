@@ -184,7 +184,17 @@ const SYSTEM_PROMPT = SOCIAL_POST_PROMPT;
 // enough headroom that a few generations actually accumulate variety rather
 // than evicting each other, small enough that every beat still gets used.
 const BEATS_PER_EXTENSION = 6;
-const BEAT_POOL_CAP = 24;
+// Pool caps are set far above what these pools realistically reach, which
+// turns them from "evict oldest when full" into "never evict". That is
+// deliberate: at 24 the beat pool was recycling its entire contents every few
+// generations, which is how nine legacy "...and your" entries survived past a
+// verb cap that only ever checked NEW additions. Nothing is evicted now, so
+// hand-written seeds persist and the pools only widen.
+//
+// Real growth is bounded by head-word diversity, not by these numbers: a beat
+// whose first word already exists is rejected, so the pools saturate when the
+// model runs out of new heads rather than when it hits 50000.
+const BEAT_POOL_CAP = 50000;
 
 // Share of the recent ring that may already contain a given DISTINCTIVE 2-word
 // fragment before a new post using it is rejected.
@@ -202,7 +212,7 @@ const FRAGMENT_FREQ_CAP = 0.20;
 // Edge vocabulary growth. 28 seeds, capped at 48 -- enough headroom that
 // generations accumulate range rather than evicting each other.
 const EDGE_PER_EXTENSION = 5;
-const EDGE_VOCAB_CAP = 48;
+const EDGE_VOCAB_CAP = 50000;
 
 // The category each generated edge word must fill. Prescribed, not requested.
 const EDGE_SLOTS = [
@@ -220,8 +230,8 @@ const EDGE_SLOTS = [
 // do. Composition entries are short labels (the long descriptions in the static
 // array are notes for us, never sent to the model), so generated ones must stay
 // short too or they will not fit the "Composition slot: X" slot in the prompt.
-const DIRECTOR_VIBES_CAP = 14;
-const COMPOSITION_SLOTS_CAP = 12;
+const DIRECTOR_VIBES_CAP = 50000;
+const COMPOSITION_SLOTS_CAP = 50000;
 const DIRECTOR_VIBE_SLOTS = [
     "a liquid or flowing substance",
     "a temperature",
