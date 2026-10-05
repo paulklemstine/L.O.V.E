@@ -662,20 +662,16 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
             // would stop growing and the closure would lock onto whatever is
             // already there. Relax only the verb cap — dedupe still applies — so
             // growth degrades to "samey" rather than to "frozen".
-            const relaxed = [];
+            // No escape hatch. It existed to stop the pool freezing, but it fires
+            // whenever the model can only offer saturated heads -- which for
+            // "your / let / does / we / this" is most cycles -- and each firing
+            // pushed one head further over cap. Observed: your went 3 -> 5, then
+            // 3 -> 6 on an earlier run. A pool that stops growing is a lesser
+            // failure than one that drifts toward a single verb, and _growPool's
+            // zero-yield log now makes a stalled pool visible instead of silent.
             if (added.length === 0) {
-                // ONE over-represented beat per cycle, not all of them. The
-                // unlimited version accepted six at once and rebuilt exactly the
-                // cluster the cap exists to prevent (24 -> 30, heads hitting 6).
-                for (const c of candidates) {
-                    if (relaxed.length >= 1) break;
-                    if (tryAdd(c, false)) relaxed.push(c);
-                }
-                if (relaxed.length) {
-                    console.log(`[love] beat pool verb cap hit — accepted ${relaxed.length} over-represented`);
-                }
+                console.log(`[love] beat pool unchanged — every candidate used a saturated verb`);
             }
-            added.push(...relaxed);
 
             if (added.length) {
                 this._saveVarietyMemory();
