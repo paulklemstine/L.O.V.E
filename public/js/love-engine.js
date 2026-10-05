@@ -676,7 +676,13 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
     // project's positive-instruction rule does not apply here.
     static EDGE_BLOCKLIST = [
         "fuck", "fucking", "cum", "cumming", "cock", "dick", "pussy", "porn",
-        "naked", "nude", "nudity", "nudes", "sex", "sexy", "sexual", "horny",
+        // "naked" is deliberately NOT here: it is in the curated EDGE_VOCABULARY
+        // seeds, which are the author's calibration of this account's register
+        // (bare / exposed / naked / unclothe / shed are all seeded). Blocking it
+        // here made the filter reject a word the seeds hand out directly, so a
+        // seeded word could reach a public post while a generated one could not.
+        // The seeds win: they define the intended register.
+        "nude", "nudity", "nudes", "sex", "sexy", "sexual", "horny",
         "aroused", "orgasm", "orgasmic", "erection", "penis", "vagina", "anal",
         "blowjob", "masturbat", "hardcore", "nsfw", "xxx", "lewd",
     ];
