@@ -23,8 +23,25 @@ firebase.json            # Firebase hosting config
   hardcoded, first as "…and want to send it to someone they care about" and then as "…and leave
   something behind that stays." Both were replaced after the model latched on and every post closed
   the same way — swapping one fixed phrase for another fixed phrase just moves the monotony. The beat
-  now comes from `POST_BEATS` (8 seeds) grown by `_maybeExtendLists()` to a 24 cap, rotated by
-  `_pickWeighted` against `recentBeats`. See the closing-beat note under Robustness.
+  now comes from `POST_BEATS`, grown by `_maybeExtendLists()` and rotated by `_pickWeighted`
+  against `recentBeats`. See the closing-beat note under Robustness.
+- **Image grounding (`_deriveVisualBrief`).** The image prompt used to accept a `postText` argument
+  and ignore it: the scene was built from plan and seed only, so the post's own imagery never
+  reached it. A post reading *"A glass of water sits on the edge of a table"* rendered a crystalline
+  nebula with no glass, water or table. One extra LLM call now reads the story and returns 3–5
+  photographable anchors plus material and light, and only those nouns reach CLIP. Measured
+  working: brief `plane, gold, metal` produced an aircraft wing; `shore, tide, water` produced a
+  tidal pool. **It does not achieve literal correspondence.** The anchors compete with ~35 words of
+  fixed technique/palette/composition boilerplate — the aesthetic the account is built on — so a
+  candle post produced a beautiful image with no candle in it. Treat "match the post" as mood
+  correspondence, which is what currently works, not depiction.
+- **Six growable creative pools**, all unbounded and self-widening: `edgeVocabulary`,
+  `planVibes`, `directorVibes`, `compositionSlots`, `openingForms`, `postBeats`. Caps are set to
+  50000, which turns them from "evict oldest when full" into "never evict" — hand-written seeds
+  persist and the pools only widen. Real growth is bounded by head-word diversity, not the cap:
+  a head may appear `HEAD_MAX_PER` (2) times, so a pool saturates when the model runs out of new
+  heads. Growth adds at most 6 per 5th transmission and never grows a prompt — pools are sampled
+  one or eight at a time and the generation prompt only ever shows the last few entries.
 - **Two distinct prompt modes:** `SOCIAL_POST_PROMPT` for text posts/replies/DMs, `VIDEO_VOICEOVER_PROMPT` for video voiceovers. Both share the same tonal rotation system.
 
 ### Content Generation
@@ -151,6 +168,33 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   A PIL compositing fallback exists (`~/ai/overlay_text.py`) but is disabled by design.
 
 ## Robustness notes
+- **qwen3 responds to structure, not instructions.** This is the single most useful thing learned
+  about this model, and every instance of it was found by measuring rather than reasoning:
+  - **Asking for variety does nothing. Prescribing it works.** Told to "give each a different
+    register", beat generation returned 7 lines opening `let...` out of 20. Assigning a category per
+    line took distinct verbs from 1-in-4 to 4-in-4.
+  - **Naming a word to avoid primes it.** Telling the generator `let` was over-used took it from 7 to
+    13. Quoting the offending phrase in the fragment cap's rejection feedback did the same: while it
+    named "you're already", that fragment climbed 25% → 40% of the ring. Feeding back a live tally
+    reads as a suggestion for the same reason (7 → 10).
+  - **Showing the existing list gets it echoed back.** The opening-form generator returned all six
+    seeds unedited. Shortening the visible list to four unblocked growth.
+  - **Hard caps beat instructions.** The beat verb cap (reject, don't ask) is the only mechanism here
+    that has reliably held a distribution.
+- **Log every mechanism that can silently do nothing.** The single most expensive recurring bug this
+  session was an invisible failure: the fragment cap reported nothing when it rejected, and nobody
+  could tell from the outside whether it was working. The pools now log `unchanged — N candidate(s),
+  none accepted` and `beat pool unchanged — every candidate used a saturated verb`. A silent no-op is
+  indistinguishable from a feature that does not exist.
+- **Distrust counters that report the wrong thing.** Three separate times a log line counted the
+  wrong quantity and I read it as truth: `beat pool 20 → 20 (+6)` when the cap had truncated every
+  push away, `+5 accepted` for a pool that did not grow, and `_tooSimilar(x, v, 0.7)` where the third
+  argument did not exist and the threshold was hardcoded at 0.5. When a number is the evidence,
+  check what it actually counts.
+- **Bounded growth beats no growth; unbounded beats both.** The beat pool's starvation escape
+  accepted over-represented beats when the verb cap rejected everything, and because that happens
+  most cycles the leak was cumulative — `your` went 3 → 5, then 3 → 6. Removed. A pool that stops
+  growing is a lesser failure than one drifting toward a single verb.
 - **A CUDA driver mismatch silently CPU-falls-back Ollama and looks like an LLM bug.** On 2026-09-29
   an `apt` run cycled `nvidia-driver-570` → purge → reinstall → purge → `install nvidia-driver-535`,
   and every attempt re-pulled the 580 packages as automatic dependencies. The result was a kernel
