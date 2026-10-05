@@ -794,7 +794,7 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
     // why edge growth saturated on the same four head words forever. Prescribing
     // the slot is the same lever that took beat verbs from 1 distinct per 4 to
     // 4 per 4.
-    async _growPool({ prop, slots, cap, label, system, brief, clean, key = "words" }) {
+    async _growPool({ prop, slots, cap, label, system, brief, clean, key = "words", dedupe = "head" }) {
         const pool = this[prop];
         const before = pool.length;
         try {
@@ -821,14 +821,31 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
             for (const c of candidates) {
                 const v = clean(c);
                 if (!v) continue;
-                // Reject on the HEAD word, not just the whole phrase. Stem dedupe
-                // alone let "velvet ember" in beside "velvet hum" and "marrow hum"
-                // beside "marrow soft" -- near-duplicates that narrow a vocabulary
-                // instead of widening it.
-                const head = LoveEngine._stem(v.split(" ")[0]);
-                if (pool.some((x) => LoveEngine._stem(x.split(" ")[0]) === head)) continue;
+                if (dedupe === "similar") {
+                    // Phrase-style pools cannot use head-word dedupe. Opening forms
+                    // are clauses, and 8 of the 12 seeds begin with the article "a"
+                    // or "an" -- so every generated "an opening that..." clashed with
+                    // them on head word alone and the pool could never grow. Compare
+                    // whole phrases by trigram overlap instead.
+                    if (pool.some((x) => this._tooSimilar(x, v))) continue;
+                } else {
+                    // Reject on the HEAD word, not just the whole phrase. Stem dedupe
+                    // alone let "velvet ember" in beside "velvet hum" and "marrow hum"
+                    // beside "marrow soft" -- near-duplicates that narrow a vocabulary
+                    // instead of widening it.
+                    const head = LoveEngine._stem(v.split(" ")[0]);
+                    if (pool.some((x) => LoveEngine._stem(x.split(" ")[0]) === head)) continue;
+                }
                 this._pushCapped(this[prop], v, cap);
                 added += 1;
+            }
+            if (!added) {
+                // Silent no-growth is indistinguishable from the feature not
+                // existing. The opening-form pool sat frozen at 12 through two
+                // full cycles for exactly this reason.
+                console.log(
+                    `[love] ${prop} unchanged — ${candidates.length} candidate(s), none accepted`
+                );
             }
             if (added) {
                 this._saveVarietyMemory();
@@ -929,6 +946,7 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
                 "Each entry is a short instruction describing ONE way a post can begin -- " +
                 "what its first line does, not what it is about. Under twelve words.",
             clean: (v) => this._cleanForm(v, 12),
+            dedupe: "similar",
         });
     }
 
