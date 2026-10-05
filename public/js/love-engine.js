@@ -768,7 +768,15 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
             }
             if (added) {
                 this._saveVarietyMemory();
-                console.log(`[love] ${prop} ${before} → ${this[prop].length} (+${added})`);
+                // Net growth, not pushes. Once a pool reaches its cap every push is
+                // truncated, so counting accepted candidates reports "+5" for a pool
+                // that did not grow at all -- the same misleading line that was
+                // already fixed on the beat pool.
+                const net = this[prop].length - before;
+                console.log(
+                    `[love] ${prop} ${before} → ${this[prop].length} ` +
+                    `(net ${net >= 0 ? "+" : ""}${net}, ${added} accepted)`
+                );
             }
             return added;
         } catch (err) {
