@@ -232,6 +232,29 @@ const EDGE_SLOTS = [
 // short too or they will not fit the "Composition slot: X" slot in the prompt.
 const DIRECTOR_VIBES_CAP = 50000;
 const COMPOSITION_SLOTS_CAP = 50000;
+
+// PLAN_VIBES and OPENING_FORMS were the last two creative pools left as
+// hardcoded statics that _growPool never touched -- 24 and 12 entries, fixed
+// for the life of the account, which is why a vibe like "burnished oak" kept
+// recurring. Both now grow the same way.
+const PLAN_VIBES_CAP = 50000;
+const OPENING_FORMS_CAP = 50000;
+const PLAN_VIBE_SLOTS = [
+    "a temperature",
+    "a texture",
+    "a time of day",
+    "a material world",
+    "a quality of light",
+    "a state of motion",
+];
+const OPENING_FORM_SLOTS = [
+    "an opening that names one object and what it does",
+    "an opening that places a moment in time",
+    "an opening that is a question needing no answer",
+    "an opening that begins with a sound",
+    "an opening that names a place",
+    "an opening that is a physical sensation",
+];
 const DIRECTOR_VIBE_SLOTS = [
     "a liquid or flowing substance",
     "a temperature",
@@ -376,6 +399,8 @@ export class LoveEngine {
         this.usedEdgeWords = [];          // last 16: recent edge words, feeds _pickWeighted
         this.directorVibes = [...LoveEngine.DIRECTOR_VIBES];
         this.compositionSlots = [...LoveEngine.COMPOSITION_SLOTS];
+        this.planVibes = [...LoveEngine.PLAN_VIBES];
+        this.openingForms = [...LoveEngine.OPENING_FORMS];
         this.usedDirectorVibes = [];
         this.usedCompositionSlots = [];
         this.phraseGrammars = [];         // last 5
@@ -407,6 +432,12 @@ export class LoveEngine {
         }
         if (!Array.isArray(this.compositionSlots) || this.compositionSlots.length === 0) {
             this.compositionSlots = [...LoveEngine.COMPOSITION_SLOTS];
+        }
+        if (!Array.isArray(this.planVibes) || this.planVibes.length === 0) {
+            this.planVibes = [...LoveEngine.PLAN_VIBES];
+        }
+        if (!Array.isArray(this.openingForms) || this.openingForms.length === 0) {
+            this.openingForms = [...LoveEngine.OPENING_FORMS];
         }
     }
 
@@ -455,6 +486,8 @@ export class LoveEngine {
             love_edge_vocabulary: "edgeVocabulary",
             love_director_vibes: "directorVibes",
             love_composition_slots: "compositionSlots",
+            love_plan_vibes: "planVibes",
+            love_opening_forms: "openingForms",
             love_phrase_grammars: "phraseGrammars",
             love_phrase_resonances: "phraseResonances",
             love_phrase_addressees: "phraseAddressees",
@@ -482,6 +515,8 @@ export class LoveEngine {
             edgeVocabulary: "love_edge_vocabulary",
             directorVibes: "love_director_vibes",
             compositionSlots: "love_composition_slots",
+            planVibes: "love_plan_vibes",
+            openingForms: "love_opening_forms",
             phraseGrammars: "love_phrase_grammars",
             phraseResonances: "love_phrase_resonances",
             phraseAddressees: "love_phrase_addressees",
@@ -525,6 +560,8 @@ export class LoveEngine {
         await this._maybeExtendEdgeVocabulary();
         await this._maybeExtendDirectorVibes();
         await this._maybeExtendCompositionSlots();
+        await this._maybeExtendPlanVibes();
+        await this._maybeExtendOpeningForms();
 
         const existing = this._beatPool;
         // _beatPool hands back the LIVE array, not a copy, so `existing` is an
@@ -718,6 +755,23 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
         return words.join(" ");
     }
 
+    // Opening forms are short descriptive clauses ("a question needing no
+    // answer"), not two-word labels, so they get their own looser cleaner.
+    _cleanForm(value, maxWords = 12) {
+        if (typeof value !== "string") return "";
+        const v = value
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z\s,]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+        if (!v) return "";
+        const words = v.split(" ").filter(Boolean);
+        if (words.length < 3 || words.length > maxWords) return "";
+        if (words.some((w) => LoveEngine.EDGE_BLOCKLIST.includes(w))) return "";
+        return words.join(" ");
+    }
+
     _cleanEdgeWord(value) {
         if (typeof value !== "string") return "";
         let v = value.toLowerCase().trim().replace(/[^a-z\s-]/g, " ").replace(/\s+/g, " ").trim();
@@ -844,6 +898,37 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
                 "('macro', 'overhead', 'silhouette'). It is inserted verbatim into an image " +
                 "prompt, so it must be a framing word, not a sentence.",
             clean: (v) => this._cleanShort(v, 2),
+        });
+    }
+
+    async _maybeExtendPlanVibes() {
+        return this._growPool({
+            prop: "planVibes",
+            cap: PLAN_VIBES_CAP,
+            label: "PlanVibeExtension",
+            key: "vibes",
+            slots: PLAN_VIBE_SLOTS,
+            system: "You are an art director naming the tonal signature a still image is shot in.",
+            brief:
+                "Each entry is a two-word aesthetic vibe with a hint of sensual warmth. " +
+                "It names a temperature, texture, time, material or quality of light.",
+            clean: (v) => this._cleanShort(v, 2),
+        });
+    }
+
+    async _maybeExtendOpeningForms() {
+        return this._growPool({
+            prop: "openingForms",
+            cap: OPENING_FORMS_CAP,
+            label: "OpeningFormExtension",
+            key: "forms",
+            slots: OPENING_FORM_SLOTS,
+            system:
+                "You write the shape a short piece of prose must open in, for a warm intimate social post.",
+            brief:
+                "Each entry is a short instruction describing ONE way a post can begin -- " +
+                "what its first line does, not what it is about. Under twelve words.",
+            clean: (v) => this._cleanForm(v, 12),
         });
     }
 
@@ -984,7 +1069,7 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
     // avoid -- naming a banned opening primes it, which is the whole reason the
     // old "the first word MUST NOT be you" hint was worse than nothing.
     _pickOpeningForm() {
-        return this._pickWeighted(LoveEngine.OPENING_FORMS, this.usedOpeningForms);
+        return this._pickWeighted(this.openingForms, this.usedOpeningForms);
     }
 
     _getOpeningVarietyHint() {
@@ -3126,7 +3211,7 @@ Return ONLY valid JSON (all string values):
 
     // Weighted against recently used vibes, so a short list cannot settle in.
     _pickPlanVibe() {
-        return this._pickWeighted(LoveEngine.PLAN_VIBES, this.usedVibes);
+        return this._pickWeighted(this.planVibes, this.usedVibes);
     }
 
     // ─── Content Generation (Story only) ───────────────────────────────
