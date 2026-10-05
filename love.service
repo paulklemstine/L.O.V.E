@@ -1,0 +1,27 @@
+[Unit]
+Description=L.O.V.E. continuous posting run (love-run.sh)
+# Ordering only: love-cli's ensureOllama() waits for the server anyway, so this
+# just avoids a wasted first-cycle timeout at boot. Ollama is its own user unit.
+After=network-online.target ollama.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/raver1975/L.O.V.E
+ExecStart=/home/raver1975/L.O.V.E/love-run.sh
+# If the whole tree dies (kernel OOM, crash), systemd revives it. loop.mjs has
+# its own per-post failure backoff, so this only fires on a dead process, not
+# on a failing post. The flock guard makes a manual `./love-run.sh` launch
+# while the service runs refuse cleanly rather than double-post.
+Restart=always
+RestartSec=30
+# systemd's default KillMode=control-group stops the entire tree on
+# stop/restart, which FIXES the documented orphan problem: killed manually,
+# love-run.sh leaves an orphaned generate_image.py holding ~5.8GB of VRAM at
+# 100% util and the next run fails to allocate. The cgroup kill gets it. The
+# ExecStopPost below is belt-and-braces for anything that escaped the cgroup
+# (none observed; the pattern is specific to the imgenv render process).
+ExecStopPost=/bin/sh -c "pkill -f '/home/raver1975/ai/imgenv/bin/python /home/raver1975/L.O.V.E/ai/generate_image.py' 2>/dev/null || true"
+
+[Install]
+WantedBy=default.target

@@ -141,8 +141,20 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   Re-encodes oversized PNGs to JPEG (Bluesky 2MB blob cap).
   `ai/render_batch.py` is no longer spawned by the CLI; it survives as the manual recovery tool for
   re-rendering a `jobs.json` written before this change.
-  Scheduled runs: `./love-run.sh [extra flags]` — takes the single-instance lock, tees output to
-  `love-run.log`, and runs `love-cli.mjs --post` forever. A second launch refuses to start.
+  Scheduled runs: `love-run.sh` is a systemd **user service**. The unit is **versioned in this
+  repo** as `love.service` and installed at `~/.config/systemd/user/love.service` — if you edit
+  the repo copy, copy it over and `systemctl --user daemon-reload` (an unversioned-only copy is
+  how the CLIP truncation fix nearly got bypassed). Control it with
+  `systemctl --user start|stop|restart|status love`.
+  It is enabled, and `Linger=yes` is already set on this account, so **it starts at boot with no
+  login** (same pattern as the Ollama unit above it). `Restart=always` + `RestartSec=30` revive it
+  if the whole tree dies — kernel OOM, crash — while loop.mjs's own backoff handles per-post
+  failures, so the two never fight. `KillMode=control-group` (systemd default) stops the entire
+  tree on stop/restart, which **fixes the orphan-render problem documented below**: the SDXL child
+  dies with its parent instead of holding 5.8GB of VRAM. A manual `./love-run.sh` while the service
+  runs is still refused by the flock, so the two cannot double-post.
+  Without the service, start long runs detached (`setsid nohup ./love-run.sh &`) — a bare
+  foreground launch dies with its terminal.
 - **Follow-back + welcome** (`doFollowBack()` in `love-cli.mjs`): one scan per post cycle, run at the
   END of the iteration so a bad scan can never cost a post. It follows back anyone not followed, and
   sends a welcome post (`generateWelcome()` = 1 LLM call + a full SDXL render). Budget is **one
@@ -230,10 +242,13 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   under a runaway `cap` (there is no total to bound against). Any future graph query here needs the
   same treatment — and remember that a single-page read of this account looks like 87/98 when the
   truth is 207/244.
-- `love-run.sh` does **not** reap its SDXL child. Killing the run mid-render orphans a
-  `generate_image.py` that keeps holding ~5.8GB of VRAM at 100% util, so the next run fails to
-  allocate. Check `pgrep -f generate_image.py` after stopping a run (mind that the pattern matches
-  your own shell — use the PID from `ps` rather than `pkill -f`).
+- `love-run.sh` does **not** reap its SDXL child **when killed manually**. Killing the run
+  mid-render orphans a `generate_image.py` that keeps holding ~5.8GB of VRAM at 100% util, so the
+  next run fails to allocate. Check `pgrep -f generate_image.py` after stopping a run (mind that
+  the pattern matches your own shell — use the PID from `ps` rather than `pkill -f`). **Under the
+  systemd service this is fixed**: `KillMode=control-group` takes the whole tree, render included.
+  The belt-and-braces `ExecStopPost` reap in the unit covers anything that escapes the cgroup;
+  nothing has been observed escaping, so that line is untested in anger.
 - **Alt text is the image prompt, capped at 3000** (Bluesky's limit). `postOne()` takes it and
   passes it to `createPost()`; without it, `createPost` falls back to `text.slice(0, 100)` and every
   image ships with the post body as its description. `generateWelcome` clamps its own prompt at
