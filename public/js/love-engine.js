@@ -209,6 +209,11 @@ const BEAT_POOL_CAP = 50000;
 // _isDistinctiveFragment, so they can never trip this.
 const FRAGMENT_FREQ_CAP = 0.20;
 
+// How many pool entries may share a leading word. One is too strict (it caps
+// the pool at its distinct-head count), unlimited brings back the clustering
+// this whole change exists to stop.
+const HEAD_MAX_PER = 2;
+
 // Edge vocabulary growth. 28 seeds, capped at 48 -- enough headroom that
 // generations accumulate range rather than evicting each other.
 const EDGE_PER_EXTENSION = 5;
@@ -659,7 +664,13 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
             // growth degrades to "samey" rather than to "frozen".
             const relaxed = [];
             if (added.length === 0) {
-                for (const c of candidates) if (tryAdd(c, false)) relaxed.push(c);
+                // ONE over-represented beat per cycle, not all of them. The
+                // unlimited version accepted six at once and rebuilt exactly the
+                // cluster the cap exists to prevent (24 -> 30, heads hitting 6).
+                for (const c of candidates) {
+                    if (relaxed.length >= 1) break;
+                    if (tryAdd(c, false)) relaxed.push(c);
+                }
                 if (relaxed.length) {
                     console.log(`[love] beat pool verb cap hit — accepted ${relaxed.length} over-represented`);
                 }
@@ -827,14 +838,22 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
                     // or "an" -- so every generated "an opening that..." clashed with
                     // them on head word alone and the pool could never grow. Compare
                     // whole phrases by trigram overlap instead.
-                    if (pool.some((x) => this._tooSimilar(x, v))) continue;
+                    if (pool.some((x) => this._tooSimilar(x, v, 0.7))) continue;
                 } else {
                     // Reject on the HEAD word, not just the whole phrase. Stem dedupe
                     // alone let "velvet ember" in beside "velvet hum" and "marrow hum"
                     // beside "marrow soft" -- near-duplicates that narrow a vocabulary
                     // instead of widening it.
+                    // Limit how many entries share a head, do not forbid repeats
+                    // outright. Forbidding capped every label pool at its distinct
+                    // head count: directorVibes froze at 30, compositionSlots at
+                    // 10, because once each head existed no new entry could land.
+                    // That defeats the point of unbounded pools.
                     const head = LoveEngine._stem(v.split(" ")[0]);
-                    if (pool.some((x) => LoveEngine._stem(x.split(" ")[0]) === head)) continue;
+                    const sameHead = pool.filter(
+                        (x) => LoveEngine._stem(x.split(" ")[0]) === head
+                    ).length;
+                    if (sameHead >= HEAD_MAX_PER) continue;
                 }
                 this._pushCapped(this[prop], v, cap);
                 added += 1;
