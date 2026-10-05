@@ -214,6 +214,15 @@ const FRAGMENT_FREQ_CAP = 0.20;
 // this whole change exists to stop.
 const HEAD_MAX_PER = 2;
 
+// An anchor may appear at most BRIEF_ANCHOR_CAP times within a rolling window
+// of the last ~10 briefs, then must cool off. This is a ROTATION, not a ban:
+// counting over the whole history would exclude "light" permanently after two
+// uses and force briefs somewhere unnatural. 40 anchor words is roughly ten
+// briefs at four anchors each.
+const BRIEF_ANCHOR_CAP = 2;
+const BRIEF_ANCHOR_HISTORY = 120;   // ring size kept in state
+const BRIEF_ANCHOR_WINDOW = 40;    // how much of it actually counts
+
 // Edge vocabulary growth. 28 seeds, capped at 48 -- enough headroom that
 // generations accumulate range rather than evicting each other.
 const EDGE_PER_EXTENSION = 5;
@@ -406,6 +415,7 @@ export class LoveEngine {
         this.compositionSlots = [...LoveEngine.COMPOSITION_SLOTS];
         this.planVibes = [...LoveEngine.PLAN_VIBES];
         this.openingForms = [...LoveEngine.OPENING_FORMS];
+        this.usedBriefAnchors = [];   // frequency cap on visual-brief anchors
         this.usedDirectorVibes = [];
         this.usedCompositionSlots = [];
         this.phraseGrammars = [];         // last 5
@@ -493,6 +503,7 @@ export class LoveEngine {
             love_composition_slots: "compositionSlots",
             love_plan_vibes: "planVibes",
             love_opening_forms: "openingForms",
+            love_used_brief_anchors: "usedBriefAnchors",
             love_phrase_grammars: "phraseGrammars",
             love_phrase_resonances: "phraseResonances",
             love_phrase_addressees: "phraseAddressees",
@@ -522,6 +533,7 @@ export class LoveEngine {
             compositionSlots: "love_composition_slots",
             planVibes: "love_plan_vibes",
             openingForms: "love_opening_forms",
+            usedBriefAnchors: "love_used_brief_anchors",
             phraseGrammars: "love_phrase_grammars",
             phraseResonances: "love_phrase_resonances",
             phraseAddressees: "love_phrase_addressees",
@@ -764,6 +776,11 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
 
     // Opening forms are short descriptive clauses ("a question needing no
     // answer"), not two-word labels, so they get their own looser cleaner.
+    _countBriefAnchor(word) {
+        const window = this.usedBriefAnchors.slice(-BRIEF_ANCHOR_WINDOW);
+        return window.reduce((n, w) => (w === word ? n + 1 : n), 0);
+    }
+
     _cleanForm(value, maxWords = 12) {
         if (typeof value !== "string") return "";
         const v = value
@@ -3499,16 +3516,40 @@ Return nothing else.`;
             );
             const data = this.ai.extractJSON(raw);
 
+            // Frequency cap. The brief converged on the same generic atmosphere
+            // words every post: over 38 briefs, "light" appeared in 42% and "air"
+            // in 26%, with 36% of all anchors being atmosphere words rather than
+            // the post's own imagery. Same disease as the beat verbs, so the same
+            // cure -- reject rather than ask. An anchor already over-represented
+            // in recent briefs is dropped even when it is a good one, because the
+            // point is to force the model somewhere it was not going to go.
+            const proposed = Array.isArray(data?.anchors) ? data.anchors : [];
+            const cleanAll = proposed.map((a) => this._cleanAnchor(a)).filter(Boolean);
+            // Prefer anchors that are not currently over-represented.
+            const fresh = cleanAll.filter(
+                (c) => !c.split(" ").some((w) => this._countBriefAnchor(w) >= BRIEF_ANCHOR_CAP)
+            );
+            // If the cap rejected EVERYTHING, fall back to the uncapped set
+            // rather than returning null. A cap that can starve the brief
+            // outright is worse than no cap: the whole point is to nudge the
+            // model somewhere new, not to stop it producing an image subject.
             const anchors = [];
-            for (const a of Array.isArray(data?.anchors) ? data.anchors : []) {
-                const clean = this._cleanAnchor(a);
-                if (!clean) continue;
+            for (const c of fresh.length ? fresh : cleanAll) {
                 // Dedup on words, not whole phrases: the first live brief returned
                 // both "glass candle" and "glass" and shipped the word twice.
-                const words = clean.split(" ");
+                const words = c.split(" ");
                 if (words.some((w) => anchors.some((x) => x.split(" ").includes(w)))) continue;
-                anchors.push(clean);
+                anchors.push(c);
                 if (anchors.length >= 4) break;
+            }
+            if (fresh.length === 0 && cleanAll.length > 0) {
+                console.log(
+                    `[love] visual brief: all ${cleanAll.length} anchors over-used, cap relaxed`
+                );
+            } else if (fresh.length < cleanAll.length) {
+                console.log(
+                    `[love] visual brief: dropped ${cleanAll.length - fresh.length} over-used anchor(s)`
+                );
             }
             // One anchor is worth more than none. The bar used to be 2, which was
             // a quality choice, but skipping means the image gets no grounding at
@@ -3523,6 +3564,13 @@ Return nothing else.`;
             const material = this._cleanAnchor(data?.material, 2);
             const light = this._cleanAnchor(data?.light, 2);
 
+            // Record what was used so the cap has something to count against.
+            for (const w of [...anchors, material, light].filter(Boolean)) {
+                for (const t of String(w).split(" ")) {
+                    if (t) this._pushCapped(this.usedBriefAnchors, t, BRIEF_ANCHOR_HISTORY);
+                }
+            }
+
             // CLIP sees this. Keep it short — the prompt is already 82-102 tokens
             // against a 154 ceiling, and over-long SDXL prompts wash out.
             // material/light are appended after the anchor dedup, so they can
@@ -3530,14 +3578,14 @@ Return nothing else.`;
             // exactly that way. Check them against the anchors too.
             const chosen = anchors.slice(0, 3);
             const chosenWords = new Set(chosen.flatMap((x) => x.split(" ")));
-            const fresh = (t) => {
+            const notRepeated = (t) => {
                 if (!t) return "";
                 const w = t.split(" ");
                 return w.some((x) => chosenWords.has(x)) ? "" : t;
             };
             const parts = [...chosen];
-            const m = fresh(material);
-            const l = fresh(light);
+            const m = notRepeated(material);
+            const l = notRepeated(light);
             if (m) { parts.push(m); m.split(" ").forEach((x) => chosenWords.add(x)); }
             if (l && !l.split(" ").some((x) => chosenWords.has(x))) parts.push(l);
             const brief = parts.join(", ").slice(0, 120);
@@ -3561,6 +3609,19 @@ Return nothing else.`;
         "belly", "stomach", "back", "arm", "arms", "leg", "legs", "foot", "feet",
         "hair", "eye", "eyes", "mouth", "face", "heart", "bone", "bones", "blood",
         "her", "his", "she", "him", "hers", "them", "they", "their",
+        // The scene contract forbids human figures, and SDXL renders anatomy
+        // badly -- "spine" becomes a pale worm, "ribs" a floating cage. This
+        // list is a backstop against the visual brief naming body parts, since
+        // the posts themselves are written about breath and skin and the model
+        // reaches for that vocabulary. It was 27 body parts short: "ribs"
+        // reached the image prompt twice before this was caught by reading the
+        // logs. A hand-kept anatomical list is always incomplete; this is
+        // defence in depth behind the brief's own "a thing you could
+        // photograph" instruction, not a substitute for it.
+        "rib", "ribs", "ribcage", "sternum", "torso", "neck", "jaw", "cheek",
+        "elbow", "armpit", "groin", "thigh", "shin", "calf", "forearm",
+        "wrist", "palm", "knuckle", "tendon", "sinew", "vein", "artery",
+        "heel", "sole", "toe", "knee", "ankle", "hip", "breast", "shoulderblade",
         // Feeling-words: these describe the post's mood, not its subject, and are
         // what "warm" in the first real brief was. Lighting arrives separately via
         // the lighting/palette fields, so nothing is lost by dropping them here.
