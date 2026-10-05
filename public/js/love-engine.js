@@ -805,7 +805,7 @@ Return ONLY valid JSON: { "beats": ["...and ...", "...and ..."] }`;
     // why edge growth saturated on the same four head words forever. Prescribing
     // the slot is the same lever that took beat verbs from 1 distinct per 4 to
     // 4 per 4.
-    async _growPool({ prop, slots, cap, label, system, brief, clean, key = "words", dedupe = "head" }) {
+    async _growPool({ prop, slots, cap, label, system, brief, clean, key = "words", dedupe = "head", show = 24 }) {
         const pool = this[prop];
         const before = pool.length;
         try {
@@ -818,8 +818,8 @@ ${slots.map((s, i) => `  ${i + 1}. ${s}`).join("\n")}
 Each entry fills its assigned slot exactly. The assignment is the point -- work
 inside the slot rather than defaulting to whichever idea comes most easily.
 
-Current list (write beyond it):
-${pool.slice(-24).map((w) => `- ${w}`).join("\n")}
+Recently used (choose a different shape from every one of these):
+${pool.slice(-show).map((w) => `- ${w}`).join("\n")}
 
 ${brief}
 
@@ -838,7 +838,7 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
                     // or "an" -- so every generated "an opening that..." clashed with
                     // them on head word alone and the pool could never grow. Compare
                     // whole phrases by trigram overlap instead.
-                    if (pool.some((x) => this._tooSimilar(x, v, 0.7))) continue;
+                    if (pool.some((x) => this._tooSimilar(x, v, 0.6))) continue;
                 } else {
                     // Reject on the HEAD word, not just the whole phrase. Stem dedupe
                     // alone let "velvet ember" in beside "velvet hum" and "marrow hum"
@@ -966,6 +966,12 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
                 "what its first line does, not what it is about. Under twelve words.",
             clean: (v) => this._cleanForm(v, 12),
             dedupe: "similar",
+            // Opening forms are long, distinctive clauses, and the model copies
+            // them back almost verbatim when shown. It returned all six seeds
+            // unedited, so every candidate was a duplicate and the pool never
+            // grew. Showing only a few keeps the "avoid these" signal without
+            // handing it a template to echo.
+            show: 4,
         });
     }
 
@@ -996,11 +1002,14 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
         return v;
     }
 
-    _tooSimilar(a, b) {
+    // `threshold` was being passed by one caller and silently ignored -- the
+    // comparison was hardcoded. Make it real so a caller can actually ask for
+    // a stricter bar.
+    _tooSimilar(a, b, threshold = 0.5) {
         const ta = this._wordTrigrams(String(a).toLowerCase());
         const tb = this._wordTrigrams(String(b).toLowerCase());
         if (ta.size === 0 || tb.size === 0) return a === b;
-        return this._jaccardSimilarity(ta, tb) > 0.5;
+        return this._jaccardSimilarity(ta, tb) > threshold;
     }
 
     _fuzzyIngredient(s) {
