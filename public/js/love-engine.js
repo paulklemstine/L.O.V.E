@@ -428,6 +428,8 @@ export class LoveEngine {
         // generation; persisted so the variety survives a restart.
         this.postBeats = [...LoveEngine.POST_BEATS];
         this.recentBeats = [];            // last few used, feeds _pickWeighted
+        this.lastClosingBeat = "";
+        this.lastClosingShape = "";
 
         this._loadTransmissionNumber();
         this._loadRecentPosts();
@@ -1917,6 +1919,8 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
         // fails, we fall back silently to the pre-amplify state.
         let appliedPhrase = plan.subliminalPhrase;
         let appliedText = story;
+        const closingShape = this.lastClosingShape || this._pickClosingShape();
+        const closingBeat = this.lastClosingBeat || this._pickBeat();
         try {
             onStatus("Sensitizing...");
             const brief = await this._sensualAmplifyCatalog({
@@ -3353,6 +3357,8 @@ Return ONLY valid JSON (all string values):
         // a small fraction of a whole post.
         let bestStory = "";
         let bestScore = Infinity;
+        let bestBeat = "";
+        let bestShape = "";
 
         for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
             const mentionDonation = this.shouldMentionDonation();
@@ -3383,6 +3389,8 @@ Return ONLY valid JSON (all string values):
             // the earlier "send it to someone" line, just with different words.
             const closingBeat = this._pickBeat();
             const closingShape = this._pickClosingShape();
+            this.lastClosingBeat = closingBeat;
+            this.lastClosingShape = closingShape;
 
             const prompt = `Write a post that makes someone STOP scrolling… feel warmth spread through their chest… ${closingBeat}
 
@@ -3465,6 +3473,8 @@ Return ONLY valid JSON:
             if (sim < bestScore) {
                 bestScore = sim;
                 bestStory = story;
+                bestBeat = closingBeat;
+                bestShape = closingShape;
             }
 
             // Fragment frequency cap. Rejecting is only safe because of the escape at the
@@ -3532,6 +3542,8 @@ Return ONLY valid JSON:
         // default, and that is exactly how the cliché loop above was reached.
         if (bestStory && this._repetitionCost(story) > bestScore) {
             story = bestStory;
+            if (bestBeat) this.lastClosingBeat = bestBeat;
+            if (bestShape) this.lastClosingShape = bestShape;
         }
         return story;
     }
