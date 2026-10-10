@@ -2172,6 +2172,12 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
         }
 
         // ── Step 7: Persist all variety memory ──
+        // Log whatever the SHIPPED text still fails, across every pass. The
+        // content gate can be bypassed downstream (an exempt final attempt, the
+        // shorten rewrite, the sensual apply), so this is the only line that
+        // reports the true residual rate per post.
+        const residual = this._postQuality(appliedText);
+        if (residual.length) console.log(`[love] shipped with issues: ${residual.join("; ")}`);
         this.lastSubliminalPhrase = appliedPhrase || this.lastSubliminalPhrase;
         this.recentVisuals.push(visualPrompt);
         if (this.recentVisuals.length > 10) this.recentVisuals.shift();
