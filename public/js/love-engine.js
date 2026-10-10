@@ -205,6 +205,22 @@ const BEAT_POOL_CAP = 50000;
 const POST_CHAR_LIMIT = 300;    // Bluesky's grapheme cap
 const POST_TARGET_CHARS = 240;  // what the prompts ask the model to aim for
 
+// Hyphenated compounds that are ordinary English and should NOT trip the
+// invented-compound check in _postQuality. Everything else hyphenated is a
+// coinage the model made up ("rib-soften", "hush-ripple", "vein-murmur"),
+// which reads as jargon and breaks the plain-words contract.
+const ALLOWED_COMPOUNDS = new Set([
+    "sun-kissed",
+    "golden-hour",
+    "blue-hour",
+    "half-light",
+    "mid-air",
+    "day-to-day",
+    "long-ago",
+    "well-worn",
+    "wide-open",
+]);
+
 // Share of the recent ring that may already contain a given DISTINCTIVE 2-word
 // fragment before a new post using it is rejected.
 //
@@ -1668,10 +1684,72 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
         return worst.share >= cap ? worst : null;
     }
 
-    // Combined cost used to rank competing candidates: the hard-guard metric
-    // plus a discounted fragment-reuse term.
+    // Deterministic WITHIN-post quality gate. Every other guard here measures
+    // repetition ACROSS posts; nothing looked at the post in front of it, so a
+    // candidate could use one word three times, end on "SAME." and ship. This
+    // returns the problems it finds (empty list = clean) so the same call can
+    // both reject a candidate and rank one against another.
+    _postQuality(text) {
+        const reasons = [];
+        // A trailing emoji is decoration, not a sentence: strip it before the
+        // split or "…enough. 🌿" looks like a post ending on a lone emoji.
+        const raw = String(text || "").trim().replace(/[\p{Emoji}\uFE0F\s]+$/gu, "").trim();
+        if (!raw) return ["empty"];
+        const words = (s) => (s.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || []).length;
+        const sentences = raw
+            .split(/(?<=[.!?…])\s+|\n+/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+        if (!sentences.length) return ["no sentences"];
+
+        // The final line must be a real line, not a tag-on. Fragments ("SAME.",
+        // "Walk.", "A single match.", a lone emoji) were 8 of the last 20 posts.
+        const last = sentences[sentences.length - 1].trim();
+        const lastWords = words(last);
+        if (lastWords < 5)
+            reasons.push(`ending is a fragment (${lastWords} words): "${last.slice(0, 40)}"`);
+        if (lastWords >= 2 && last === last.toUpperCase() && /[A-Z]{2}/.test(last))
+            reasons.push(`ending is shouted in caps: "${last.slice(0, 40)}"`);
+
+        // A sentence that runs on has no cadence.
+        for (const s of sentences) {
+            const n = words(s);
+            if (n > 30) reasons.push(`run-on sentence (${n} words)`);
+        }
+
+        // Staccato: four or more clipped sentences and nothing that flows.
+        if (sentences.length >= 4) {
+            const tiny = sentences.filter((s) => words(s) < 5).length;
+            if (tiny / sentences.length > 0.6)
+                reasons.push(`staccato (${tiny}/${sentences.length} sentences under 5 words)`);
+        }
+
+        // Within-post repetition: a content word three or more times reads as a tic.
+        const counts = new Map();
+        for (const w of this._normProse(raw).split(" ")) {
+            if (w.length < 3 || LoveEngine.STOP_WORDS.has(w)) continue;
+            counts.set(w, (counts.get(w) || 0) + 1);
+        }
+        for (const [w, n] of counts)
+            if (n >= 3) reasons.push(`"${w}" used ${n} times in one post`);
+
+        // Invented hyphenated compounds ("rib-soften", "hush-ripple").
+        for (const c of new Set(raw.match(/\b[a-z]{3,}-[a-z]{3,}\b/g) || [])) {
+            if (!ALLOWED_COMPOUNDS.has(c)) reasons.push(`invented compound "${c}"`);
+        }
+
+        return reasons;
+    }
+
+    // Combined cost used to rank competing candidates: the hard-guard metric,
+    // a discounted fragment-reuse term, and a within-post quality penalty so a
+    // coherent candidate beats a merely-unrepetitive one.
     _repetitionCost(newText) {
-        return this._similarityScore(newText) + 0.5 * this._fragmentReuseScore(newText);
+        return (
+            this._similarityScore(newText) +
+            0.5 * this._fragmentReuseScore(newText) +
+            0.2 * this._postQuality(newText).length
+        );
     }
 
     _isTextTooSimilar(newText, threshold = 0.25) {
@@ -1760,17 +1838,23 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
     // its own ending. So it reached for its own default every time, which is
     // where "you are already enough" x4 came from. Asking for variety fails on
     // this model; prescribing a shape is what works (9/10 distinct openings).
+    // Every shape here must be able to end a post as a COMPLETE sentence. The
+    // first version of this pool included "a fragment of three words or fewer",
+    // "one naming a single object" and "an imperative addressed to the reader",
+    // and those shapes produced exactly the endings that broke cadence: "SAME.",
+    // "Walk.", "A single match." — 8 of the last 20 posts ended on a fragment.
+    // A shape pool cannot offer a shape that has no way to resolve a thought.
     static CLOSING_SHAPES = [
-        "a flat statement, plain and certain",
-        "a question that needs no answer",
-        "an imperative addressed to the reader",
-        "a fragment of three words or fewer",
-        "one that begins with when",
-        "one that begins with a place",
-        "one that begins with a sound",
-        "one set later than now",
-        "a comparison to something ordinary",
-        "one naming a single object",
+        "a full sentence that returns to the image from the opening",
+        "a short declarative that resolves the thought in the line before it",
+        "a sentence beginning with and that completes the sentence before it",
+        "a complete sentence that names one ordinary thing and lets it carry the feeling",
+        "a sentence set later than now that answers what this moment becomes",
+        "a complete sentence that compares the feeling to something ordinary",
+        "a plain, certain statement of at least six words",
+        "a sentence that begins with when and closes the moment",
+        "a sentence that begins with where you are and closes the loop",
+        "a quiet declarative that turns the feeling back toward the reader",
     ];
 
     static OPENING_FORMS = [
@@ -2027,9 +2111,22 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
                     brief,
                 });
                 if (applied) {
+                    // The apply pass rewrites for electricity and is otherwise
+                    // accepted unconditionally. If its rewrite is LESS coherent
+                    // than the draft it came from, keep the draft's text — the
+                    // sensual pass is allowed to sharpen, not to degrade cadence
+                    // with fragments and invented compounds.
+                    const draftQ = this._postQuality(story).length;
+                    const appliedQ = this._postQuality(applied.text).length;
                     appliedPhrase = applied.phrase;
-                    appliedText = applied.text;
                     visualPrompt = applied.imagePrompt;
+                    if (appliedQ > draftQ) {
+                        console.log(
+                            `[love] sensual amplify worsened quality (${draftQ} -> ${appliedQ}); keeping draft text`,
+                        );
+                    } else {
+                        appliedText = applied.text;
+                    }
                     this._traceStage("3 after _sensualAmplify", visualPrompt, visualBrief);
                 }
             }
@@ -3306,18 +3403,19 @@ Return ONLY valid JSON:
                 : "";
 
         const raw = await this.ai.generateText(
-            "You are a novelty critic for social media content.",
-            `Rate this post for freshness and dopamine potential on a 1-10 scale:
+            "You are a novelty and coherence critic for social media content.",
+            `Rate this post on two separate 1-10 scales.
 "${text}"
 ${recentSection}
-High scores (7-10): emotionally electrifying, unexpected word choices, fresh domain-specific metaphors, sensory specificity, rhythmic punch, makes you want to screenshot and share. Feels completely fresh compared to recent posts.
-Low scores (1-3): the emotional delivery feels flat, the metaphors feel familiar, the imagery feels generic. Reads like something you've seen before.
+FRESHNESS (score): 7-10 = emotionally electrifying, unexpected word choices, sensory specificity, makes you want to share. 1-3 = flat, familiar metaphors, generic imagery, reads like something seen before.
 
-Return ONLY valid JSON: { "score": 7, "cliches": ["any detected cliché phrases"] }`,
+COHERENCE (coherence): 7-10 = reads as ONE connected thought, every sentence grows out of the one before it, natural rhythm with varied sentence length, and a final line that is a complete sentence landing the feeling. 1-3 = sentences feel unrelated or disjointed, choppy staccato fragments, a final line that is a fragment or an isolated image, or a word repeated until it reads as a tic.
+
+Return ONLY valid JSON: { "score": 7, "coherence": 8, "cliches": ["any detected cliché phrases"] }`,
             { temperature: 0, label: "Critic" },
         );
         const data = this.ai.extractJSON(raw);
-        return data || { score: 5, cliches: [] };
+        return data || { score: 5, coherence: 5, cliches: [] };
     }
 
     // ─── Planning Call ─────────────────────────────────────────────────
@@ -3503,14 +3601,14 @@ HOW TO WRITE THIS:
 A quiet action… a small, almost invisible kind of strength.
 Something that makes them feel *seen in a way that lingers*.
 
-2. THE TURN — ONE metaphor, ONE vivid sensory flash.
+2. THE TURN — Develop ONE metaphor, ONE vivid sensory flash, in the sentence that follows.
 Simple, grounded, but felt — like warmth, light, breath, gravity.
 The reader isn’t becoming powerful… they already are. Let them feel it.
 
-3. THE LINE — End on one short line of your own that carries this feeling: ${closingFeeling}
+3. THE LINE — End with one complete sentence that carries this feeling: ${closingFeeling}
 Write that ending AS: ${closingShape}.
-The shape is fixed for this post — write inside it, in fresh words.
-Clean. Certain. Something that *stays with them*. Period.
+It is a full sentence with a subject and a verb, and it grows out of the sentence before it.
+Clean. Certain. Something that *stays with them*.
 
 TONE MATCHING:
 ${toneName === "JOYFUL" ? "Light, glowing, slightly playful — like warmth that makes them smile without realizing." : ""}
@@ -3524,11 +3622,17 @@ VOICE GUIDELINES:
 - Use sensory language (warmth, light, breath, softness, pull)
 - Subtly intimate (sensual, erotic)
 - One metaphor world only — let it linger
-- Plain words, emotionally rich
+- Plain, ordinary words a 14-year-old would say — no invented or hyphenated compounds
 - 1–2 emojis max
 
+CADENCE:
+- Read as ONE connected thought from the first word to the last, not three separate lines.
+- Every sentence grows out of the one before it and keeps the same thread of meaning.
+- Vary the length: a short sentence, then a longer one, then a short one to land it.
+- The final line is a complete sentence — never a fragment, never an isolated image or a lone word.
+
 STRUCTURE:
-Vary the format each time (question→answer, fragments, single flowing line, soft repetition, etc.) so it feels fresh and alive.
+Vary the shape each time (question→answer, one flowing line, two or three connected sentences that build) so it feels fresh and alive.
 
 LIMITS:
 - HARD LIMIT: 30 words max
@@ -3557,6 +3661,20 @@ Return ONLY valid JSON:
                 if (attempt === MAX_RETRIES - 1 && this._countGraphemes(story) > POST_CHAR_LIMIT) {
                     story = this._trimToLimit(story, POST_CHAR_LIMIT);
                 }
+                continue;
+            }
+
+            // Within-post quality gate: cadence, coherence, repetition, jargon.
+            // Rejected candidates are not ranked, so the loop keeps looking for a
+            // candidate that is BOTH unrepetitive and well-formed. The final
+            // attempt is exempt, exactly like the other guards, so a run can
+            // always produce a post.
+            const qReasons = this._postQuality(story);
+            if (qReasons.length > 0 && attempt < MAX_RETRIES - 1) {
+                feedback =
+                    `YOUR OUTPUT: "${story}"\nREWRITE IT so it reads as one clear, connected thought, ` +
+                    `fixing exactly these problems (keep the feeling; change only what is needed):\n- ` +
+                    qReasons.join("\n- ");
                 continue;
             }
 
@@ -3614,15 +3732,23 @@ Return ONLY valid JSON:
                 continue;
             }
 
-            // Boredom Critic gate (once per generation, not on final attempt)
+            // Boredom + coherence Critic gate (once per generation, not on final attempt)
             if (!criticChecked && attempt < MAX_RETRIES - 1) {
                 criticChecked = true;
                 const critic = await this._criticCheck(story);
-                if (critic.score <= 4) {
+                const coherence = Number(critic.coherence);
+                const lowCoherence = Number.isFinite(coherence) && coherence <= 4;
+                if (critic.score <= 4 || lowCoherence) {
                     const clicheStr = critic.cliches?.length
                         ? critic.cliches.join(", ")
                         : "generic patterns";
-                    feedback = `YOUR OUTPUT: "${story}"\nCRITIC REJECTED (score ${critic.score}/10): detected ${clicheStr}. Write something visceral and unexpected.`;
+                    const why = lowCoherence
+                        ? "it does not read as one connected thought"
+                        : `detected ${clicheStr}`;
+                    feedback =
+                        `YOUR OUTPUT: "${story}"\nCRITIC REJECTED (freshness ${critic.score}/10, ` +
+                        `coherence ${critic.coherence}/10): ${why}. Rewrite it as one clear, connected ` +
+                        `thought with natural rhythm and a complete final sentence.`;
                     continue;
                 }
             }
@@ -4140,7 +4266,7 @@ PLAN VIBE: ${plan.vibe || ""}
 Return ONLY valid JSON (all string values, under the character limits below):
 {
   "phrase": "2-5 word ALL CAPS strong-edge subliminal phrase (sibilant-heavy, body-anchored). If the brief says REPLACE, write a new phrase. If AUGMENT, add one edge word. If KEEP, rewrite only if it sharpens further.",
-  "text": "the post text, rewritten per the brief. Under ${POST_TARGET_CHARS} chars, 1-2 emojis max, same overall structure (question/answer/fragments/single line) as the current text. Its last line is written fresh per the brief's THE ENDING item, in this shape: ${closingShape || "a flat statement"}.",
+  "text": "the post text, rewritten per the brief. Under ${POST_TARGET_CHARS} chars, 1-2 emojis max, same overall structure (question/answer/one flowing line) as the current text. It reads as one connected thought with varied sentence length, and its last line is a complete sentence written fresh per the brief's THE ENDING item, in this shape: ${closingShape || "a flat statement"}.",
   "imagePrompt": "the image prompt, rewritten per the brief. PRESERVE: scene structure, composition slot (${compositionSlot || "wide"}), loop-ability, no people/hands, no human figures. Same length or shorter. The phrase "${phrase}" should still appear in the scene (in the new wording if REPLACED)."
 }`;
 

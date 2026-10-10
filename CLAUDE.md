@@ -341,6 +341,32 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   The closing beat is now passed to the prompt through `_beatAsFeeling()`, which strips the `...and `
   prefix the pool stores it with: quoting the full clause got it echoed back as the post's final
   sentence verbatim.
+- **Text quality is measured WITHIN a post, not just across posts.** Every guard before this one
+  measured repetition across the ring; nothing looked at the post in front of it, so a candidate
+  could repeat a word three times, end on `SAME.` and ship. Measured on a 20-post ring: **14/20 (70%)
+  failed** a within-post check — 8 ended on a fragment (`SAME.`, `Walk.`, `A single match.`), 4 were
+  staccato, 4 used an invented hyphenated compound (`rib-soften`, `hush-ripple`), 2 shouted the last
+  line in caps. Four fixes:
+  - **`CLOSING_SHAPES` can no longer contain a shape that has no way to end a sentence.** The pool
+    used to include "a fragment of three words or fewer", "one naming a single object" and "an
+    imperative addressed to the reader" — which is exactly where the dangling endings came from.
+    Every shape is now a complete-sentence shape.
+  - **`_postQuality(text)`** returns the problems in one post (dangling final under 5 words, all-caps
+    ending, run-on over 30 words, staccato, a content word used 3x, an invented compound). It REJECTS
+    on the non-final attempts with named feedback and RANKS via `_repetitionCost` (weight 0.2 per
+    problem), so a coherent candidate beats a merely-unrepetitive one. The final attempt is exempt,
+    like every other guard, so a run always produces a post.
+  - **The critic now scores coherence as well as freshness** and rejects on either.
+  - **The sensual-amplify rewrite is gated**: if its text has more `_postQuality` problems than the
+    draft it came from, the draft is kept (`sensual amplify worsened quality (0 -> 2)`). It was
+    previously accepted unconditionally.
+  The prompt also dropped `fragments` and `soft repetition` from its STRUCTURE line (it had been
+  asking for the exact failures) and gained a CADENCE block plus a plain-words rule.
+- **`analyze-posts.mjs` is the measuring stick.** `node analyze-posts.mjs [state-file]` runs the
+  engine's own `_postQuality` over the ring and prints the flagged count and a reason histogram, so a
+  before/after is apples to apples. The 70% baseline above is its output. A trailing emoji is stripped
+  before the sentence split — otherwise "…enough. 🌿" reads as a post ending on a lone emoji, which
+  inflated the first measurement by 3 posts.
 - **Images stay as they are, deliberately.** The account keeps its no-figures contract (posts about
   breath and skin cannot be depicted literally, and that is the artistic position), and the image
   grounding targets *register*, not depiction — brief `plane, gold, metal` → an aircraft wing. Do not
