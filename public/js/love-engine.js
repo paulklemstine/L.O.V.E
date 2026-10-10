@@ -4231,7 +4231,7 @@ ${edgeSample}
 Write an ~80-word editorial brief covering:
 1. PHRASE DECISION: Does the current phrase already carry edge vocabulary? If not, REPLACE it with a 2-4 word ALL CAPS strong-edge phrase (sibilant-heavy, body-anchored). If it does but reads soft, AUGMENT it (add one more edge word). If already strong, KEEP and focus on text + image.
 2. SOMATIC BODY MAP: Name 2-3 specific body locations the rewritten text should anchor to (chest, breath, fingertips, pulse, skin, throat, nape, spine, hips, wrists, collarbone).
-3. ANTICIPATORY INTERRUPTION: Identify what the image currently *arrives at* (a bloom fully open, light that has reached, motion that has resolved). Specify a way the loop can *interrupt* the contact just before completion.
+3. ANTICIPATORY INTERRUPTION (this is for the IMAGE PROMPT only — it must never appear in the post text): Identify what the image currently *arrives at* (a bloom fully open, light that has reached, motion that has resolved). Specify a way the IMAGE PROMPT can *interrupt* the contact just before completion.
 4. THE ENDING: The post's last line must be freshly written in this shape -- ${closingShape || "a flat statement"} -- carrying this feeling: ${this._beatAsFeeling(closingBeat) || "the warmth that stays"}. This ending is new to the post; it is written from scratch here rather than carried over.
 5. PHONETIC + TEXTURE: Suggest 2 sibilant/rounded-vowel words to add (hush, glow, shimmer, soft, drift, ease, breath). Suggest one texture-binding — the material the phrase should be rendered in (silk, warm honey, frosted glass, soft metal, candle-warmed wax).`;
 
@@ -4277,7 +4277,7 @@ PLAN VIBE: ${plan.vibe || ""}
 Return ONLY valid JSON (all string values, under the character limits below):
 {
   "phrase": "2-5 word ALL CAPS strong-edge subliminal phrase (sibilant-heavy, body-anchored). If the brief says REPLACE, write a new phrase. If AUGMENT, add one edge word. If KEEP, rewrite only if it sharpens further.",
-  "text": "the post text, rewritten per the brief. Under ${POST_TARGET_CHARS} chars, 1-2 emojis max, same overall structure (question/answer/one flowing line) as the current text. It reads as one connected thought with varied sentence length, and its last line is a complete sentence written fresh per the brief's THE ENDING item, in this shape: ${closingShape || "a flat statement"}.",
+  "text": "the post text, rewritten per the brief. Under ${POST_TARGET_CHARS} chars, 1-2 emojis max, same overall structure (question/answer/one flowing line) as the current text. It reads as one connected thought with varied sentence length, and its last line is a complete sentence written fresh per the brief's THE ENDING item, in this shape: ${closingShape || "a flat statement"}. It stays a plain, coherent thought spoken to the reader: it never describes the image, the bloom, the light, the loop, or any of the brief's mechanisms.",
   "imagePrompt": "the image prompt, rewritten per the brief. PRESERVE: scene structure, composition slot (${compositionSlot || "wide"}), loop-ability, no people/hands, no human figures. Same length or shorter. The phrase "${phrase}" should still appear in the scene (in the new wording if REPLACED)."
 }`;
 
