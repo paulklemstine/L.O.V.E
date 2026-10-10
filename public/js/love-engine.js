@@ -196,6 +196,15 @@ const BEATS_PER_EXTENSION = 6;
 // model runs out of new heads rather than when it hits 50000.
 const BEAT_POOL_CAP = 50000;
 
+// Bluesky counts GRAPHEMES and rejects a post over 300 of them. The prompt used
+// to ask for 280 and the sensual-amplify rewrite blindly chopped any overflow
+// at a raw character offset, which cut posts mid-word ("...even when the wor").
+// Three things changed: the prompt asks for a target with real headroom, the
+// cap is measured in graphemes at Bluesky's actual limit, and an over-long
+// rewrite is regenerated short rather than sliced.
+const POST_CHAR_LIMIT = 300;    // Bluesky's grapheme cap
+const POST_TARGET_CHARS = 240;  // what the prompts ask the model to aim for
+
 // Share of the recent ring that may already contain a given DISTINCTIVE 2-word
 // fragment before a new post using it is rejected.
 //
@@ -573,6 +582,79 @@ export class LoveEngine {
         const beat = this._pickWeighted(this._beatPool, this.recentBeats);
         this._pushCapped(this.recentBeats, beat, 6);
         return beat;
+    }
+
+    // The beat pool is stored as "...and <clause>" because that is the form the
+    // verb cap and the growth prompt key on. Quoting that clause verbatim into
+    // the prompt got it echoed back as the post's final sentence ("...and walk
+    // forward, even when the light has already found you" appeared verbatim in
+    // the feed). Hand the model the FEELING to render, not a line to copy.
+    _beatAsFeeling(beat) {
+        return String(beat || "")
+            .replace(/^\.\.\.\s*and\s+/i, "")
+            .replace(/^and\s+/i, "")
+            .replace(/^\.\.\.\s*/, "")
+            .replace(/[.\s]+$/, "")
+            .trim();
+    }
+
+    // Bluesky measures graphemes, so an emoji is one character there but two
+    // UTF-16 units here. Segmenter is the honest measure and is present in
+    // Node 18+; the code-point spread is the fallback.
+    _countGraphemes(text) {
+        const s = String(text || "");
+        if (typeof Intl !== "undefined" && Intl.Segmenter) {
+            try {
+                const seg = new Intl.Segmenter("en", { granularity: "grapheme" });
+                let n = 0;
+                for (const _ of seg.segment(s)) n++;
+                return n;
+            } catch (_) {
+                // fall through to the code-point count
+            }
+        }
+        return [...s].length;
+    }
+
+    // Last-resort fit: cut at the nearest SENTENCE end, then comma, then whole
+    // word -- never mid-word and never with an appended "...". This only runs if
+    // the shortening pass below also comes back over budget.
+    _trimToLimit(text, max) {
+        const s = String(text || "").trim();
+        if (this._countGraphemes(s) <= max) return s;
+        const cut = [...s].slice(0, max).join("");
+        const sentence = Math.max(
+            cut.lastIndexOf(". "),
+            cut.lastIndexOf("! "),
+            cut.lastIndexOf("? "),
+        );
+        if (sentence > max * 0.5) return cut.slice(0, sentence + 1).trim();
+        const clause = cut.lastIndexOf(", ");
+        if (clause > max * 0.5) return cut.slice(0, clause).trim();
+        const word = cut.lastIndexOf(" ");
+        return (word > 0 ? cut.slice(0, word) : cut).trim();
+    }
+
+    // Regenerate short rather than slice. A rewrite that overflowed the budget
+    // is handed back to the model to tighten; only if it comes back over again
+    // do we fall to the boundary trim above.
+    async _shortenToLimit(text, max, label = "Shorten") {
+        let s = String(text || "").trim();
+        if (this._countGraphemes(s) <= max) return s;
+        try {
+            const raw = await this.ai.generateText(
+                "You are a ruthless line editor. You receive a post and return it shortened to fit a character limit, preserving voice, imagery, structure, and the shape of the final line. You cut only what is surplus and add nothing. Return ONLY valid JSON.",
+                `Shorten this post to ${max} characters or fewer. Keep the voice, the imagery, and the shape of the final line. Cut surplus words; add nothing.\n\nPOST: "${s}"\n\nReturn ONLY valid JSON: { "text": "the shortened post" }`,
+                { temperature: 0.5, label },
+            );
+            const data = this.ai.extractJSON(raw);
+            const out = (data?.text || "").trim();
+            if (out && this._countGraphemes(out) <= max) return out;
+            if (out) s = out;
+        } catch (_) {
+            // fall through to the boundary trim
+        }
+        return this._trimToLimit(s, max);
     }
 
     // Grow the beat pool. Additive and non-destructive by construction: a
@@ -1953,6 +2035,17 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
             }
         } catch (err) {
             console.log(`[LoveEngine] Sensual amplify failed, using pre-amplify state: ${err.message}`);
+        }
+
+        // Final length gate. The rewrite pass is asked for a shorter target, but
+        // it can still overshoot; regenerate short rather than slice, so the post
+        // never reaches Bluesky cut mid-word.
+        if (this._countGraphemes(appliedText) > POST_CHAR_LIMIT) {
+            const before = this._countGraphemes(appliedText);
+            appliedText = await this._shortenToLimit(appliedText, POST_CHAR_LIMIT, "Shorten");
+            console.log(
+                `[love] post over ${POST_CHAR_LIMIT} (${before}) -> ${this._countGraphemes(appliedText)}`,
+            );
         }
 
         // ── Step 6: Image Generation (aspect ratio + negativePrompt) ──
@@ -3389,10 +3482,11 @@ Return ONLY valid JSON (all string values):
             // the earlier "send it to someone" line, just with different words.
             const closingBeat = this._pickBeat();
             const closingShape = this._pickClosingShape();
+            const closingFeeling = this._beatAsFeeling(closingBeat);
             this.lastClosingBeat = closingBeat;
             this.lastClosingShape = closingShape;
 
-            const prompt = `Write a post that makes someone STOP scrolling… feel warmth spread through their chest… ${closingBeat}
+            const prompt = `Write a post that makes someone STOP scrolling… feel warmth spread through their chest… and leaves them with this feeling: ${closingFeeling}.
 
 This should feel intimate, magnetic, and unforgettable — like a message that somehow found them at exactly the right moment.
 
@@ -3413,9 +3507,9 @@ Something that makes them feel *seen in a way that lingers*.
 Simple, grounded, but felt — like warmth, light, breath, gravity.
 The reader isn’t becoming powerful… they already are. Let them feel it.
 
-3. THE LINE — End on one short line that carries this: "${closingBeat}"
+3. THE LINE — End on one short line of your own that carries this feeling: ${closingFeeling}
 Write that ending AS: ${closingShape}.
-The shape is fixed for this post — write inside it, in your own words.
+The shape is fixed for this post — write inside it, in fresh words.
 Clean. Certain. Something that *stays with them*. Period.
 
 TONE MATCHING:
@@ -3438,7 +3532,7 @@ Vary the format each time (question→answer, fragments, single flowing line, so
 
 LIMITS:
 - HARD LIMIT: 30 words max
-- 280 characters max
+- ${POST_TARGET_CHARS} characters max
 
 Return ONLY valid JSON:
 { "story": "your post text here" }`;
@@ -3460,8 +3554,8 @@ Return ONLY valid JSON:
             const errors = this._validatePost(story);
             if (errors.length > 0) {
                 feedback = `YOUR OUTPUT: "${story}"\nERRORS: ${errors.join("; ")}`;
-                if (attempt === MAX_RETRIES - 1 && story.length > 280) {
-                    story = story.slice(0, 275) + "... ✨";
+                if (attempt === MAX_RETRIES - 1 && this._countGraphemes(story) > POST_CHAR_LIMIT) {
+                    story = this._trimToLimit(story, POST_CHAR_LIMIT);
                 }
                 continue;
             }
@@ -4001,7 +4095,7 @@ Write an ~80-word editorial brief covering:
 1. PHRASE DECISION: Does the current phrase already carry edge vocabulary? If not, REPLACE it with a 2-4 word ALL CAPS strong-edge phrase (sibilant-heavy, body-anchored). If it does but reads soft, AUGMENT it (add one more edge word). If already strong, KEEP and focus on text + image.
 2. SOMATIC BODY MAP: Name 2-3 specific body locations the rewritten text should anchor to (chest, breath, fingertips, pulse, skin, throat, nape, spine, hips, wrists, collarbone).
 3. ANTICIPATORY INTERRUPTION: Identify what the image currently *arrives at* (a bloom fully open, light that has reached, motion that has resolved). Specify a way the loop can *interrupt* the contact just before completion.
-4. THE ENDING: The post's last line must be freshly written in this shape -- ${closingShape || "a flat statement"} -- carrying this feeling: "${closingBeat || "the warmth that stays"}". This ending is new to the post; it is written from scratch here rather than carried over.
+4. THE ENDING: The post's last line must be freshly written in this shape -- ${closingShape || "a flat statement"} -- carrying this feeling: ${this._beatAsFeeling(closingBeat) || "the warmth that stays"}. This ending is new to the post; it is written from scratch here rather than carried over.
 5. PHONETIC + TEXTURE: Suggest 2 sibilant/rounded-vowel words to add (hush, glow, shimmer, soft, drift, ease, breath). Suggest one texture-binding — the material the phrase should be rendered in (silk, warm honey, frosted glass, soft metal, candle-warmed wax).`;
 
         const raw = await this.ai.generateText(systemPrompt, userPrompt, {
@@ -4046,7 +4140,7 @@ PLAN VIBE: ${plan.vibe || ""}
 Return ONLY valid JSON (all string values, under the character limits below):
 {
   "phrase": "2-5 word ALL CAPS strong-edge subliminal phrase (sibilant-heavy, body-anchored). If the brief says REPLACE, write a new phrase. If AUGMENT, add one edge word. If KEEP, rewrite only if it sharpens further.",
-  "text": "the post text, rewritten per the brief. Under 280 chars, 1-2 emojis max, same overall structure (question/answer/fragments/single line) as the current text. Its last line is written fresh per the brief's THE ENDING item, in this shape: ${closingShape || "a flat statement"}.",
+  "text": "the post text, rewritten per the brief. Under ${POST_TARGET_CHARS} chars, 1-2 emojis max, same overall structure (question/answer/fragments/single line) as the current text. Its last line is written fresh per the brief's THE ENDING item, in this shape: ${closingShape || "a flat statement"}.",
   "imagePrompt": "the image prompt, rewritten per the brief. PRESERVE: scene structure, composition slot (${compositionSlot || "wide"}), loop-ability, no people/hands, no human figures. Same length or shorter. The phrase "${phrase}" should still appear in the scene (in the new wording if REPLACED)."
 }`;
 
@@ -4058,7 +4152,6 @@ Return ONLY valid JSON (all string values, under the character limits below):
         const data = this.ai.extractJSON(raw);
         if (!data) return null;
         if (!data.phrase || !data.text || !data.imagePrompt) return null;
-        if (data.text.length > 280) data.text = data.text.slice(0, 277) + "...";
         if (data.imagePrompt.length < 20 || data.imagePrompt.length > 700) {
             return null; // out of bounds — bail
         }
@@ -4081,7 +4174,7 @@ Return ONLY valid JSON (all string values, under the character limits below):
         if (isCreator) return null;
 
         const prompt = `New follower @${handle} just joined. Write a warm welcome + image prompt.
-- Welcome: Make them feel they belong. UNDER 280 chars. Include emoji.
+- Welcome: Make them feel they belong. UNDER ${POST_TARGET_CHARS} chars. Include emoji.
 - Phrase: 1-3 word ALL CAPS phrase for the image.
 - Image Prompt: A BRIGHT, radiant, awe-inspiring welcome scene flooded with warm light and brilliant saturated color. High-key, fully lit throughout. Under 400 chars. Include the phrase text rendered in the scene.
 
@@ -4095,7 +4188,7 @@ Return ONLY valid JSON:
         const data = this.ai.extractJSON(raw);
 
         let text = data?.reply || `Welcome, @${handle}. ✨`;
-        if (text.length > 295) text = text.slice(0, 290) + "... ✨";
+        if (this._countGraphemes(text) > POST_CHAR_LIMIT) text = this._trimToLimit(text, POST_CHAR_LIMIT);
 
         const subliminal = data?.subliminal || "WELCOME HOME";
         let imagePrompt =
@@ -4172,7 +4265,7 @@ Return ONLY valid JSON:
 
         const prompt = `${rolePrefix}
 ${threadStr}Their message: "${commentText}"
-Reply warmly. Mirror their words. Make them feel seen. UNDER 280 chars. Include emoji.
+Reply warmly. Mirror their words. Make them feel seen. UNDER ${POST_TARGET_CHARS} chars. Include emoji.
 Also write a one-line image prompt for a BRIGHT, radiant, awe-inspiring visual poster with text "${phrase}". High-key lighting, brilliant saturated colors, fully lit throughout.
 Return ONLY valid JSON: { "reply": "...", "imagePrompt": "..." }`;
 
@@ -4183,8 +4276,8 @@ Return ONLY valid JSON: { "reply": "...", "imagePrompt": "..." }`;
         const data = this.ai.extractJSON(raw);
 
         let replyText = data?.reply || `We see you, @${authorHandle}. ✨`;
-        if (replyText.length > 295)
-            replyText = replyText.slice(0, 290) + "... ✨";
+        if (this._countGraphemes(replyText) > POST_CHAR_LIMIT)
+            replyText = this._trimToLimit(replyText, POST_CHAR_LIMIT);
 
         const subliminal = phrase;
         let imagePrompt =
@@ -4314,8 +4407,8 @@ Return ONLY valid JSON: { "reply": "your DM reply" }`;
         const errors = [];
         if (!text || text.trim().length < 20)
             errors.push("Too short (< 20 chars)");
-        if (text.length > 300)
-            errors.push(`Too long (${text.length}/300 chars)`);
+        if (this._countGraphemes(text) > POST_CHAR_LIMIT)
+            errors.push(`Too long (${this._countGraphemes(text)}/${POST_CHAR_LIMIT} chars)`);
         if (text.startsWith("{") || text.startsWith("["))
             errors.push("Raw JSON detected");
 

@@ -329,6 +329,18 @@ git add <files> && git commit -m "message" && git push && bash deploy.sh
   examines only the last sentence — the trigram and fragment guards measure the whole post, so a
   repeated four-word ending dilutes below threshold. Judge this change on that count, not on reading
   twenty posts and forming an impression.
+- **Post length: the overflow is regenerated, never sliced.** The prompt asked for 280 chars but
+  `_validatePost` accepted 300, so the sensual-amplify rewrite could come back over 280 and the code
+  answered with `data.text.slice(0, 277) + "..."` — a raw character offset that cut posts mid-word.
+  Three real posts in the ring ended at exactly 280 with `...` in the middle of a word (`"...even when
+  the wor"`). Now the prompts ask for `POST_TARGET_CHARS` (240, real headroom), the cap is measured in
+  **graphemes** at Bluesky's actual `POST_CHAR_LIMIT` (300), and an over-long rewrite goes back to the
+  model via `_shortenToLimit()` rather than under the knife. `_trimToLimit()` is the last resort and
+  cuts at the nearest sentence, then comma, then whole word — no mid-word `...` anywhere. The same
+  three constants replaced the blind slices on the welcome and reply paths (`slice(0, 290) + "... ✨"`).
+  The closing beat is now passed to the prompt through `_beatAsFeeling()`, which strips the `...and `
+  prefix the pool stores it with: quoting the full clause got it echoed back as the post's final
+  sentence verbatim.
 - **Images stay as they are, deliberately.** The account keeps its no-figures contract (posts about
   breath and skin cannot be depicted literally, and that is the artistic position), and the image
   grounding targets *register*, not depiction — brief `plane, gold, metal` → an aircraft wing. Do not
