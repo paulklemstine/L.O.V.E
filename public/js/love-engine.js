@@ -3671,6 +3671,7 @@ Return ONLY valid JSON:
             // always produce a post.
             const qReasons = this._postQuality(story);
             if (qReasons.length > 0 && attempt < MAX_RETRIES - 1) {
+                console.log(`[love] quality gate: rejected — ${qReasons.join("; ")}`);
                 feedback =
                     `YOUR OUTPUT: "${story}"\nREWRITE IT so it reads as one clear, connected thought, ` +
                     `fixing exactly these problems (keep the feeling; change only what is needed):\n- ` +
