@@ -1733,8 +1733,12 @@ Return ONLY valid JSON: { "${key}": ["...", "..."] }`,
         for (const [w, n] of counts)
             if (n >= 3) reasons.push(`"${w}" used ${n} times in one post`);
 
-        // Invented hyphenated compounds ("rib-soften", "hush-ripple").
-        for (const c of new Set(raw.match(/\b[a-z]{3,}-[a-z]{3,}\b/g) || [])) {
+        // Invented hyphenated compounds ("rib-soften", "hush-ripple"). Case-
+        // insensitive: the first one in a post is sentence-initial ("Talc-soft"),
+        // and a lowercase-only pattern silently missed exactly that.
+        for (const c of new Set(
+            (raw.match(/\b[a-z]{3,}-[a-z]{3,}\b/gi) || []).map((x) => x.toLowerCase()),
+        )) {
             if (!ALLOWED_COMPOUNDS.has(c)) reasons.push(`invented compound "${c}"`);
         }
 
